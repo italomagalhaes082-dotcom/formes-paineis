@@ -391,7 +391,7 @@ const EMPREENDIMENTOS = {
     nome: "Liberty Unique", subtitulo: "Painel Gerencial", cor: "#4f8ef7", corSecund: "#22c9a0",
     sheetId: "1mvNNh2r43GeEmW9h90B_NeyfXWkyoc8k2QHnbVZyUH0",
     abaDespesas: "DESPESAS TOTAIS", abaReceitas: "RECEITAS TOTAIS", abaVendas: null,
-    nCasas: 42, areaCasa: 114,
+    nCasas: 42, areaCasa: 114, areaTotal: 4788, pctObraDefault: 75,
     senha: "unique2024", bioKey: "lu_bio", rpId: "liberty-formes.netlify.app",
     socLabel: "🤝 Sociedade",
     nomesMap: [
@@ -419,7 +419,7 @@ const EMPREENDIMENTOS = {
     sheetId: "1D660xfizv39rn0pxDJA2Whqeye3bp4hB4vxCAxrXRvw",
     abaDespesas: "DESPESAS TOTAIS", abaReceitas: "RECEITAS TOTAIS", abaVendas: "VALORES DE VENDA",
     abaGestaoVendas: "GESTAO VENDAS",
-    nCasas: 66, areaCasa: 144,
+    nCasas: 66, areaCasa: 144, areaTotal: 8958, mixCasas: '45 casas de 144 m² + 21 casas de 118 m²', pctObraDefault: 82,
     senha: "jazz2024", bioKey: "jazz_bio", rpId: "liberty-formes.netlify.app",
     socLabel: "🤝 Sociedade",
     permuta: {
@@ -443,7 +443,7 @@ const EMPREENDIMENTOS = {
     nome: "Bossa Nova Residência", subtitulo: "Painel Gerencial", cor: "#a371f7", corSecund: "#4f8ef7",
     sheetId: "1B-AG_5lU9JW8TAjybn4OGwK2E3b676xVIE6Yoz9CRjI",
     abaDespesas: "DESPESAS TOTAIS", abaReceitas: "RECEITAS TOTAIS", abaVendas: null,
-    nCasas: 69, areaCasa: 118,
+    nCasas: 69, areaCasa: 118, areaTotal: 8142, pctObraDefault: 84,
     senha: "bossa2024", bioKey: "bossa_bio", rpId: "liberty-formes.netlify.app",
     socLabel: "🤝 Permuta",
     nomesMap: [
@@ -962,7 +962,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v13.07.26-a · análise comparativa</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v13.07.26-b · áreas reais + % obra</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:3px solid ${color}">
@@ -2038,7 +2038,7 @@ async function renderAnalise(force) {
       const jDesp = await fetchSheet(c.abaDespesas, c.sheetId);
       const rowsD = parseSheet(jDesp);
       const desp = parseDespesasRows(rowsD);
-      const area = (c.nCasas||0)*(c.areaCasa||0);
+      const area = areaTotalCfg(c);
       // séries mensais por família + custo de obra total mensal
       const fam = {}; FAMILIAS_ANALISE.forEach(f=>fam[f.k]={});
       const obraMes = {};
@@ -2053,7 +2053,7 @@ async function renderAnalise(force) {
         }
         FAMILIAS_ANALISE.forEach(f=>{ if(f.match(cU)) fam[f.k][ym]=(fam[f.k][ym]||0)+r.valor; });
       });
-      return { key:k, nome:c.nome, cor:c.cor, area, fam, obraMes, primeiro };
+      return { key:k, nome:c.nome, cor:c.cor, area, fam, obraMes, primeiro, pct: pctObraDe(k) };
     }));
     window._analiseData = results;
     paintAnalise(results);
@@ -2124,11 +2124,16 @@ function paintAnalise(R) {
     insights.push(`⚙️ ${x.r.nome}: índice Materiais/MO caiu para ${x.u6.toFixed(2)} nos últimos 6m (média histórica ${x.geral.toFixed(2)}) — fase de acabamento/mão de obra intensiva, ou compras de material represadas.`); });
   idx.forEach(x=>{ if(x.u6!==null && x.geral>0 && x.u6 > x.geral*1.8)
     insights.push(`📦 ${x.r.nome}: índice Materiais/MO em ${x.u6.toFixed(2)} nos últimos 6m (média ${x.geral.toFixed(2)}) — estoque adiantado ou MO desmobilizada.`); });
+  { const projs=R.map(r=>{const pc=r.pct||0; return pc>0&&r.area? {nome:r.nome, v:(sum(r.obraMes)/(pc/100))/r.area}:null;}).filter(Boolean).sort((a,b)=>b.v-a.v);
+    if (projs.length>=2 && projs[projs.length-1].v>0){
+      const d=(projs[0].v/projs[projs.length-1].v-1)*100;
+      if (d>15) insights.push(`🏗️ Projeção de custo final/m²: <strong>${projs[0].nome}</strong> projeta ${fmt(projs[0].v)}/m² contra ${fmt(projs[projs.length-1].v)}/m² de ${projs[projs.length-1].nome} (+${d.toFixed(0)}%) — nos %s de obra informados. Diferença de padrão construtivo ou custo a investigar.`);
+    } }
   R.forEach((r,i)=>FAMILIAS_ANALISE.forEach((f,j)=>{ const t=tend[i][j];
     if (t!==null && Math.abs(t)>=40) insights.push(`${t>0?'📈':'📉'} ${r.nome} · ${f.nome}: ${t>0?'+':''}${t.toFixed(0)}% no último trimestre vs anterior.`); }));
 
   el.innerHTML = `
-    <div class="info-box" style="border:1px solid #4f8ef740;margin-bottom:14px"><span>📈</span><div><strong>Análise comparativa das 3 obras</strong> — famílias de custo, índices por período e curvas alinhadas pela idade de cada obra (mês 1 = primeiro gasto de obra). Categorias já com reclassificações confirmadas. Meses em andamento ficam fora dos índices.</div></div>
+    <div class="info-box" style="border:1px solid #4f8ef740;margin-bottom:14px"><span>📈</span><div><strong>Análise comparativa das 3 obras</strong> — famílias de custo, índices por período e curvas alinhadas pela idade de cada obra (mês 1 = primeiro gasto de obra). Categorias já com reclassificações confirmadas. Meses em andamento ficam fora dos índices. % de obra executada: o valor editado no Resultado Final de cada obra (padrões atuais: Jazz 82 · Bossa 84 · Liberty 75 — atualize lá e a Análise acompanha).</div></div>
 
     ${insights.length?`<div class="info-box" style="border:1px solid #22c9a066;background:#22c9a008;margin-bottom:14px"><span style="font-size:16px">🔎</span><div><strong>Leituras do auditor (${insights.length}):</strong><br>${insights.slice(0,8).map(s=>'· '+s).join('<br>')}</div></div>`:''}
 
@@ -2172,9 +2177,17 @@ function paintAnalise(R) {
         return `<tr><td style="font-weight:700">mês ${m}</td>
           ${vals.map((v,i)=>`<td style="text-align:right;font-size:11px">${v===null?'<span style=color:#30363d>—</span>':fmt(v)+'/m²'}</td>`).join('')}
           <td style="text-align:right;font-size:10.5px;color:${d!==null&&d>25?'#f4a942':'#8b949e'}">${d===null?'—':'+'+d.toFixed(0)+'%'}</td></tr>`;}).join('')}
-        <tr style="border-top:2px solid var(--border)"><td style="font-weight:700">hoje</td>
+        <tr style="border-top:2px solid var(--border)"><td style="font-weight:700">hoje<br><span style="font-size:9px;color:#8b949e">área total</span></td>
           ${porIdade.map(p=>`<td style="text-align:right;font-size:10.5px">mês ${p.idadeAtual}<br><strong>${p.r.area?fmt(sum(p.r.obraMes)/p.r.area):'—'}/m²</strong></td>`).join('')}
           <td></td></tr>
+        <tr><td style="font-weight:700">hoje<br><span style="font-size:9px;color:#a371f7">área EXECUTADA</span></td>
+          ${porIdade.map(p=>{const pc=p.r.pct||0; const v=pc>0&&p.r.area? sum(p.r.obraMes)/(p.r.area*pc/100):null;
+            return `<td style="text-align:right;font-size:10.5px">${pc>0?pc+'% exec.':'% n/d'}<br><strong style="color:#a371f7">${v?fmt(v)+'/m²':'—'}</strong></td>`;}).join('')}
+          <td style="font-size:9.5px;color:#8b949e;text-align:right">comparável entre obras<br>e com o CUB</td></tr>
+        <tr><td style="font-weight:700">projeção<br><span style="font-size:9px;color:#f4a942">custo final/m²</span></td>
+          ${porIdade.map(p=>{const pc=p.r.pct||0; const v=pc>0&&p.r.area? (sum(p.r.obraMes)/(pc/100))/p.r.area:null;
+            return `<td style="text-align:right;font-size:10.5px"><strong style="color:#f4a942">${v?fmt(v)+'/m²':'—'}</strong></td>`;}).join('')}
+          <td style="font-size:9.5px;color:#8b949e;text-align:right">se o custo/executado<br>se mantiver até 100%</td></tr>
       </tbody></table></div>
 
     <div class="section-title">📉 Tendência por família — último trimestre vs anterior</div>
@@ -3342,6 +3355,13 @@ async function attemptBioLogin() {
 
 // ── RESULTADO FINAL ────────────────────────────────────────────
 function rfKey(k) { return 'rf_'+CFG.sheetId+'_'+k; }
+function areaTotalCfg(c) { return (c&&c.areaTotal) || ((c&&c.nCasas||0)*(c&&c.areaCasa||0)); }
+// % de obra de QUALQUER empreendimento: parâmetro salvo do Resultado Final ou padrão da config
+function pctObraDe(key) {
+  const c = EMPREENDIMENTOS[key]; if (!c) return 0;
+  const salvo = parseFloat(localStorage.getItem('rf_'+c.sheetId+'_pctObraExec'));
+  return (salvo>0? salvo : (c.pctObraDefault||0));
+}
 function rfGet(k,def) { return localStorage.getItem(rfKey(k)) ?? String(def??''); }
 function rfSet(k,v) { localStorage.setItem(rfKey(k),v); }
 
@@ -3480,7 +3500,7 @@ function renderRFInputs() {
     +rfInput('pctImposto','Impostos e Taxas',pctGet('pctImposto')||'','Ex: 7',true)
     +rfInput('pctPermuta','Permuta (% sobre VGV)',pctGet('pctPermuta')||'','Ex: 16.66',true)
     +rfInput('incc','INCC (Correção Monetária)','','Ex: 2.000.000,00')
-    +rfInput('pctObraExec','Obra Executada',pctGet('pctObraExec')||'','Ex: 65',true)
+    +rfInput('pctObraExec','Obra Executada',pctGet('pctObraExec')||CFG.pctObraDefault||'','Ex: 65',true)
     +'</div>'
     +'<div style="display:flex;gap:8px;margin-top:12px">'
     +'<button onclick="rfManualSave()" style="flex:1;background:#22c9a0;border:none;border-radius:8px;color:#0d1117;font-family:DM Mono,monospace;font-size:12px;font-weight:700;padding:10px;cursor:pointer">💾 Salvar</button>'
@@ -3528,7 +3548,7 @@ function renderRFCalc() {
     .filter(r => (r.categoria||'').toLowerCase().includes('permut'))
     .reduce((s,r) => s+r.valor, 0);
   const incc        = parseFloat(rfGet('incc',0))||0;
-  const pctObraExec = parseFloat(rfGet('pctObraExec',0))||0;
+  const pctObraExec = parseFloat(rfGet('pctObraExec', CFG.pctObraDefault||0))||0;
 
   // ── Já saiu do caixa (das despesas lançadas) ─────────────────
   const comissaoPaga = _DESPESAS
@@ -3633,14 +3653,14 @@ function renderRFCalc() {
     // ── 4. RESULTADO ─────────────────────────────────────────
     // ── CUSTO POR M² DE OBRA ─────────────────────────────────
     +(function(){
-      const areaTotal = (CFG.nCasas||0)*(CFG.areaCasa||0);
+      const areaTotal = areaTotalCfg(CFG);
       if (!areaTotal || !custoObra) return '';
       const m2Pago = custoObra/areaTotal;
       const m2Exec = pctObraExec>0 ? custoObra/(areaTotal*pctObraExec/100) : null;
       const m2Proj = pctObraExec>0 ? obraProj/areaTotal : null;
       return rfSec('3b. Custo por m² de obra','#a371f7')
         +rfResultRow('Área total do empreendimento', (areaTotal).toLocaleString('pt-BR')+' m²', '#e6edf3', false,
-          CFG.nCasas+' casas × '+CFG.areaCasa+' m² — apenas custos DIRETOS de obra entram aqui (categorias de obra escolhidas no painel: materiais, mão de obra, canteiro, alimentação, aluguel de equipamentos, segurança, escritório de obra, salários, energia, água). Comissões, impostos, permuta, marketing e distratos ficam de fora.')
+          (CFG.mixCasas || (CFG.nCasas+' casas × '+CFG.areaCasa+' m²'))+' — apenas custos DIRETOS de obra entram aqui (categorias de obra escolhidas no painel: materiais, mão de obra, canteiro, alimentação, aluguel de equipamentos, segurança, escritório de obra, salários, energia, água). Comissões, impostos, permuta, marketing e distratos ficam de fora.')
         +(m2Exec!==null ? rfResultRow('Custo/m² do que já foi executado', fmt(m2Exec)+'/m²', '#a371f7', false,
           'Custo de obra pago ('+fmt(custoObra)+') dividido pela área JÁ EXECUTADA ('+(areaTotal*pctObraExec/100).toLocaleString('pt-BR',{maximumFractionDigits:0})+' m² = '+pctObraExec+'% da área total). É o número comparável com o mercado (CUB, outras obras).') : '')
         +(m2Proj!==null ? rfResultRow('Custo/m² PROJETADO ao final', fmt(m2Proj)+'/m²', '#f4a942', false,

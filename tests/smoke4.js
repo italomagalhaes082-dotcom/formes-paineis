@@ -201,6 +201,8 @@ async function testEmp(emp, checks){
     ok(AN.includes('Materiais ÷ Mão de obra')||AN.includes('Índice Materiais'),'Análise: índice mat/MO');
     ok(AN.includes('alinhadas pela idade'),'Análise: alinhamento por idade');
     ok(AN.includes('Tendência por família'),'Análise: tendências');
+    ok(AN.includes('área EXECUTADA'),'Análise: custo/m² executado por obra');
+    ok(AN.includes('projeção'),'Análise: projeção de custo final/m²');
     // busca de despesas: digitar não perde o texto (debounce re-render preserva)
     w.switchTab(5); await new Promise(r=>setTimeout(r,300));
     const inp=w.document.getElementById('despBusca');
