@@ -714,7 +714,10 @@ async function fetchSheet(aba, sheetId) {
   // Suporta busca por GID (aba = {gid:N}) — imune a nome/acento/conversão de arquivos .xlsx
   const seletor = (aba && typeof aba === 'object' && aba.gid !== undefined)
     ? `gid=${aba.gid}` : `sheet=${encodeURIComponent(aba)}`;
-  const url = `https://docs.google.com/spreadsheets/d/${sid}/gviz/tq?tqx=out:csv&${seletor}`;
+  // headers=1: declara UMA linha de cabeçalho. Sem o parâmetro o Google auto-detecta
+  // e pode ABSORVER as primeiras linhas de dados como cabeçalho (comeu 6 aportes de 2021);
+  // com headers=0 ele apaga o texto do cabeçalho em colunas numéricas. headers=1 resolve os dois.
+  const url = `https://docs.google.com/spreadsheets/d/${sid}/gviz/tq?tqx=out:csv&${seletor}&headers=1`;
   const res = await fetch(url);
   if(!res.ok) throw new Error(`Erro ao buscar aba "${aba && aba.gid !== undefined ? "gid " + aba.gid : aba}": ${res.status}`);
   const text = await res.text();
@@ -802,6 +805,19 @@ async function loadData(force) {
     // rendimentos são DERIVADOS das abas cruas (categoria/tipo), não de abas próprias
     document.getElementById("loadingMsg").textContent = "Lendo receitas e despesas em paralelo...";
     await Promise.all([ loadReceitasFull(), loadDespesas() ]);
+
+    // SENTINELA: memoriza quantas linhas cada aba entregou; acusa se encolher
+    try {
+      const chave = 'linhas_'+CFG.sheetId;
+      const antes = JSON.parse(localStorage.getItem(chave)||'{}');
+      const agora = { rec: (window._linhasRec||0), desp: (window._linhasDesp||0) };
+      window._encolhimento = [];
+      ['rec','desp'].forEach(k=>{
+        if (antes[k]>50 && agora[k] < antes[k]*0.98)
+          window._encolhimento.push({aba: k==='rec'?'RECEITAS TOTAIS':'DESPESAS TOTAIS', antes: antes[k], agora: agora[k]});
+      });
+      if (agora.rec>50 || agora.desp>50) localStorage.setItem(chave, JSON.stringify({rec: Math.max(antes.rec||0, agora.rec), desp: Math.max(antes.desp||0, agora.desp)}));
+    } catch(e) {}
 
     // GUARDA: filtro básico ativo na planilha trunca o CSV — avisa em vez de mostrar painel vazio
     if (_DESPESAS.length === 0 && (_DESP_RETIRADAS.length > 0 || _RECEITAS.length > 50)) {
@@ -962,7 +978,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v13.07.26-b · áreas reais + % obra</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v13.07.26-c · censo de aportes</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:3px solid ${color}">
@@ -2624,6 +2640,21 @@ async function runAuditoria(progressCb) {
       pergunta:"Cada linha abaixo existe na planilha mas o painel não conseguiu ler a DATA DE COMPETÊNCIA. Corrigir o formato da data na planilha (dd/mm/aaaa). Se muitas linhas antigas aparecem aqui, a conversão do arquivo pode ter corrompido datas — conferir as primeiras linhas da aba.",
       itens:(window._cargaDrop||[]).map(d=>_audItem(d.quem, d.motivo, d.val?fmt(d.val):'—', "#f85149")) });
   }
+  // Q0b. CENSO DE APORTES × retrato de 10/07/2026 (só Jazz)
+  if ((new URLSearchParams(location.search).get('emp')||'liberty') === 'jazz' && window._censoReceitas) {
+    const BASE = { '2021':{n:13,v:202523}, '2022':{n:26,v:881085}, '2023':{n:22,v:1295021}, '2026':{n:4,v:400000} };
+    const cen = window._censoReceitas;
+    const falt = [];
+    Object.entries(BASE).forEach(([ano,b])=>{
+      const a = cen.porAnoAportes[ano] || {n:0,v:0};
+      if (a.n < b.n) falt.push(ano+': lidos '+a.n+' de '+b.n+' ('+fmt(b.v-a.v)+' faltando)');
+    });
+    if (falt.length) alerts.push({ sev:"alta", icon:"🧮",
+      titulo:"Censo de aportes: faltam lançamentos vs retrato de 10/07",
+      resumo: falt.join(' · ')+" · linhas brutas recebidas da aba: "+cen.brutas,
+      pergunta:"Os aportes de 23/04, 30/08 e 21/10/2021 (pares Formes+Alves de R$ 61.418+61.105, 5.000+5.000, 5.000+5.000) e 1×R$ 10.000 de 29/11/2021 constavam na planilha antiga e não estão chegando da nova. Se 'linhas brutas' ≈ 1.774, as linhas chegam mas estão ilegíveis (conferir datas/categorias das primeiras linhas da RECEITAS TOTAIS); se for menor, as linhas foram perdidas na conversão — recuperar do arquivo .xlsx de backup.",
+      itens:[ _audItem('Primeiras datas lidas da aba', (cen.primeirasLinhas||[]).join(' · ')||'—', '', '#79c0ff') ] });
+  }
   // Q7b. RECLASSIFICAÇÕES APLICADAS (regras confirmadas pelo financeiro)
   { const rc = D.filter(r=>r.reclassDe);
     if (rc.length) alerts.push({ sev:"info", icon:"🔁",
@@ -3746,6 +3777,7 @@ let _REC_APORTES = [];
 let _RENDIMENTOS = [];
 function parseReceitasRows(allRows) {
   // Retorna {receitas, aportes, rendimentos} — colunas detectadas pelo cabeçalho
+  window._censoReceitas = { brutas: allRows.length, porAnoAportes: {}, primeirasLinhas: allRows.slice(1,4).map(r=>String(r&&r[3]||'').slice(0,12)) };
   const M = detectCols(allRows, "rec");
   const rows = allRows.slice(M.hdr + 1);
   const receitas=[], aportes=[], rendimentos=[];
@@ -3772,7 +3804,12 @@ function parseReceitasRows(allRows) {
 
     if (catU.includes('AFAC') || catU.includes('APORTE') || oriU.includes('AFAC') || descU.startsWith('AFAC') || descU.startsWith('APORTE')) {
       const socio = normalizeSocio(cliente) || normalizeSocio(catRaw) || normalizeSocio(desc) || (cliente ? "(" + cliente.split(" ")[0] + ")" : null);
-      if (socio && valReceb > 0) aportes.push({ socio, data: dataComp, valor: valReceb });
+      if (socio && valReceb > 0) {
+        aportes.push({ socio, data: dataComp, valor: valReceb });
+        const ano = dataComp.slice(-4);
+        const c = (window._censoReceitas.porAnoAportes[ano] = window._censoReceitas.porAnoAportes[ano] || {n:0,v:0});
+        c.n++; c.v += valReceb;
+      }
       return;
     }
     if (catU.includes('RENDIMENTO') || descU.startsWith('RENDIMENTO APLICA')) {
