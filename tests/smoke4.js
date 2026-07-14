@@ -192,6 +192,21 @@ async function testEmp(emp, checks){
     ok(t('tab8').includes('Mês a mês') && /jan|fev|mar|mai|jul/.test(t('tab8')),'Visão mensal do fornecedor');
     w.volSetForn(null); await new Promise(r=>setTimeout(r,80));
     ok(!t('tab8').includes('Filtrado por:'),'Limpar filtro volta ao grupo');
+    ok(t('tab8').includes('Ranking por Categoria'),'Consolidado: ranking por categoria');
+    ok(t('tab8').includes('Fornecedor - Aquisição de materiais')||t('tab8').includes('Aquisição'),'Categoria real no ranking');
+    // aba Análise
+    w.switchTab(12); await new Promise(r=>setTimeout(r,900));
+    const AN=t('tab12');
+    ok(AN.includes('Famílias de custo'),'Análise: tabela de famílias');
+    ok(AN.includes('Materiais ÷ Mão de obra')||AN.includes('Índice Materiais'),'Análise: índice mat/MO');
+    ok(AN.includes('alinhadas pela idade'),'Análise: alinhamento por idade');
+    ok(AN.includes('Tendência por família'),'Análise: tendências');
+    // busca de despesas: digitar não perde o texto (debounce re-render preserva)
+    w.switchTab(5); await new Promise(r=>setTimeout(r,300));
+    const inp=w.document.getElementById('despBusca');
+    if(inp){ inp.value='cim'; w.despSetBusca('cim'); await new Promise(r=>setTimeout(r,600)); }
+    const inp2=w.document.getElementById('despBusca');
+    ok(inp2 && inp2.value==='cim','Busca despesas: texto preservado após re-render');
     // toggle: clica, confere que abriu, clica de novo e confere que fechou
     const rowT=w.document.querySelector('.forn-consol-row');
     if(rowT){ rowT.click(); await new Promise(r=>setTimeout(r,120)); }

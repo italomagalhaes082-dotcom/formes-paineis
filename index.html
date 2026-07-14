@@ -359,6 +359,7 @@
       <button class="tab" onclick="switchTab(9)">🔍 Auditoria</button>
       <button class="tab" onclick="switchTab(10)">🏪 Fornecedores</button>
       <button class="tab" id="tabBtnSoc" onclick="switchTab(11)">🤝 Sociedade</button>
+      <button class="tab" onclick="switchTab(12)">📈 Análise</button>
     </div>
   </div>
   <div class="content">
@@ -374,6 +375,7 @@
     <div class="tab-content" id="tab9"></div>
     <div class="tab-content" id="tab10"></div>
     <div class="tab-content" id="tab11"></div>
+    <div class="tab-content" id="tab12"></div>
   </div>
 </div>
 
@@ -786,6 +788,7 @@ function parseSheet(json) {
 
 async function loadData(force) {
   if (force) { _GV = null; _GV_MOTIVO = ""; }
+  window._cargaDrop = []; window._cargaDropN = 0;
   document.getElementById("dashboard").style.display = "none";
   document.getElementById("loadingScreen").style.display = "flex";
   document.getElementById("loadingMsg").textContent = "Carregando dados da planilha...";
@@ -959,7 +962,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v12.07.26-e · CI ativo</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v13.07.26-a · análise comparativa</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:3px solid ${color}">
@@ -1797,7 +1800,14 @@ window.despOrdenar = function(v) {
 };
 window.despSetBusca = function(v) {
   _despFiltros.busca = v;
-  renderDespesas();
+  clearTimeout(window._despBuscaT);
+  window._despBuscaT = setTimeout(() => {
+    const sy = window.scrollY;
+    renderDespesas();
+    const inp = document.getElementById('despBusca');
+    if (inp) { const fim = inp.value.length; inp.focus(); try{inp.setSelectionRange(fim, fim);}catch(e){} }
+    window.scrollTo(0, sy);
+  }, 350);
 };
 window.despSetEvolucao = function(v) {
   _despFiltros.evolucao = v;
@@ -1957,6 +1967,27 @@ function volPaint(fornKey){
       ${rows.length>LIM?`<div style="font-size:10px;color:#8b949e;font-family:'DM Mono',monospace;margin:-10px 0 14px">mostrando ${LIM} de ${rows.length} pagamentos (ordene ou use a visão anual para ver o todo)</div>`:''}`;
     })() : ''}
 
+    ${(function(){
+      const C={};
+      R.forEach(r=>Object.entries(r.porCat||{}).forEach(([cat,v])=>{
+        const g=(C[cat]=C[cat]||{total:0,u12:0,obras:{}});
+        g.total+=v.total; g.u12+=v.u12; g.obras[r.key]=v.total;
+      }));
+      const tG=R.reduce((s,r)=>s+(r.tDesp||0),0);
+      const cats=Object.entries(C).sort((a,b)=>b[1].total-a[1].total).slice(0,20);
+      return `
+      <div class="section-title">📊 Ranking por Categoria de Despesa${hintIcon("Todas as despesas das 3 obras agrupadas pela categoria (já com as reclassificações confirmadas aplicadas). Compare o peso de cada tipo de gasto entre as obras e no grupo.")}</div>
+      <div class="table-wrap" style="margin-bottom:16px"><table>
+        <thead><tr><th>Categoria</th>${R.map(r=>`<th style="text-align:right;color:${r.cor}">${r.nome.split(' ')[0]}</th>`).join('')}<th style="text-align:right">Grupo</th><th style="text-align:right">%</th><th style="text-align:right">12m</th></tr></thead>
+        <tbody>${cats.map(([cat,g])=>`<tr>
+          <td style="font-size:11.5px">${cat}</td>
+          ${R.map(r=>`<td style="text-align:right;font-size:11px">${g.obras[r.key]?fmt(g.obras[r.key]):'—'}</td>`).join('')}
+          <td style="text-align:right;font-weight:700;font-size:11.5px">${fmt(g.total)}</td>
+          <td style="text-align:right;color:#8b949e;font-size:10.5px">${(g.total/tG*100).toFixed(1)}%</td>
+          <td style="text-align:right;color:#8b949e;font-size:10.5px">${fmt(g.u12)}</td></tr>`).join('')}
+        </tbody></table></div>`;
+    })()}
+
     <div class="section-title">🏪 Fornecedores — clique para filtrar tudo acima</div>
     <input id="fornConsolBusca" placeholder="🔍 buscar fornecedor..." oninput="window.fornConsolFiltra(this.value)"
       style="width:100%;background:var(--card);border:1px solid var(--border);border-radius:8px;color:#e6edf3;padding:9px 12px;font-family:'DM Mono',monospace;font-size:12px;margin-bottom:10px">
@@ -1985,6 +2016,176 @@ window.fornConsolFiltra = function(q){
     el.style.display = !n || (el.dataset.nome||'').includes(n) ? '' : 'none';
   });
 };
+
+// ═══════════ 📈 ANÁLISE COMPARATIVA — visão de auditor ═══════════
+const FAMILIAS_ANALISE = [
+  { k:'materiais',   nome:'Materiais',    cor:'#4f8ef7', match:c=>c.includes('AQUISICAO DE MATERIAIS')||c.includes('MATERIA') },
+  { k:'mo',          nome:'Mão de obra',  cor:'#f4a942', match:c=>c.includes('MAO DE OBRA') },
+  { k:'salarios',    nome:'Salários',     cor:'#e0955c', match:c=>c.includes('SALARIO') },
+  { k:'alimentacao', nome:'Alimentação',  cor:'#22c9a0', match:c=>c.includes('ALIMENTA') },
+  { k:'equipamentos',nome:'Aluguel equip.',cor:'#a371f7', match:c=>c.includes('ALUGUEL DE EQUIPAMENTOS')||c.includes('ALUGUEL EQUIP') },
+];
+const MESN_A=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+function _ymLabel(ym){ return MESN_A[ym%100-1]+'/'+String(ym).slice(2,4); }
+
+async function renderAnalise(force) {
+  const el = document.getElementById('tab12');
+  if (!el) return;
+  if (window._analiseData && !force) { paintAnalise(window._analiseData); return; }
+  el.innerHTML = '<div class="info-box">⏳ Cruzando as despesas das três obras…</div>';
+  try {
+    const results = await Promise.all(Object.entries(EMPREENDIMENTOS).map(async ([k, c]) => {
+      const jDesp = await fetchSheet(c.abaDespesas, c.sheetId);
+      const rowsD = parseSheet(jDesp);
+      const desp = parseDespesasRows(rowsD);
+      const area = (c.nCasas||0)*(c.areaCasa||0);
+      // séries mensais por família + custo de obra total mensal
+      const fam = {}; FAMILIAS_ANALISE.forEach(f=>fam[f.k]={});
+      const obraMes = {};
+      let primeiro = null;
+      desp.forEach(r=>{
+        const d = parseDate(r.data); if(!d) return;
+        const ym = d.getFullYear()*100 + (d.getMonth()+1);
+        const cU = _audNorm(r.categoria||'');
+        if (isCustoObra(r.categoria||'')) {
+          obraMes[ym]=(obraMes[ym]||0)+r.valor;
+          if (!primeiro || ym<primeiro) primeiro=ym;
+        }
+        FAMILIAS_ANALISE.forEach(f=>{ if(f.match(cU)) fam[f.k][ym]=(fam[f.k][ym]||0)+r.valor; });
+      });
+      return { key:k, nome:c.nome, cor:c.cor, area, fam, obraMes, primeiro };
+    }));
+    window._analiseData = results;
+    paintAnalise(results);
+  } catch(e) {
+    el.innerHTML = '<div class="info-box" style="border:1px solid #f8514966">Erro na análise: '+(e.message||e)+'</div>';
+  }
+}
+
+function paintAnalise(R) {
+  const el = document.getElementById('tab12');
+  const hoje = new Date(); const ymHoje = hoje.getFullYear()*100 + (hoje.getMonth()+1);
+  const ymsAll = [...new Set(R.flatMap(r=>Object.keys(r.obraMes).map(Number)))].sort((a,b)=>a-b);
+  const fechados = ymsAll.filter(ym=>ym<ymHoje);
+  const sum = o => Object.values(o||{}).reduce((s,v)=>s+v,0);
+  const ultN = (serie, n) => fechados.slice(-n).reduce((s,ym)=>s+(serie[ym]||0),0);
+  const idadeMeses = (r, ym) => { // meses desde o 1º gasto de obra
+    if (!r.primeiro) return 0;
+    return (Math.floor(ym/100)-Math.floor(r.primeiro/100))*12 + (ym%100 - r.primeiro%100) + 1;
+  };
+  const k=(l,v,s,c,h)=>`<div class="kpi" style="border-top:3px solid ${c}"><div class="kpi-label">${l}${h?hintIcon(h):''}</div><div class="kpi-value" style="color:${c};font-size:17px">${v}</div>${s?`<div class="kpi-sub">${s}</div>`:''}</div>`;
+
+  // ── 1. famílias × obras: total, R$/m², % do custo de obra ──
+  const tabFam = FAMILIAS_ANALISE.map(f=>{
+    const cols = R.map(r=>{
+      const t=sum(r.fam[f.k]); const obra=sum(r.obraMes);
+      return { t, m2: r.area? t/r.area : 0, pct: obra? t/obra*100 : 0 };
+    });
+    const tG = cols.reduce((s,c)=>s+c.t,0);
+    return { f, cols, tG };
+  });
+
+  // ── 2. índice materiais / mão de obra (inclui salários de obra) ──
+  const idx = R.map(r=>{
+    const serieIdx = {};
+    fechados.forEach(ym=>{
+      const mat=(r.fam.materiais[ym]||0), mo=(r.fam.mo[ym]||0)+(r.fam.salarios[ym]||0);
+      if (mo>3000) serieIdx[ym] = mat/mo;   // meses com MO relevante
+    });
+    const matT=sum(r.fam.materiais), moT=sum(r.fam.mo)+sum(r.fam.salarios);
+    return { r, serieIdx, geral: moT>0? matT/moT : 0,
+             u6: (()=>{ const m6=ultN(r.fam.materiais,6), o6=ultN(r.fam.mo,6)+ultN(r.fam.salarios,6); return o6>0? m6/o6 : null; })() };
+  });
+
+  // ── 3. tendência 3m vs 3m anteriores por família/obra ──
+  const tend = R.map(r=>FAMILIAS_ANALISE.map(f=>{
+    const a=ultN(r.fam[f.k],3), b=fechados.slice(-6,-3).reduce((s,ym)=>s+(r.fam[f.k][ym]||0),0);
+    return b>1000? (a-b)/b*100 : null;
+  }));
+
+  // ── 4. alinhamento por idade da obra: custo de obra acumulado/m² nos marcos ──
+  const marcos=[6,12,18,24,30,36];
+  const porIdade = R.map(r=>{
+    const acum={}; let run=0;
+    ymsAll.forEach(ym=>{ run+=(r.obraMes[ym]||0); acum[idadeMeses(r,ym)]=run; });
+    const idadeAtual = r.primeiro? idadeMeses(r, ymHoje-0) : 0;
+    return { r, acum, idadeAtual };
+  });
+
+  // ── insights automáticos (regras de auditor) ──
+  const insights=[];
+  { const al=tabFam.find(t=>t.f.k==='alimentacao');
+    const comA=al.cols.map((c,i)=>({nome:R[i].nome, m2:c.m2})).filter(x=>x.m2>0).sort((a,b)=>b.m2-a.m2);
+    if (comA.length>=2 && comA[comA.length-1].m2>0){
+      const razao=comA[0].m2/comA[comA.length-1].m2;
+      if (razao>1.3) insights.push(`🍛 Alimentação por m²: <strong>${comA[0].nome}</strong> gasta ${razao.toFixed(1)}× o que gasta ${comA[comA.length-1].nome} (${fmt(comA[0].m2)}/m² vs ${fmt(comA[comA.length-1].m2)}/m²) — vale investigar nº de funcionários × fornecimento.`);
+    } }
+  idx.forEach(x=>{ if(x.u6!==null && x.geral>0 && x.u6 < x.geral*0.55)
+    insights.push(`⚙️ ${x.r.nome}: índice Materiais/MO caiu para ${x.u6.toFixed(2)} nos últimos 6m (média histórica ${x.geral.toFixed(2)}) — fase de acabamento/mão de obra intensiva, ou compras de material represadas.`); });
+  idx.forEach(x=>{ if(x.u6!==null && x.geral>0 && x.u6 > x.geral*1.8)
+    insights.push(`📦 ${x.r.nome}: índice Materiais/MO em ${x.u6.toFixed(2)} nos últimos 6m (média ${x.geral.toFixed(2)}) — estoque adiantado ou MO desmobilizada.`); });
+  R.forEach((r,i)=>FAMILIAS_ANALISE.forEach((f,j)=>{ const t=tend[i][j];
+    if (t!==null && Math.abs(t)>=40) insights.push(`${t>0?'📈':'📉'} ${r.nome} · ${f.nome}: ${t>0?'+':''}${t.toFixed(0)}% no último trimestre vs anterior.`); }));
+
+  el.innerHTML = `
+    <div class="info-box" style="border:1px solid #4f8ef740;margin-bottom:14px"><span>📈</span><div><strong>Análise comparativa das 3 obras</strong> — famílias de custo, índices por período e curvas alinhadas pela idade de cada obra (mês 1 = primeiro gasto de obra). Categorias já com reclassificações confirmadas. Meses em andamento ficam fora dos índices.</div></div>
+
+    ${insights.length?`<div class="info-box" style="border:1px solid #22c9a066;background:#22c9a008;margin-bottom:14px"><span style="font-size:16px">🔎</span><div><strong>Leituras do auditor (${insights.length}):</strong><br>${insights.slice(0,8).map(s=>'· '+s).join('<br>')}</div></div>`:''}
+
+    <div class="section-title">Famílias de custo — grupo e por obra (R$/m² sobre área total)</div>
+    <div class="table-wrap" style="margin-bottom:16px"><table>
+      <thead><tr><th>Família</th>${R.map(r=>`<th style="text-align:right;color:${r.cor}">${r.nome.split(' ')[0]}</th>`).join('')}<th style="text-align:right">Grupo</th></tr></thead>
+      <tbody>${tabFam.map(({f,cols,tG})=>`
+        <tr><td><span style="color:${f.cor}">●</span> <strong style="font-size:11.5px">${f.nome}</strong></td>
+          ${cols.map(c=>`<td style="text-align:right;font-size:10.5px">${fmt(c.t)}<br><span style="color:#8b949e">${fmt(c.m2)}/m² · ${c.pct.toFixed(1)}%</span></td>`).join('')}
+          <td style="text-align:right;font-weight:700;font-size:11px">${fmt(tG)}</td></tr>`).join('')}
+      </tbody></table></div>
+
+    <div class="section-title">⚙️ Índice Materiais ÷ Mão de obra${hintIcon('Materiais ÷ (mão de obra + salários de obra), mês a mês. Alto no início (fundação/estrutura compra muito material), cai no acabamento (MO intensiva). Comparar obras na mesma fase revela eficiência de compra e dimensionamento de equipe.')}</div>
+    <div class="kpi-grid" style="grid-template-columns:repeat(${R.length},1fr)">
+      ${idx.map(x=>k(x.r.nome.split(' ')[0], x.geral.toFixed(2), 'últimos 6m: '+(x.u6===null?'—':x.u6.toFixed(2)), x.r.cor)).join('')}
+    </div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 12px;margin:10px 0 16px">
+      <div style="font-size:11px;color:#8b949e;margin-bottom:8px;font-family:'DM Mono',monospace">Índice mensal — últimos 18 meses fechados</div>
+      ${idx.map(x=>{
+        const yms=fechados.slice(-18);
+        const max=Math.max(1,...yms.map(ym=>x.serieIdx[ym]||0));
+        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="width:64px;font-size:10px;color:${x.r.cor};font-family:'DM Mono',monospace">${x.r.nome.split(' ')[0]}</span>
+          <div style="flex:1;display:flex;gap:2px;align-items:flex-end;height:44px">
+            ${yms.map(ym=>{const v=x.serieIdx[ym];return `<div style="flex:1;background:${v?x.r.cor:'#21262d'};opacity:.85;height:${v?Math.max(8,v/max*100):4}%" title="${_ymLabel(ym)}: ${v?v.toFixed(2):'sem MO relevante'}"></div>`;}).join('')}
+          </div></div>`;}).join('')}
+      <div style="display:flex;gap:2px;margin-left:72px">${fechados.slice(-18).map(ym=>`<div style="flex:1;font-size:6.5px;color:#8b949e;text-align:center;font-family:'DM Mono',monospace">${ym%100===1?String(Math.floor(ym/100)).slice(2):MESN_A[ym%100-1]}</div>`).join('')}</div>
+    </div>
+
+    <div class="section-title">🕐 Obras alinhadas pela idade — custo de obra acumulado por m²${hintIcon('Mês 1 = primeiro gasto de obra de cada empreendimento. Comparar no MESMO mês de vida mostra qual obra está mais cara/barata na mesma fase, independente do calendário.')}</div>
+    <div class="table-wrap" style="margin-bottom:16px"><table>
+      <thead><tr><th>Marco</th>${R.map(r=>`<th style="text-align:right;color:${r.cor}">${r.nome.split(' ')[0]}</th>`).join('')}<th style="text-align:right;color:#8b949e">Δ mais cara vs mais barata</th></tr></thead>
+      <tbody>${marcos.map(m=>{
+        const vals=porIdade.map(p=>{
+          if (m>p.idadeAtual) return null;
+          let melhor=null; Object.entries(p.acum).forEach(([id,v])=>{ if(+id<=m && (melhor===null||+id>melhor.id)) melhor={id:+id,v}; });
+          return melhor && p.r.area ? melhor.v/p.r.area : null;
+        });
+        const ok=vals.filter(v=>v!==null);
+        const d=ok.length>=2? (Math.max(...ok)/Math.min(...ok)-1)*100 : null;
+        return `<tr><td style="font-weight:700">mês ${m}</td>
+          ${vals.map((v,i)=>`<td style="text-align:right;font-size:11px">${v===null?'<span style=color:#30363d>—</span>':fmt(v)+'/m²'}</td>`).join('')}
+          <td style="text-align:right;font-size:10.5px;color:${d!==null&&d>25?'#f4a942':'#8b949e'}">${d===null?'—':'+'+d.toFixed(0)+'%'}</td></tr>`;}).join('')}
+        <tr style="border-top:2px solid var(--border)"><td style="font-weight:700">hoje</td>
+          ${porIdade.map(p=>`<td style="text-align:right;font-size:10.5px">mês ${p.idadeAtual}<br><strong>${p.r.area?fmt(sum(p.r.obraMes)/p.r.area):'—'}/m²</strong></td>`).join('')}
+          <td></td></tr>
+      </tbody></table></div>
+
+    <div class="section-title">📉 Tendência por família — último trimestre vs anterior</div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Família</th>${R.map(r=>`<th style="text-align:right;color:${r.cor}">${r.nome.split(' ')[0]}</th>`).join('')}</tr></thead>
+      <tbody>${FAMILIAS_ANALISE.map((f,j)=>`<tr><td style="font-size:11.5px"><span style="color:${f.cor}">●</span> ${f.nome}</td>
+        ${R.map((r,i)=>{const t=tend[i][j];return `<td style="text-align:right;font-size:11px;color:${t===null?'#30363d':t>15?'#f4a942':t<-15?'#22c9a0':'#c9d1d9'}">${t===null?'—':(t>0?'+':'')+t.toFixed(0)+'%'}</td>`;}).join('')}
+      </tr>`).join('')}
+      </tbody></table></div>
+    <div style="font-size:10px;color:#8b949e;font-family:'DM Mono',monospace;margin-top:8px">Laranja = acelerando · verde = desacelerando · considera só meses fechados</div>`;
+}
 
 async function renderConsolidado(force) {
   const el = document.getElementById('tab8');
@@ -2016,12 +2217,15 @@ async function renderConsolidado(force) {
       try { if (ap.length) { const rows = calcCDI(ap, ret); cdi = rows[rows.length-1]?.custoCDI_acum || 0; } } catch(e) {}
       // Volume de compras: despesas completas da obra (fluxos de sócio já fora)
       const desp = parseDespesasRows(rowsD);
-      const porMes = {}, porAno = {}, porForn = {};
+      const porMes = {}, porAno = {}, porForn = {}, porCat = {};
       desp.forEach(r => {
         const d = parseDate(r.data); if (!d) return;
         const ym = d.getFullYear()*100 + (d.getMonth()+1);
         porMes[ym] = (porMes[ym]||0) + r.valor;
         porAno[d.getFullYear()] = (porAno[d.getFullYear()]||0) + r.valor;
+        const catk = r.categoria || '(sem categoria)';
+        (porCat[catk] = porCat[catk] || {total:0, u12:0}).total += r.valor;
+        if ((new Date()-d) < 366*86400000) porCat[catk].u12 += r.valor;
         // chave canônica do fornecedor (une LTDA/ME/EPP e variações entre obras)
         const fk = _audNorm(r.fornecedor).replace(/\b(LTDA|ME|EPP|EIRELI|S\/?A)\b\.?/g,'').replace(/[^A-Z0-9 ]/g,'').replace(/\s+/g,' ').trim();
         if (!fk || fk==='—') return;
@@ -2032,7 +2236,7 @@ async function renderConsolidado(force) {
         F.meses[ym] = (F.meses[ym]||0) + r.valor;
         if ((new Date()-d) < 366*86400000) F.u12 += r.valor;
       });
-      return { key:k, nome:c.nome, cor:c.cor, tAp, tRet, exposto:tAp-tRet, nAp:ap.length, nRet:ret.length, cdi, rend, porMes, porAno, porForn, tDesp: desp.reduce((s,r)=>s+r.valor,0) };
+      return { key:k, nome:c.nome, cor:c.cor, tAp, tRet, exposto:tAp-tRet, nAp:ap.length, nRet:ret.length, cdi, rend, porMes, porAno, porForn, porCat, tDesp: desp.reduce((s,r)=>s+r.valor,0) };
     }));
     window._consolData = results;
     paintConsolidado(results);
@@ -2398,6 +2602,14 @@ async function runAuditoria(progressCb) {
       resumo: falhas.length+" contrato(s) com parcelas intermediárias ausentes da planilha",
       pergunta:"Se a parcela 5/13 existe e a 4/13 não, ou o recebimento não foi lançado (receita subestimada e inadimplência invisível) ou foi lançado sem o padrão n/m. Localizar as parcelas faltantes de cada contrato.",
       itens: falhas.slice(0,25).map(f=>_audItem("CS "+String(f.casa).padStart(2,"0")+" · "+(f.cliente||"—"), "faltam: "+f.faltam.slice(0,8).join(", ")+" de "+f.total, f.tem.size+" lançadas", "#f4a942")) });
+  }
+  // Q0. DIAGNÓSTICO DE CARGA — linhas descartadas na leitura da planilha
+  { const n = window._cargaDropN||0;
+    if (n>0) alerts.push({ sev: n>10?"alta":"info", icon:"📥",
+      titulo:"Diagnóstico de carga: "+n+" linha(s) de RECEITAS descartadas na leitura",
+      resumo:"Linhas com data ilegível não entram em NENHUM cálculo (aportes, vendas, Resultado Final)",
+      pergunta:"Cada linha abaixo existe na planilha mas o painel não conseguiu ler a DATA DE COMPETÊNCIA. Corrigir o formato da data na planilha (dd/mm/aaaa). Se muitas linhas antigas aparecem aqui, a conversão do arquivo pode ter corrompido datas — conferir as primeiras linhas da aba.",
+      itens:(window._cargaDrop||[]).map(d=>_audItem(d.quem, d.motivo, d.val?fmt(d.val):'—', "#f85149")) });
   }
   // Q7b. RECLASSIFICAÇÕES APLICADAS (regras confirmadas pelo financeiro)
   { const rc = D.filter(r=>r.reclassDe);
@@ -2972,7 +3184,7 @@ function renderFornecedores(){
       <div class="kpi" style="border-top:3px solid #a371f7"><div class="kpi-label">Top 5 Concentram</div><div class="kpi-value" style="color:#a371f7">${(top5/totalTudo*100).toFixed(1)}%</div><div class="kpi-sub">do total de despesas</div></div>
     </div>
     <div style="display:flex;flex-direction:column;gap:8px;margin:16px 0 12px">
-      <input type="text" placeholder="🔍  Buscar fornecedor..." value="${_fornState.busca}"
+      <input type="text" id="fornBusca" placeholder="🔍  Buscar fornecedor..." value="${_fornState.busca}"
         oninput="fornSetBusca(this.value)"
         style="background:#161b22;border:1px solid #21262d;border-radius:8px;color:#e6edf3;font-size:13px;padding:10px 14px;outline:none;font-family:'DM Mono',monospace;width:100%"/>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -3037,6 +3249,7 @@ function switchTab(i) {
   else if(i===9) renderAuditoria();
   else if(i===10) renderFornecedores();
   else if(i===11) renderSociedade();
+  else if(i===12) renderAnalise();
   else setTimeout(()=>buildCharts(i),80);
 }
 
@@ -3529,7 +3742,13 @@ function parseReceitasRows(allRows) {
     const catU     = catRaw.toUpperCase();
     const descU    = desc.toUpperCase();
     const oriU     = origem.toUpperCase();
-    if (!dataComp || !parseDate(dataComp)) return;
+    if (!dataComp || !parseDate(dataComp)) {
+      window._cargaDrop = window._cargaDrop || [];
+      if (window._cargaDrop.length < 12 && (cliente || desc || valReceb>0))
+        window._cargaDrop.push({aba:'RECEITAS', motivo:'data ilegível: "'+String(r[M.data]||'').slice(0,18)+'"', quem:(cliente||desc).slice(0,30), val:valReceb});
+      window._cargaDropN = (window._cargaDropN||0)+1;
+      return;
+    }
 
     if (catU.includes('AFAC') || catU.includes('APORTE') || oriU.includes('AFAC') || descU.startsWith('AFAC') || descU.startsWith('APORTE')) {
       const socio = normalizeSocio(cliente) || normalizeSocio(catRaw) || normalizeSocio(desc) || (cliente ? "(" + cliente.split(" ")[0] + ")" : null);
@@ -3717,9 +3936,9 @@ function renderVendasCurado(el) {
     ${window._gvSemColuna?`<div class="info-box" style="border:1px solid #e05c7e66;background:#e05c7e0d;margin-bottom:12px"><span style="color:#e05c7e;font-size:16px">⚠</span><div><strong>A aba GESTÃO VENDAS está sem a coluna RECEBIDO DISTRATADOS</strong> — os números de retenção ficam zerados até recolar o GESTAO_VENDAS_JAZZ.xlsx mais recente. <strong>Atenção:</strong> confira se você editou a planilha CERTA — o painel lê a que termina em <strong>…${String(SHEET_ID).slice(-6)}</strong> (a nativa nova); a .xlsx antiga é backup e não alimenta nada.</div></div>`:''}
     ${div.length?`<div class="info-box" style="border:1px solid #f4a94266;background:#f4a9420d;margin-bottom:12px"><span style="color:#f4a942;font-size:16px">⚠</span><div><strong>Divergências curada × planilha (${div.length}):</strong><br>${div.slice(0,8).map(d=>'· '+d).join('<br>')}</div></div>`:''}
     <div class="kpi-grid">
-      ${k('VGV vigente', fmt(vgv), (G.length-nDisp)+' vendidas · '+nDisp+' disponíveis', '#4f8ef7')}
+      ${k('VGV vigente', fmt(vgv), G.length+' casas no empreendimento', '#4f8ef7')}
       ${k('Recebido (vigentes)', fmt(receb), vgv>0?(receb/vgv*100).toFixed(1)+'% do VGV · INCC: '+fmt(incc):'', '#22c9a0')}
-      ${k('Situação', nQ+' quitadas · '+nA+' em andamento', '', '#a371f7')}
+      ${k('Situação das '+G.length+' casas', nQ+' quit · '+nA+' andam · '+nDev+' devendo · '+nDisp+' disp', 'soma: '+(nQ+nA+nDev+nDisp)+' — quitadas + andamento + devendo = '+(nQ+nA+nDev)+' vendidas', '#a371f7')}
       ${k('⚠ Entregues e devendo', nDev+' casas', 'saldo em aberto: '+fmt(saldoDevendo), nDev?'#e05c7e':'#22c9a0','Casas já entregues cujo contrato ainda tem saldo a receber — prioridade de cobrança: o cliente já mora e a alavanca da entrega se foi.')}
     </div>
     <div class="section-title" style="margin-top:16px">↩️ Distratos — inteligência completa (${dN})</div>
@@ -4394,6 +4613,29 @@ document.getElementById('drillModal').addEventListener('click', function(e) {
   if(e.target===this) closeDrill();
 });
 </script>
+
+</body>
+</html>window.fornSetBusca = function(v) {
+  _fornState.busca = v;
+  clearTimeout(window._fornBuscaT);
+  window._fornBuscaT = setTimeout(() => {
+    const sy = window.scrollY;
+    renderFornecedores();
+    const inp = document.getElementById('fornBusca');
+    if (inp) { const fim = inp.value.length; inp.focus(); try{inp.setSelectionRange(fim, fim);}catch(e){} }
+    window.scrollTo(0, sy);
+  }, 350);
+};!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title id="page-title">Painel Gerencial — Formes Engenharia</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<!-- Firebase compat SDK v9 (cache-bust: v3) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
 
 </body>
 </html>
