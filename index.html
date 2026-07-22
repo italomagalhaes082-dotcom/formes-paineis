@@ -1016,7 +1016,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v22.07.26-i · perícia das janelas</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v22.07.26-j · janelas pré-alimentação</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:3px solid ${color}">
@@ -2114,13 +2114,18 @@ async function renderAlimentacao(force) {
     while (y*100+m<=ymHoje) { todos.push(y*100+m); m++; if(m>12){m=1;y++;} } }
   const val=(r,ym)=>r.fam.alimentacao[ym]||0;
   const obraAtiva=(r,ym)=>(r.obraMes[ym]||0)>30000;  // obra rodando de verdade naquele mês
-  // ── detector de janelas suspeitas: obra ativa, alimentação zerada, Bossa pagando ──
+  // ── detector de janelas: obra ativa sem alimentação, por DOIS critérios ──
+  // (a) o Bossa pagava no mesmo mês (comparação direta), OU
+  // (b) o mês é ANTERIOR à primeira alimentação oficial daquela obra (pré-história da categoria)
   const bossa=R.find(r=>r.key==='bossa');
+  const priAli={}; R.forEach(r=>{ priAli[r.key] = todos.find(ym=>val(r,ym)>500) || null; });
+  const suspAli=(r,ym)=> obraAtiva(r,ym) && val(r,ym)<500 &&
+    ( (r.key!=='bossa' && bossa && val(bossa,ym)>2000) || (!priAli[r.key] || ym<priAli[r.key]) );
   const janelas=[];
-  R.filter(r=>r.key!=='bossa').forEach(r=>{
+  R.forEach(r=>{
     let inicio=null;
     todos.forEach((ym,i)=>{
-      const suspeito = obraAtiva(r,ym) && val(r,ym)<500 && bossa && val(bossa,ym)>2000;
+      const suspeito = suspAli(r,ym);
       if (suspeito && inicio===null) inicio=ym;
       if ((!suspeito || i===todos.length-1) && inicio!==null){
         const fim = suspeito? ym : todos[i-1];
@@ -2133,11 +2138,11 @@ async function renderAlimentacao(force) {
   const lab=ym=>MESN_A[ym%100-1]+'/'+String(ym).slice(2,4);
   const k=(l,v,s,c,h)=>`<div class="kpi" style="border-top:3px solid ${c}"><div class="kpi-label">${l}${h?hintIcon(h):''}</div><div class="kpi-value" style="color:${c};font-size:15px">${v}</div>${s?`<div class="kpi-sub">${s}</div>`:''}</div>`;
   const fechados=todos.filter(ym=>ym<ymHoje);
-  if (window._aliRelMode) { el.innerHTML = aliRelatorioHtml(R, todos, fechados, ymHoje, janelas, val, obraAtiva, lab, sum, bossa); return; }
+  if (window._aliRelMode) { el.innerHTML = aliRelatorioHtml(R, todos, fechados, ymHoje, janelas, val, obraAtiva, lab, sum, bossa, suspAli); return; }
   el.innerHTML = `
     <div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button onclick="aliToggleRel()" style="background:#22c9a0;color:#04140f;border:0;border-radius:8px;padding:8px 16px;cursor:pointer;font-family:'DM Mono',monospace;font-weight:700">📄 Versão relatório / PDF</button></div>`+`
     <div class="info-box" style="border:1px solid #22c9a040;margin-bottom:12px"><span>🍛</span><div><strong>Alimentação de obra — comparativo integral das três obras.</strong> Números pela categoria oficial; os candidatos a reclassificação (caixinha/André/mercado) só entram após sua validação na Auditoria. Meses de obra parada não contam como lacuna.</div></div>
-    ${janelas.length?`<div class="info-box" style="border:1px solid #e05c7e66;background:#e05c7e0d;margin-bottom:12px"><span style="color:#e05c7e;font-size:16px">🕵️</span><div><strong>Janelas suspeitas — obra ativa SEM alimentação identificada, com o Bossa pagando normalmente (${janelas.length}):</strong><br>${janelas.map(j=>`· <strong>${j.obra}</strong>: ${lab(j.inicio)} → ${lab(j.fim)} (${j.meses} meses) — candidata ao período em que a alimentação estava embutida na folha do André (adiantamento para mantimentos)`).join('<br>')}<br><span style="font-size:11px;color:#8b949e">Confirmando o período, aplico a regra da diária/folha do André nessa janela e a alimentação real das obras se realinha.</span></div></div>`:''}
+    ${janelas.length?`<div class="info-box" style="border:1px solid #e05c7e66;background:#e05c7e0d;margin-bottom:12px"><span style="color:#e05c7e;font-size:16px">🕵️</span><div><strong>Janelas suspeitas — obra ativa SEM alimentação identificada (Bossa pagando no mesmo mês, OU período anterior à 1ª alimentação oficial da obra) (${janelas.length}):</strong><br>${janelas.map(j=>`· <strong>${j.obra}</strong>: ${lab(j.inicio)} → ${lab(j.fim)} (${j.meses} meses) — candidata ao período em que a alimentação estava embutida na folha do André (adiantamento para mantimentos)`).join('<br>')}<br><span style="font-size:11px;color:#8b949e">Confirmando o período, aplico a regra da diária/folha do André nessa janela e a alimentação real das obras se realinha.</span></div></div>`:''}
     <div class="kpi-grid" style="grid-template-columns:repeat(${R.length},1fr)">
       ${R.map(r=>{
         const tot=sum(r.fam.alimentacao); const aExec=r.pct>0? r.area*r.pct/100 : 0;
@@ -2147,14 +2152,14 @@ async function renderAlimentacao(force) {
           (aExec?fmt(tot/aExec)+'/m² exec · ':'')+(tot/obraTot*100).toFixed(2)+'% do custo de obra · média '+fmt(tot/mesesAtivos)+'/mês ativo', r.cor);
       }).join('')}
     </div>
-    <div class="section-title" style="margin-top:16px">Matriz mensal — todo o período${hintIcon('Célula vermelha: obra ATIVA no mês (custo de obra > R$30 mil) sem alimentação identificada, enquanto o Bossa pagava — a assinatura da janela do André. Cinza: obra parada ou pré-início.')}</div>
+    <div class="section-title" style="margin-top:16px">Matriz mensal — todo o período${hintIcon('Célula vermelha: obra ATIVA (custo > R$30 mil) sem alimentação — porque o Bossa pagava no mesmo mês OU porque a obra ainda não tinha alimentação oficial nenhuma (pré-história da categoria). Cinza: obra parada.')}</div>
     <div class="table-wrap" style="max-height:560px;overflow:auto"><table>
       <thead style="position:sticky;top:0;background:var(--card)"><tr><th>Mês</th>${R.map(r=>`<th style="text-align:right;color:${r.cor}">${r.nome.split(' ')[0]}</th>`).join('')}</tr></thead>
       <tbody>${todos.slice().reverse().map(ym=>`<tr>
         <td style="font-family:'DM Mono',monospace;font-size:10.5px">${lab(ym)}</td>
         ${R.map(r=>{
           const v=val(r,ym); const ativa=obraAtiva(r,ym);
-          const susp = ativa && v<500 && r.key!=='bossa' && bossa && val(bossa,ym)>2000;
+          const susp = suspAli(r,ym);
           return `<td style="text-align:right;font-size:10.5px;${susp?'background:#e05c7e22;color:#e05c7e;font-weight:700':v===0?'color:#30363d':''}">${!ativa&&v===0?'·':v===0?'0':fmt(v)}</td>`;}).join('')}
       </tr>`).join('')}
       </tbody></table></div>
@@ -2206,7 +2211,7 @@ async function renderAlimentacao(force) {
     </div>`;
 }
 
-function aliRelatorioHtml(R, todos, fechados, ymHoje, janelas, val, obraAtiva, lab, sum, bossa) {
+function aliRelatorioHtml(R, todos, fechados, ymHoje, janelas, val, obraAtiva, lab, sum, bossa, suspAli) {
   const hoje=new Date().toLocaleDateString('pt-BR');
   let ultData=null; (_DESPESAS||[]).forEach(r=>{const d=parseDate(r.data); if(d&&(!ultData||d>ultData)) ultData=d;});
   const kp=(l,v)=>`<div class="kpi-papel"><b>${v}</b><span>${l}</span></div>`;
@@ -2249,7 +2254,7 @@ function aliRelatorioHtml(R, todos, fechados, ymHoje, janelas, val, obraAtiva, l
       <table><thead><tr><th>Mês</th>${R.map(r=>`<th class="num">${r.nome.split(' ')[0]}</th>`).join('')}</tr></thead><tbody>
         ${todos.slice().reverse().map(ym=>`<tr><td>${lab(ym)}</td>${R.map(r=>{
           const v=val(r,ym); const ativa=obraAtiva(r,ym);
-          const susp = ativa && v<500 && r.key!=='bossa' && bossa && val(bossa,ym)>2000;
+          const susp = suspAli(r,ym);
           return `<td class="num" style="${susp?'background:#fde8ec;color:#b2233f;font-weight:700':''}">${!ativa&&v===0?'·':v===0?'0':fmt(v)}</td>`;}).join('')}</tr>`).join('')}
       </tbody></table>
       <div style="font-size:9.5px;color:#999;margin-top:6px">Célula destacada: obra ativa no mês (custo de obra > R$ 30 mil) sem alimentação identificada, com o Bossa pagando (> R$ 2 mil). "·" = obra sem movimento relevante no mês.</div>
