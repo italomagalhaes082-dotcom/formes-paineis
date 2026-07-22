@@ -411,7 +411,7 @@ const EMPREENDIMENTOS = {
     nome: "Liberty Unique", subtitulo: "Painel Gerencial", cor: "#4f8ef7", corSecund: "#22c9a0",
     sheetId: "1mvNNh2r43GeEmW9h90B_NeyfXWkyoc8k2QHnbVZyUH0",
     abaDespesas: "DESPESAS TOTAIS", abaReceitas: "RECEITAS TOTAIS", abaVendas: null,
-    nCasas: 42, areaCasa: 114, areaTotal: 4788, pctObraDefault: 75,
+    nCasas: 42, areaCasa: 114, areaTotal: 4788, pctObraDefault: 75, estruturaPrevisaoFim: '2026-08',
     senha: "unique2024", bioKey: "lu_bio", rpId: "liberty-formes.netlify.app",
     socLabel: "🤝 Sociedade",
     nomesMap: [
@@ -439,7 +439,7 @@ const EMPREENDIMENTOS = {
     sheetId: "1D660xfizv39rn0pxDJA2Whqeye3bp4hB4vxCAxrXRvw",
     abaDespesas: "DESPESAS TOTAIS", abaReceitas: "RECEITAS TOTAIS", abaVendas: "VALORES DE VENDA",
     abaGestaoVendas: "GESTAO VENDAS",
-    nCasas: 66, areaCasa: 144, areaTotal: 8958, mixCasas: '45 casas de 144 m² + 21 casas de 118 m²', pctObraDefault: 82,
+    nCasas: 66, areaCasa: 144, areaTotal: 8958, mixCasas: '45 casas de 144 m² + 21 casas de 118 m²', pctObraDefault: 82, estruturaPrevisaoFim: '2026-08',
     senha: "jazz2024", bioKey: "jazz_bio", rpId: "liberty-formes.netlify.app",
     socLabel: "🤝 Sociedade",
     permuta: {
@@ -463,7 +463,7 @@ const EMPREENDIMENTOS = {
     nome: "Bossa Nova Residência", subtitulo: "Painel Gerencial", cor: "#a371f7", corSecund: "#4f8ef7",
     sheetId: "1B-AG_5lU9JW8TAjybn4OGwK2E3b676xVIE6Yoz9CRjI",
     abaDespesas: "DESPESAS TOTAIS", abaReceitas: "RECEITAS TOTAIS", abaVendas: null,
-    nCasas: 69, areaCasa: 118, areaTotal: 8142, pctObraDefault: 84,
+    nCasas: 69, areaCasa: 118, areaTotal: 8142, pctObraDefault: 84, estruturaConcluidaEm: '2026-06', obsEstrutura: 'restam muros de divisão (pequenas fundações e pilaretes)',
     senha: "bossa2024", bioKey: "bossa_bio", rpId: "liberty-formes.netlify.app",
     socLabel: "🤝 Permuta",
     nomesMap: [
@@ -998,7 +998,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v14.07.26-a · ABC · MO · relatório</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v14.07.26-b · fases + judicial/cartório</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:3px solid ${color}">
@@ -2066,7 +2066,8 @@ const TIPOS_MATERIAL = [
   ['Impermeabilização', /IMPERMEAB|MANTA|VEDACIT/],
 ];
 function tipoMaterialDe(descU) { for (const [nome, re] of TIPOS_MATERIAL) if (re.test(descU)) return nome; return null; }
-const RE_JUDICIAL = /JUDICIAL|CUSTAS|CARTOR|ADVOCA|HONORAR|PROCESSO|FORUM|ALVARA JUD|PENHORA/;
+const RE_JUDICIAL = /JUDICIAL|CUSTAS PROC|ADVOCA|HONORAR|PROCESSO|FORUM|ALVARA JUD|PENHORA|ACAO |LIMINAR/;
+const RE_CARTORIO = /CARTOR|TABELIONATO|EMOLUMENTO|ESCRITURA|REGISTRO DE IMO|RECONHEC.*FIRMA|AUTENTICA|ITBI|RGI\b|AVERBAC/;
 
 const FAMILIAS_ANALISE = [
   { k:'materiais',   nome:'Materiais',    cor:'#4f8ef7', match:c=>c.includes('AQUISICAO DE MATERIAIS')||c.includes('MATERIA') },
@@ -2146,7 +2147,7 @@ async function renderAnalise(force) {
       const fam = {}; FAMILIAS_ANALISE.forEach(f=>fam[f.k]={});
       const obraMes = {};
       const matTipos = {}, moForn = {}, judMes = {};
-      let judTotal = 0, despTotal = 0;
+      let judTotal = 0, cartTotal = 0, despTotal = 0;
       let primeiro = null;
       desp.forEach(r=>{
         const d = parseDate(r.data); if(!d) return;
@@ -2171,9 +2172,10 @@ async function renderAnalise(force) {
           const fk=(r.fornecedor||'—').trim();
           if (fk!=='—') moForn[fk]=(moForn[fk]||0)+r.valor;
         }
-        if (RE_JUDICIAL.test(cU) || RE_JUDICIAL.test(dU)) { judTotal+=r.valor; judMes[ym]=(judMes[ym]||0)+r.valor; }
+        if (RE_CARTORIO.test(cU) || RE_CARTORIO.test(dU)) { cartTotal+=r.valor; }
+        else if (RE_JUDICIAL.test(cU) || RE_JUDICIAL.test(dU)) { judTotal+=r.valor; judMes[ym]=(judMes[ym]||0)+r.valor; }
       });
-      return { key:k, nome:c.nome, cor:c.cor, area, fam, obraMes, primeiro, pct: pctObraDe(k), matTipos, moForn, judTotal, judMes, despTotal };
+      return { key:k, nome:c.nome, cor:c.cor, area, fam, obraMes, primeiro, pct: pctObraDe(k), matTipos, moForn, judTotal, cartTotal, judMes, despTotal, estruturaConcluidaEm: c.estruturaConcluidaEm||null, estruturaPrevisaoFim: c.estruturaPrevisaoFim||null };
     }));
     window._analiseData = results;
     paintAnalise(results);
@@ -2366,27 +2368,33 @@ function paintAnalise(R) {
         </tbody></table></div>`;
     })()}
 
-    <div class="section-title">⚖️ Custas judiciais e cartorárias — índice${hintIcon('Lançamentos com termos judiciais/cartorários no descritivo ou categoria, como % do total de despesas de cada obra. Referência de mercado: manter abaixo de 1% é saudável; crescimento na série pede atenção ao contencioso.')}</div>
+    <div class="section-title">⚖️ Custas judiciais — índice controlável${hintIcon('SÓ o contencioso: processos, honorários advocatícios, custas processuais, penhoras. Cartorário fica FORA (é obrigatório e inescapável — medido à parte, sem juízo de valor). Régua: <0,5% saudável · até 1% atenção · acima, vermelho.')}</div>
     <div class="kpi-grid" style="grid-template-columns:repeat(${R.length+1},1fr)">
       ${R.map(r=>{
         const pct=r.despTotal>0? r.judTotal/r.despTotal*100 : 0;
-        return k(r.nome.split(' ')[0], pct.toFixed(2)+'%', fmt(r.judTotal), pct>1?'#e05c7e':pct>0.5?'#f4a942':'#22c9a0');
+        return k(r.nome.split(' ')[0], pct.toFixed(2)+'%', fmt(r.judTotal)+' em contencioso', pct>1?'#e05c7e':pct>0.5?'#f4a942':'#22c9a0');
       }).join('')}
       ${(function(){ const jt=R.reduce((s,r)=>s+r.judTotal,0), dt=R.reduce((s,r)=>s+r.despTotal,0)||1;
-        return k('GRUPO', (jt/dt*100).toFixed(2)+'%', fmt(jt)+' em '+fmt(dt), jt/dt>0.01?'#e05c7e':'#22c9a0','Índice consolidado. Inclui custas, cartórios, honorários e processos.'); })()}
+        return k('GRUPO', (jt/dt*100).toFixed(2)+'%', fmt(jt), jt/dt>0.01?'#e05c7e':jt/dt>0.005?'#f4a942':'#22c9a0'); })()}
+    </div>
+    <div class="kpi-grid" style="grid-template-columns:repeat(${R.length+1},1fr);margin-top:8px">
+      ${R.map(r=>k('Cartorário · '+r.nome.split(' ')[0], fmt(r.cartTotal||0), 'obrigatório — sem régua', '#8b949e')).join('')}
+      ${k('Cartorário · GRUPO', fmt(R.reduce((s,r)=>s+(r.cartTotal||0),0)), 'escrituras, registros, ITBI, emolumentos', '#8b949e','Custo inescapável do negócio imobiliário — acompanhado apenas para visibilidade, separado do contencioso.')}
     </div>
 
     <div class="section-title" style="margin-top:16px">♻️ Indícios de desperdício e compra tardia${hintIcon('Sem quantidades nos lançamentos, desperdício não se mede diretamente — estes são INDÍCIOS: material estrutural comprado com a obra quase pronta (>90%) sugere retrabalho, perda ou desvio de destino. Material/m² muito diferente entre obras de padrão parecido também.')}</div>
     ${(function(){
       const ESTRUT=['Cimento','Concreto','Aço/Ferragem','Bloco/Tijolo','Areia/Brita/Aterro'];
       const achados=[];
+      // regra calibrada com o modelo da Formes: as obras rodam as 3 fases em paralelo,
+      // então compra estrutural só é suspeita APÓS a estrutura declarada concluída na config
       R.forEach(r=>{
-        if (!(r.pct>=90)) return;
-        const corte = fechados.slice(-6);
+        if (!r.estruturaConcluidaEm) return;   // Jazz/Liberty: estrutura ainda em execução — sem flag
+        const corte = parseInt(r.estruturaConcluidaEm.replace('-',''));
         ESTRUT.forEach(tp=>{
           const v=r.matTipos[tp]; if(!v) return;
-          const rec=corte.reduce((s,ym)=>s+(v.meses[ym]||0),0);
-          if (rec>15000) achados.push(`${r.nome.split(' ')[0]}: ${fmt(rec)} em <strong>${tp}</strong> nos últimos 6 meses com obra a ${r.pct}% — fase de acabamento comprando material de estrutura`);
+          const pos=Object.entries(v.meses).filter(([ym])=>+ym>corte).reduce((s,[,x])=>s+x,0);
+          if (pos>20000) achados.push(`${r.nome.split(' ')[0]}: ${fmt(pos)} em <strong>${tp}</strong> APÓS a conclusão da estrutura (${r.estruturaConcluidaEm}) — esperado apenas o residual dos muros de divisão; conferir destino`);
         });
       });
       // material/m² divergente entre Bossa e Liberty (padrões próximos)
@@ -2400,7 +2408,7 @@ function paintAnalise(R) {
       }
       return achados.length
         ? `<div class="info-box" style="border:1px solid #f4a94266;background:#f4a9420d"><span style="color:#f4a942">♻️</span><div>${achados.map(a=>'· '+a).join('<br>')}</div></div>`
-        : `<div class="info-box"><span>✓</span><div>Nenhum indício relevante nos critérios atuais (compra estrutural tardia · material/m² divergente entre obras de padrão próximo).</div></div>`;
+        : `<div class="info-box"><span>✓</span><div>Nenhum indício nos critérios calibrados: compra estrutural após conclusão declarada da estrutura (hoje só se aplica ao Bossa; Jazz/Liberty entram quando concluírem, previsto ago/26) · material/m² divergente entre obras de padrão próximo.</div></div>`;
     })()}
 
     <div class="section-title">📉 Tendência por família — último trimestre vs anterior</div>

@@ -205,7 +205,8 @@ async function testEmp(emp, checks){
     ok(AN.includes('projeção'),'Análise: projeção de custo final/m²');
     ok(AN.includes('Curva ABC'),'Análise: curva ABC de materiais');
     ok(AN.includes('Mão de obra — visão profunda'),'Análise: MO profunda');
-    ok(AN.includes('Custas judiciais'),'Análise: índice judicial');
+    ok(AN.includes('índice controlável')||AN.includes('Custas judiciais'),'Análise: índice judicial (só contencioso)');
+    ok(AN.includes('Cartorário'),'Análise: cartorário separado, sem régua');
     ok(AN.includes('desperdício')||AN.includes('Indícios'),'Análise: indícios de desperdício');
     w.switchTab(13); await new Promise(r=>setTimeout(r,400));
     const REL=t('tab13');
