@@ -1013,7 +1013,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v22.07.26-e · filtro alimentação v2</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v22.07.26-f · auditoria do filtro de obra</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:3px solid ${color}">
@@ -2170,7 +2170,7 @@ async function renderAnalise(force) {
       // séries mensais por família + custo de obra total mensal
       const fam = {}; FAMILIAS_ANALISE.forEach(f=>fam[f.k]={});
       const obraMes = {};
-      const matTipos = {}, moForn = {}, judMes = {};
+      const matTipos = {}, moForn = {}, judMes = {}, catAudit = {};
       let judTotal = 0, cartTotal = 0, despTotal = 0;
       let primeiro = null;
       desp.forEach(r=>{
@@ -2178,6 +2178,9 @@ async function renderAnalise(force) {
         const ym = d.getFullYear()*100 + (d.getMonth()+1);
         const cU = _audNorm(r.categoria||''); const dU = _audNorm(r.descOriginal||r.descricao||'');
         despTotal += r.valor;
+        const catNome = r.categoria || '(sem categoria)';
+        const CA = (catAudit[catNome] = catAudit[catNome] || {total:0, incluida:isCustoObra(r.categoria||'')});
+        CA.total += r.valor;
         if (isCustoObra(r.categoria||'')) {
           obraMes[ym]=(obraMes[ym]||0)+r.valor;
           if (!primeiro || ym<primeiro) primeiro=ym;
@@ -2199,7 +2202,7 @@ async function renderAnalise(force) {
         if (RE_CARTORIO.test(cU) || RE_CARTORIO.test(dU)) { cartTotal+=r.valor; }
         else if (RE_JUDICIAL.test(cU) || RE_JUDICIAL.test(dU)) { judTotal+=r.valor; judMes[ym]=(judMes[ym]||0)+r.valor; }
       });
-      return { key:k, nome:c.nome, cor:c.cor, area, fam, obraMes, primeiro, pct: pctObraDe(k), matTipos, moForn, judTotal, cartTotal, judMes, despTotal, estruturaConcluidaEm: c.estruturaConcluidaEm||null, estruturaPrevisaoFim: c.estruturaPrevisaoFim||null };
+      return { key:k, nome:c.nome, cor:c.cor, area, fam, obraMes, primeiro, pct: pctObraDe(k), matTipos, moForn, judTotal, cartTotal, judMes, despTotal, catAudit, estruturaConcluidaEm: c.estruturaConcluidaEm||null, estruturaPrevisaoFim: c.estruturaPrevisaoFim||null };
     }));
     window._analiseData = results;
     paintAnalise(results);
@@ -2335,6 +2338,43 @@ function paintAnalise(R) {
             return `<td style="text-align:right;font-size:10.5px"><strong style="color:#f4a942">${v?fmt(v)+'/m²':'—'}</strong></td>`;}).join('')}
           <td style="font-size:9.5px;color:#8b949e;text-align:right">se o custo/executado<br>se mantiver até 100%</td></tr>
       </tbody></table></div>
+
+    <div class="section-title">🔬 Auditoria do filtro de custo de obra${hintIcon('Cada categoria das três planilhas, com o veredito do filtro: ✓ entra no custo de obra (e no custo/m²), ✗ fica fora. Assimetrias entre obras — categoria com valor numa e zerada noutra, ou ✗ com valor relevante — são as suspeitas de desalinhamento. Marque aqui o que discorda e ajustamos a regra.')}</div>
+    ${(function(){
+      const C={};
+      R.forEach(r=>Object.entries(r.catAudit||{}).forEach(([cat,v])=>{
+        const g=(C[cat]=C[cat]||{total:0,incluida:v.incluida,obras:{}});
+        g.total+=v.total; g.obras[r.key]=v.total;
+        if (v.incluida) g.incluida=true;
+      }));
+      const lista=Object.entries(C).sort((a,b)=>b[1].total-a[1].total).slice(0,28);
+      const susp=[];
+      lista.forEach(([cat,g])=>{
+        if (!g.incluida && g.total > 100000) susp.push('fora');
+        const vals=R.map(r=>g.obras[r.key]||0);
+        if (g.incluida && Math.max(...vals)>200000 && Math.min(...vals)===0) susp.push('assim');
+      });
+      const custoObraTot = R.map(r=>({nome:r.nome.split(' ')[0], v: Object.values(r.catAudit||{}).filter(x=>x.incluida).reduce((s,x)=>s+x.total,0), area:r.area, pct:r.pct}));
+      return `
+      <div class="kpi-grid" style="grid-template-columns:repeat(${R.length},1fr)">
+        ${custoObraTot.map((c,i)=>`<div class="kpi" style="border-top:3px solid ${R[i].cor}"><div class="kpi-label">${c.nome} · custo de obra filtrado</div>
+          <div class="kpi-value" style="color:${R[i].cor};font-size:15px">${fmt(c.v)}</div>
+          <div class="kpi-sub">${c.pct>0?fmt(c.v/(c.area*c.pct/100))+'/m² exec ('+c.pct+'%)':'—'}</div></div>`).join('')}
+      </div>
+      <div class="table-wrap" style="margin:10px 0 6px;max-height:520px;overflow:auto"><table>
+        <thead style="position:sticky;top:0;background:var(--card)"><tr><th>No custo?</th><th>Categoria</th>${R.map(r=>`<th style="text-align:right;color:${r.cor}">${r.nome.split(' ')[0]}</th>`).join('')}<th style="text-align:right">Grupo</th></tr></thead>
+        <tbody>${lista.map(([cat,g])=>{
+          const vals=R.map(r=>g.obras[r.key]||0);
+          const assimetrica = g.incluida && Math.max(...vals)>200000 && Math.min(...vals)===0;
+          const foraGrande = !g.incluida && g.total>100000;
+          return `<tr style="${assimetrica||foraGrande?'background:#f4a94212':''}">
+            <td style="text-align:center">${g.incluida?'<span style=color:#22c9a0>✓</span>':'<span style=color:#8b949e>✗</span>'}${foraGrande?' <span style=color:#f4a942>⚠</span>':''}${assimetrica?' <span style=color:#e05c7e>⇄</span>':''}</td>
+            <td style="font-size:11px">${cat}</td>
+            ${vals.map(v=>`<td style="text-align:right;font-size:10.5px;color:${v===0?'#30363d':'inherit'}">${v?fmt(v):'0'}</td>`).join('')}
+            <td style="text-align:right;font-weight:700;font-size:11px">${fmt(g.total)}</td></tr>`;}).join('')}
+        </tbody></table></div>
+      <div style="font-size:10px;color:#8b949e;font-family:'DM Mono',monospace;margin-bottom:16px">⚠ = fora do custo de obra com valor relevante (candidata a entrar?) · ⇄ = dentro do custo mas zerada em alguma obra (nome divergente entre planilhas?)</div>`;
+    })()}
 
     <div class="section-title">🧱 Curva ABC de Materiais — grupo${hintIcon('Tipos de material extraídos dos descritivos (nas categorias de aquisição). Classe A = itens que somam 80% do gasto: onde negociar vale mais. Fornecedor único em item classe A = risco de dependência e de preço.')}</div>
     ${(function(){

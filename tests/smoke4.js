@@ -214,6 +214,8 @@ async function testEmp(emp, checks){
     ok(AN.includes('área EXECUTADA'),'Análise: custo/m² executado por obra');
     ok(AN.includes('projeção'),'Análise: projeção de custo final/m²');
     ok(AN.includes('Curva ABC'),'Análise: curva ABC de materiais');
+    ok(AN.includes('Auditoria do filtro de custo de obra'),'Filtro: seção de auditoria');
+    ok(AN.includes('custo de obra filtrado'),'Filtro: totais por obra lado a lado');
     ok(AN.includes('Mão de obra — visão profunda'),'Análise: MO profunda');
     ok(AN.includes('índice controlável')||AN.includes('Custas judiciais'),'Análise: índice judicial (só contencioso)');
     ok(AN.includes('Cartorário'),'Análise: cartorário separado, sem régua');
