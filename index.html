@@ -394,6 +394,7 @@
       <button class="tab" id="tabBtnSoc" onclick="switchTab(11)">🤝 Sociedade</button>
       <button class="tab" onclick="switchTab(12)">📈 Análise</button>
       <button class="tab" onclick="switchTab(13)">📄 Relatório</button>
+      <button class="tab" onclick="switchTab(14)">🍛 Alimentação</button>
     </div>
   </div>
   <div class="content">
@@ -411,6 +412,7 @@
     <div class="tab-content" id="tab11"></div>
     <div class="tab-content" id="tab12"></div>
     <div class="tab-content" id="tab13"></div>
+    <div class="tab-content" id="tab14"></div>
   </div>
 </div>
 
@@ -535,6 +537,7 @@ const CATS_CUSTO_OBRA = [
   "salarios", "salários",
   "energia eletrica", "energia elétrica",
   "abastecimento de agua", "abastecimento de água",
+  "reembolso",
 ];
 
 function isCustoObra(cat) {
@@ -1013,7 +1016,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v22.07.26-f · auditoria do filtro de obra</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v22.07.26-g · aba alimentação</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:3px solid ${color}">
@@ -2094,6 +2097,74 @@ const FAMILIAS_ANALISE = [
 const MESN_A=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 function _ymLabel(ym){ return MESN_A[ym%100-1]+'/'+String(ym).slice(2,4); }
 
+async function renderAlimentacao(force) {
+  const el = document.getElementById('tab14');
+  if (!el) return;
+  el.innerHTML = '<div class="info-box">⏳ Comparando a alimentação das três obras…</div>';
+  let R;
+  try { R = await ensureAnaliseData(force); }
+  catch(e) { el.innerHTML = '<div class="info-box" style="border:1px solid #f8514966">Erro: '+(e.message||e)+'</div>'; return; }
+  const hoje=new Date(); const ymHoje=hoje.getFullYear()*100+(hoje.getMonth()+1);
+  const sum=o=>Object.values(o||{}).reduce((s,v)=>s+v,0);
+  // meses do primeiro gasto de alimentação de qualquer obra até o mês atual
+  const ymsAli=[...new Set(R.flatMap(r=>Object.keys(r.fam.alimentacao).map(Number)))].sort((a,b)=>a-b);
+  const ini=ymsAli[0]||ymHoje;
+  const todos=[]; { let y=Math.floor(ini/100), m=ini%100;
+    while (y*100+m<=ymHoje) { todos.push(y*100+m); m++; if(m>12){m=1;y++;} } }
+  const val=(r,ym)=>r.fam.alimentacao[ym]||0;
+  const obraAtiva=(r,ym)=>(r.obraMes[ym]||0)>30000;  // obra rodando de verdade naquele mês
+  // ── detector de janelas suspeitas: obra ativa, alimentação zerada, Bossa pagando ──
+  const bossa=R.find(r=>r.key==='bossa');
+  const janelas=[];
+  R.filter(r=>r.key!=='bossa').forEach(r=>{
+    let inicio=null;
+    todos.forEach((ym,i)=>{
+      const suspeito = obraAtiva(r,ym) && val(r,ym)<500 && bossa && val(bossa,ym)>2000;
+      if (suspeito && inicio===null) inicio=ym;
+      if ((!suspeito || i===todos.length-1) && inicio!==null){
+        const fim = suspeito? ym : todos[i-1];
+        const meses = todos.filter(x=>x>=inicio&&x<=fim).length;
+        if (meses>=2) janelas.push({obra:r.nome.split(' ')[0], inicio, fim, meses});
+        inicio=null;
+      }
+    });
+  });
+  const lab=ym=>MESN_A[ym%100-1]+'/'+String(ym).slice(2,4);
+  const k=(l,v,s,c,h)=>`<div class="kpi" style="border-top:3px solid ${c}"><div class="kpi-label">${l}${h?hintIcon(h):''}</div><div class="kpi-value" style="color:${c};font-size:15px">${v}</div>${s?`<div class="kpi-sub">${s}</div>`:''}</div>`;
+  const fechados=todos.filter(ym=>ym<ymHoje);
+  el.innerHTML = `
+    <div class="info-box" style="border:1px solid #22c9a040;margin-bottom:12px"><span>🍛</span><div><strong>Alimentação de obra — comparativo integral das três obras.</strong> Números pela categoria oficial; os candidatos a reclassificação (caixinha/André/mercado) só entram após sua validação na Auditoria. Meses de obra parada não contam como lacuna.</div></div>
+    ${janelas.length?`<div class="info-box" style="border:1px solid #e05c7e66;background:#e05c7e0d;margin-bottom:12px"><span style="color:#e05c7e;font-size:16px">🕵️</span><div><strong>Janelas suspeitas — obra ativa SEM alimentação identificada, com o Bossa pagando normalmente (${janelas.length}):</strong><br>${janelas.map(j=>`· <strong>${j.obra}</strong>: ${lab(j.inicio)} → ${lab(j.fim)} (${j.meses} meses) — candidata ao período em que a alimentação estava embutida na folha do André (adiantamento para mantimentos)`).join('<br>')}<br><span style="font-size:11px;color:#8b949e">Confirmando o período, aplico a regra da diária/folha do André nessa janela e a alimentação real das obras se realinha.</span></div></div>`:''}
+    <div class="kpi-grid" style="grid-template-columns:repeat(${R.length},1fr)">
+      ${R.map(r=>{
+        const tot=sum(r.fam.alimentacao); const aExec=r.pct>0? r.area*r.pct/100 : 0;
+        const mesesAtivos=todos.filter(ym=>val(r,ym)>0).length||1;
+        const obraTot=sum(r.obraMes)||1;
+        return k(r.nome.split(' ')[0], fmt(tot),
+          (aExec?fmt(tot/aExec)+'/m² exec · ':'')+(tot/obraTot*100).toFixed(2)+'% do custo de obra · média '+fmt(tot/mesesAtivos)+'/mês ativo', r.cor);
+      }).join('')}
+    </div>
+    <div class="section-title" style="margin-top:16px">Matriz mensal — todo o período${hintIcon('Célula vermelha: obra ATIVA no mês (custo de obra > R$30 mil) sem alimentação identificada, enquanto o Bossa pagava — a assinatura da janela do André. Cinza: obra parada ou pré-início.')}</div>
+    <div class="table-wrap" style="max-height:560px;overflow:auto"><table>
+      <thead style="position:sticky;top:0;background:var(--card)"><tr><th>Mês</th>${R.map(r=>`<th style="text-align:right;color:${r.cor}">${r.nome.split(' ')[0]}</th>`).join('')}</tr></thead>
+      <tbody>${todos.slice().reverse().map(ym=>`<tr>
+        <td style="font-family:'DM Mono',monospace;font-size:10.5px">${lab(ym)}</td>
+        ${R.map(r=>{
+          const v=val(r,ym); const ativa=obraAtiva(r,ym);
+          const susp = ativa && v<500 && r.key!=='bossa' && bossa && val(bossa,ym)>2000;
+          return `<td style="text-align:right;font-size:10.5px;${susp?'background:#e05c7e22;color:#e05c7e;font-weight:700':v===0?'color:#30363d':''}">${!ativa&&v===0?'·':v===0?'0':fmt(v)}</td>`;}).join('')}
+      </tr>`).join('')}
+      </tbody></table></div>
+    <div class="section-title" style="margin-top:16px">Últimos 12 meses fechados — ritmo atual</div>
+    <div class="kpi-grid" style="grid-template-columns:repeat(${R.length},1fr)">
+      ${R.map(r=>{
+        const u12=fechados.slice(-12).reduce((s,ym)=>s+val(r,ym),0);
+        const u3=fechados.slice(-3).reduce((s,ym)=>s+val(r,ym),0)/3;
+        return k(r.nome.split(' ')[0]+' · 12m', fmt(u12), 'ritmo últimos 3m: '+fmt(u3)+'/mês', r.cor);
+      }).join('')}
+    </div>`;
+}
+
 async function renderRelatorio() {
   const el = document.getElementById('tab13');
   if (!el) return;
@@ -2156,12 +2227,9 @@ async function renderRelatorio() {
     </div>`;
 }
 
-async function renderAnalise(force) {
-  const el = document.getElementById('tab12');
-  if (!el) return;
-  if (window._analiseData && !force) { paintAnalise(window._analiseData); return; }
-  el.innerHTML = '<div class="info-box">⏳ Cruzando as despesas das três obras…</div>';
-  try {
+async function ensureAnaliseData(force) {
+  if (window._analiseData && !force) return window._analiseData;
+  {
     const results = await Promise.all(Object.entries(EMPREENDIMENTOS).map(async ([k, c]) => {
       const jDesp = await fetchSheet(c.abaDespesas, c.sheetId);
       const rowsD = parseSheet(jDesp);
@@ -2205,10 +2273,16 @@ async function renderAnalise(force) {
       return { key:k, nome:c.nome, cor:c.cor, area, fam, obraMes, primeiro, pct: pctObraDe(k), matTipos, moForn, judTotal, cartTotal, judMes, despTotal, catAudit, estruturaConcluidaEm: c.estruturaConcluidaEm||null, estruturaPrevisaoFim: c.estruturaPrevisaoFim||null };
     }));
     window._analiseData = results;
-    paintAnalise(results);
-  } catch(e) {
-    el.innerHTML = '<div class="info-box" style="border:1px solid #f8514966">Erro na análise: '+(e.message||e)+'</div>';
+    return results;
   }
+}
+async function renderAnalise(force) {
+  const el = document.getElementById('tab12');
+  if (!el) return;
+  if (window._analiseData && !force) { paintAnalise(window._analiseData); return; }
+  el.innerHTML = '<div class="info-box">⏳ Cruzando as despesas das três obras…</div>';
+  try { paintAnalise(await ensureAnaliseData(force)); }
+  catch(e) { el.innerHTML = '<div class="info-box" style="border:1px solid #f8514966">Erro na análise: '+(e.message||e)+'</div>'; }
 }
 
 function paintAnalise(R) {
@@ -3618,6 +3692,7 @@ function switchTab(i) {
   else if(i===11) renderSociedade();
   else if(i===12) renderAnalise();
   else if(i===13) renderRelatorio();
+  else if(i===14) renderAlimentacao();
   else setTimeout(()=>buildCharts(i),80);
 }
 

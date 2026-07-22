@@ -67,6 +67,8 @@ for(let i=0;i<6;i++) dspJ.push(dsp('Loja','0'+(i+1)+'/0'+(i+1)+'/2025','CIMENTO 
 dspJ.push(dsp('Mestre','05/03/2025','FOLHA 100',20000,'Mão de obra - Mestre'));
 dspJ.push(dsp('RAFAEL SANTOS CLIMATIZACAO','10/04/2025','INFRA AR CONDICIONADO CASAS 1-6',15000,'Fornecedor - Aquisição de materiais'));
 dspJ.push(dsp('ANDRE LUIS BARBOSA','05/05/2025','ADIANTAMENTO DE CAIXA OBRA',2000,'Mão de obra - Terceiros'));
+dspJ.push(dsp('CIMENTO FORTE','10/01/2025','CIMENTO CP2',60000,'Fornecedor - Aquisição de materiais'));
+dspJ.push(dsp('CIMENTO FORTE','10/02/2025','CIMENTO CP2',60000,'Fornecedor - Aquisição de materiais'));
 dspJ.push(dsp('ANDRE LUIS BARBOSA','12/05/2025','PAGTO SEMANA',1260,'Mão de obra - Terceiros'));
 dspJ.push(dsp('MESTRE','20/05/2025','COMPRAS SUPERMERCADO SAO LUIS',450,'Fornecedor - Aquisição de materiais'));
 dspJ.push(dsp('ANDRE LIMA VERDE','01/06/2025','FRETE PORCELANATO',540,'Mão de obra - Terceiros'));
@@ -215,6 +217,12 @@ async function testEmp(emp, checks){
     ok(AN.includes('projeção'),'Análise: projeção de custo final/m²');
     ok(AN.includes('Curva ABC'),'Análise: curva ABC de materiais');
     ok(AN.includes('Auditoria do filtro de custo de obra'),'Filtro: seção de auditoria');
+    // aba Alimentação
+    w.switchTab(14); await new Promise(r=>setTimeout(r,700));
+    const AL=t('tab14');
+    ok(AL.includes('Matriz mensal'),'Alimentação: matriz mensal das 3 obras');
+    ok(AL.includes('Janelas suspeitas'),'Alimentação: detector de janelas (jazz ativo sem alimentação × bossa pagando)');
+    ok(AL.includes('% do custo de obra'),'Alimentação: KPIs por obra');
     ok(AN.includes('custo de obra filtrado'),'Filtro: totais por obra lado a lado');
     ok(AN.includes('Mão de obra — visão profunda'),'Análise: MO profunda');
     ok(AN.includes('índice controlável')||AN.includes('Custas judiciais'),'Análise: índice judicial (só contencioso)');
