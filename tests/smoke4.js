@@ -25,7 +25,7 @@ recL.push(rec('','30/06/2025','RENDIMENTO APLICACAO 06-2025',0,6000,'Rendimentos
 function d7(forn,data,desc,v,cat){return [forn,data,desc,('-'+v).replace('.',','),'23 - CONTA',cat,'LIBERTY UNIQUE'];}
 const dspL=[['Nome do fornecedor','Data','Descrição','(R$)','Conta bancária','Categoria 1','Centro de Custo 1']];
 const dsp7=(f,dt,de,v,c)=>dspL.push(d7(f,dt,de,v,c));
-dspL.push(dsp('FERRO NORTE','10/02/2025','ACO CA50',65000,'Fornecedor - Aquisição de materiais'));
+dsp7('FERRO NORTE','10/02/2025','ACO CA50',65000,'Fornecedor - Aquisição de materiais');
 dsp7('ITALO MAGALHAES SILVA','10/01/2026','RETIRADA SOCIO',100000,'Retirada Sócios');
 dsp7('ITALO MAGALHAES SILVA','18/12/2024','EQUILIBRIO DE APORTES',107500,'Equilibrio de Aportes');
 dsp7('ITALO MAGALHAES SILVA','22/01/2026','RETIRADA SOCIO',100000,'Retirada Sócios');
