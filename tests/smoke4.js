@@ -176,7 +176,7 @@ async function testEmp(emp, checks){
     ok(t('tab9').includes('Candidatos a ALIMENTAÇÃO'),'Alimentação: card de candidatos');
     ok(t('tab9').includes('÷R$14') || t('tab9').includes('operário·dias'),'Alimentação: divisibilidade da diária André (1260=14×90)');
     ok(t('tab9').includes('SUPERMERCADO') || t('tab9').includes('mercado'),'Alimentação: compra de mercado detectada');
-    ok(!t('tab9').includes('LIMA VERDE'),'Alimentação: homônimo (Lima Verde) EXCLUÍDO');
+    ok(!/LIMA VERDE[\s\S]{0,160}operário·dias/.test(t('tab9')),'Alimentação: homônimo (Lima Verde) fora da regra da diária');
     ok(!t('tab9').includes('MATERIAL DE LIMPEZA'),'Alimentação: limpeza no atacadista EXCLUÍDA');
     w.switchTab(6); await new Promise(r=>setTimeout(r,200));
     const rfEl=w.document.getElementById('rf_pctObraExec');

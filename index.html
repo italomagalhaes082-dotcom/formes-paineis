@@ -2910,7 +2910,7 @@ async function runAuditoria(progressCb) {
           if (!r._diaria && CONTEXTO.test(dU)) cands.caixinha.push(r); // contexto de comida sem diária exata: entra como caixinha
         }
       }
-      else if (RE_MERCADO.test(dU)      else {
+      else {
         const EXCLUI_MERC = /LIMPEZA|VIBRADOR|EQUIPAMENTO|FERRAMENTA|MATERIAL|EPI|BOTINA|LUVA|CAPACETE|CIMENTO|ARGAMASSA/;
         const COMIDA = /SUPERMERC|SUPER MERC|MERCADINHO|\bFEIRA\b|ACOUGUE|PADARIA|HORTIFRUT|FRIOS|GENEROS ALIMENT|MARMITA|REFEICAO|QUENTINHA|ALMOCO|\bCARNE\b|FRANGO|\bPAO\b|LANCHE|AGUA MINERAL|CAFE/;
         if (COMIDA.test(dU) && !EXCLUI_MERC.test(dU)) cands.mercado.push(r);
