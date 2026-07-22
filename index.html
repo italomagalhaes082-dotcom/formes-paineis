@@ -1013,7 +1013,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v22.07.26-c · encaixe definitivo</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v22.07.26-d · candidatos alimentação</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:3px solid ${color}">
@@ -2880,6 +2880,44 @@ async function runAuditoria(progressCb) {
       resumo: falt.join(' · ')+" · linhas brutas recebidas da aba: "+cen.brutas,
       pergunta:"Os aportes de 23/04, 30/08 e 21/10/2021 (pares Formes+Alves de R$ 61.418+61.105, 5.000+5.000, 5.000+5.000) e 1×R$ 10.000 de 29/11/2021 constavam na planilha antiga e não estão chegando da nova. Se 'linhas brutas' ≈ 1.774, as linhas chegam mas estão ilegíveis (conferir datas/categorias das primeiras linhas da RECEITAS TOTAIS); se for menor, as linhas foram perdidas na conversão — recuperar do arquivo .xlsx de backup.",
       itens:[ _audItem('Primeiras datas lidas da aba', (cen.primeirasLinhas||[]).join(' · ')||'—', '', '#79c0ff') ] });
+  }
+  // Q6c. CANDIDATOS A ALIMENTAÇÃO — regras do negócio (André/caixinha/supermercado)
+  // NÃO reclassifica: lista evidências para validação do Ítalo; confirmadas → viram regra efetiva
+  { const empAtual = new URLSearchParams(location.search).get('emp')||'liberty';
+    const jaAlim = c => _audNorm(c||'').includes('ALIMENTA');
+    const cands = { caixinha:[], andreDiaria:[], mercado:[] };
+    const RE_CAIXINHA = /CAIXINHA|ADIANTAMENTO.{0,12}CAIXA|CAIXA.{0,6}OBRA/;
+    const RE_MERCADO = /SUPERMERC|SUPER MERC|MERCADINHO|MERCANTIL|ATACAD|ASSAI|\bFEIRA\b|ACOUGUE|PADARIA|HORTIFRUT|FRIOS|GENEROS ALIMENT|MARMITA|REFEICAO|QUENTINHA|ALMOCO|\bCARNE\b|FRANGO/;
+    D.forEach(r=>{
+      if (jaAlim(r.categoria)) return;                       // já é alimentação: nada a fazer
+      const dU=_audNorm(r.descOriginal||r.descricao||''); const fU=_audNorm(r.fornecedor||'');
+      if ((empAtual==='jazz'||empAtual==='liberty') && RE_CAIXINHA.test(dU))
+        cands.caixinha.push(r);
+      else if ((empAtual==='jazz'||empAtual==='liberty') && fU.includes('ANDRE') && r.valor>=200 && r.valor<=40000) {
+        // diária de alimentação: valor = operários × dias × (14..18) → divisível exato, quociente plausível
+        for (const dia of [14,15,16,17,18]) {
+          if (Math.abs(r.valor/dia - Math.round(r.valor/dia)) < 1e-9) {
+            const opDias = r.valor/dia;
+            if (opDias>=20 && opDias<=1500 && !/EMPREIT|MEDICAO|MAO DE OBRA|SERVIC/.test(dU)) {
+              r._diaria = dia; r._opDias = opDias; cands.andreDiaria.push(r); break;
+            }
+          }
+        }
+      }
+      else if (RE_MERCADO.test(dU) || (RE_MERCADO.test(fU) && r.valor<=8000))
+        cands.mercado.push(r);
+    });
+    const tot = g => g.reduce((s,r)=>s+r.valor,0);
+    const nTot = cands.caixinha.length+cands.andreDiaria.length+cands.mercado.length;
+    if (nTot>0) alerts.push({ sev:"info", icon:"🍛",
+      titulo:"Candidatos a ALIMENTAÇÃO DE OBRA — regras do negócio, aguardando sua validação",
+      resumo:`caixinha/adiantamento: ${cands.caixinha.length} (${fmt(tot(cands.caixinha))}) · diária André R$14–18/operário: ${cands.andreDiaria.length} (${fmt(tot(cands.andreDiaria))}) · compras de mercado: ${cands.mercado.length} (${fmt(tot(cands.mercado))})`,
+      pergunta:"Nenhum número do painel foi alterado. Revise as amostras: as que refletirem alimentação de verdade, confirme comigo no chat (por regra ou por item) — aí a regra vira reclassificação automática com rastro, como a do Rafael Santos. Nas diárias do André, o painel mostra a conta: valor ÷ diária = operários×dias.",
+      itens:[
+        ...cands.caixinha.slice(0,10).map(r=>_audItem(r.fornecedor, r.data+' · '+String(r.descOriginal||'').slice(0,42), fmt(r.valor), "#f4a942")),
+        ...cands.andreDiaria.slice(0,12).map(r=>_audItem(r.fornecedor, r.data+' · '+String(r.descOriginal||'').slice(0,30)+' · ÷R$'+r._diaria+' = '+r._opDias+' operário·dias', fmt(r.valor), "#22c9a0")),
+        ...cands.mercado.slice(0,10).map(r=>_audItem(r.fornecedor, r.data+' · '+String(r.descOriginal||'').slice(0,42)+' · cat: '+(r.categoria||'—').slice(0,22), fmt(r.valor), "#79c0ff")),
+      ] });
   }
   // Q7b. RECLASSIFICAÇÕES APLICADAS (regras confirmadas pelo financeiro)
   { const rc = D.filter(r=>r.reclassDe);
