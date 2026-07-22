@@ -213,6 +213,12 @@ async function testEmp(emp, checks){
     ok(REL.includes('Relatório Gerencial'),'Relatório: papel renderiza');
     ok(REL.includes('Top 10 categorias') && REL.includes('Fornecedores — Top 10'),'Relatório: tops presentes');
     ok(REL.includes('Imprimir'),'Relatório: botão de impressão');
+    ok(REL.includes('dados até'),'Relatório: carimbo dados-até');
+    // indicadores CFO no Resultado Final (com % preenchido no teste anterior)
+    w.switchTab(6); await new Promise(r=>setTimeout(r,250));
+    const RF6=t('tab6');
+    ok(RF6.includes('Indicadores do Investidor'),'RF: seção CFO');
+    ok(RF6.includes('TIR projetada') && RF6.includes('MOIC'),'RF: TIR e MOIC presentes');
     // busca de despesas: digitar não perde o texto (debounce re-render preserva)
     w.switchTab(5); await new Promise(r=>setTimeout(r,300));
     const inp=w.document.getElementById('despBusca');

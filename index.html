@@ -258,7 +258,16 @@
 #tab13 .papel h1 { font-size:22px; margin:0 0 2px; } #tab13 .papel h2 { font-size:14px; margin:20px 0 8px; border-bottom:2px solid #1a1f24; padding-bottom:4px; text-transform:uppercase; letter-spacing:1px; }
 #tab13 .papel table { width:100%; border-collapse:collapse; font-size:11.5px; } 
 #tab13 .papel th { text-align:left; font-size:10px; text-transform:uppercase; color:#666; padding:4px 6px; border-bottom:1px solid #ccc; }
-#tab13 .papel td { padding:4px 6px; border-bottom:1px solid #eee; }
+#tab13 .papel td { padding:4px 6px; border-bottom:1px solid #eee; color:#1a1f24 !important; background:transparent !important; font-size:11.5px; }
+#tab13 .papel th { color:#555 !important; background:transparent !important; }
+#tab13 .papel table { table-layout:auto; }
+@media (max-width:680px){
+  #tab13 .papel { padding:16px 12px; border-radius:8px; }
+  #tab13 .papel h1 { font-size:17px; }
+  #tab13 .papel table { font-size:10px; display:block; overflow-x:auto; white-space:nowrap; }
+  #tab13 .papel td, #tab13 .papel th { padding:3px 5px; font-size:10px !important; }
+  #tab13 .kpi-papel b { font-size:14px; } #tab13 .kpi-papel { margin:3px 10px 3px 0; }
+}
 #tab13 .papel .num { text-align:right; font-family:'DM Mono',monospace; }
 #tab13 .kpi-papel { display:inline-block; margin:4px 14px 4px 0; } 
 #tab13 .kpi-papel b { font-size:16px; display:block; } #tab13 .kpi-papel span { font-size:9.5px; color:#666; text-transform:uppercase; letter-spacing:.5px; }
@@ -998,7 +1007,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v14.07.26-b · fases + judicial/cartório</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v22.07.26-a · CFO + relatório mobile</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:3px solid ${color}">
@@ -2083,6 +2092,11 @@ async function renderRelatorio() {
   const el = document.getElementById('tab13');
   if (!el) return;
   const hoje = new Date().toLocaleDateString('pt-BR');
+  // dados até: última data de despesa OU receita lançada
+  let ultData = null;
+  const veja = arr => (arr||[]).forEach(r=>{ const d=parseDate(r.data||r.dataComp); if(d && (!ultData||d>ultData)) ultData=d; });
+  veja(_DESPESAS); veja(_RECEITAS);
+  const dadosAte = ultData ? ultData.toLocaleDateString('pt-BR') : '—';
   const tAp=_APORTES.reduce((s,r)=>s+r.valor,0), tRet=_RETIRADAS.reduce((s,r)=>s+r.valor,0);
   const tDesp=_DESPESAS.reduce((s,r)=>s+r.valor,0);
   const porCat={}; _DESPESAS.forEach(r=>{const c=r.categoria||'(sem)'; porCat[c]=(porCat[c]||0)+r.valor;});
@@ -2111,7 +2125,8 @@ async function renderRelatorio() {
     </div>
     <div class="papel">
       <h1>${CFG.nome} — Relatório Gerencial</h1>
-      <div style="font-size:11px;color:#666">Formes Engenharia · emitido em ${hoje} · fonte: planilha …${String(SHEET_ID).slice(-6)} · painel formes-paineis.netlify.app</div>
+      <div style="font-size:11px;color:#666">Formes Engenharia · emitido em ${hoje} · <strong style="color:#1a1f24">dados até ${dadosAte}</strong> (último lançamento de receita/despesa)</div>
+      <div style="font-size:10px;color:#999">fonte: planilha …${String(SHEET_ID).slice(-6)} · painel formes-paineis.netlify.app</div>
       <h2>Capital dos Sócios</h2>
       ${kp('Aportado',fmt(tAp))}${kp('Retirado',fmt(tRet))}${kp('Exposto',fmt(tAp-tRet))}${kp('Aportes',_APORTES.length)}${kp('Retiradas',_RETIRADAS.length)}
       <h2>Obra</h2>
@@ -3482,8 +3497,17 @@ function renderFornecedores(){
         </div>
       </div>`;}).join("")}`;
 }
-window.fornSetBusca=function(v){_fornState.busca=v;renderFornecedores();
-  const inp=document.querySelector('#tab10 input');if(inp){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length);}};
+window.fornSetBusca = function(v) {
+  _fornState.busca = v;
+  clearTimeout(window._fornBuscaT);
+  window._fornBuscaT = setTimeout(() => {
+    const sy = window.scrollY;
+    renderFornecedores();
+    const inp = document.getElementById('fornBusca');
+    if (inp) { const fim2 = inp.value.length; inp.focus(); try{inp.setSelectionRange(fim2, fim2);}catch(e){} }
+    window.scrollTo(0, sy);
+  }, 350);
+}
 window.fornSetOrd=function(v){_fornState.ord=v;renderFornecedores();};
 window.fornSetInnerOrd=function(v){_fornState.innerOrd=v;renderFornecedores();};
 window.fornToggle=function(nome){_fornState.open[nome]=!_fornState.open[nome];renderFornecedores();};
@@ -3888,6 +3912,48 @@ function renderRFCalc() {
         +'</div>')
 
     // ── 4. RESULTADO ─────────────────────────────────────────
+    // ── 5. INDICADORES DO INVESTIDOR (visão CFO) ─────────────
+    +(function(){
+      if (resultadoProj===null) return '';
+      const tAp=_APORTES.reduce((s,r)=>s+r.valor,0);
+      const tRet=_RETIRADAS.reduce((s,r)=>s+r.valor,0);
+      if (!tAp) return '';
+      const exposto = tAp - tRet;
+      // fluxo do sócio: aportes(-) e retiradas(+) nas datas reais; terminal = exposto devolvido + resultado projetado
+      const fluxos=[];
+      _APORTES.forEach(a=>{ const d=parseDate(a.data); if(d) fluxos.push({d, v:-a.valor}); });
+      _RETIRADAS.forEach(r2=>{ const d=parseDate(r2.data); if(d) fluxos.push({d, v:+r2.valor}); });
+      // conclusão estimada: hoje + meses restantes pelo ritmo médio de execução
+      const mesesDecorridos = fluxos.length ? Math.max(6,(new Date()-Math.min(...fluxos.map(f=>+f.d)))/(30.44*86400000)) : 24;
+      const ritmo = pctObraExec>0 ? pctObraExec/mesesDecorridos : 2;
+      const mesesRest = pctObraExec>0 ? Math.max(1, Math.ceil((100-pctObraExec)/Math.max(0.5,ritmo))) + 3 : 12; // +3 meses p/ vender/receber
+      const fimEst = new Date(); fimEst.setMonth(fimEst.getMonth()+mesesRest);
+      fluxos.push({d:fimEst, v: exposto + resultadoProj});
+      fluxos.sort((a,b)=>a.d-b.d);
+      // TIR mensal por bissecção
+      const t0=+fluxos[0].d;
+      const vpl = tx => fluxos.reduce((s,f)=> s + f.v/Math.pow(1+tx, (+f.d-t0)/(30.44*86400000)), 0);
+      let lo=-0.05, hi=0.15, tirM=null;
+      if (vpl(lo)*vpl(hi)<0){ for(let it=0;it<80;it++){ const mid=(lo+hi)/2; if (vpl(mid)>0) lo=mid; else hi=mid; } tirM=(lo+hi)/2; }
+      const tirAA = tirM!==null ? (Math.pow(1+tirM,12)-1)*100 : null;
+      const roi = resultadoProj/tAp*100;
+      const moic = (tRet + exposto + resultadoProj)/tAp;
+      const _vgvB = vgvTotal || vgvReal || 0;
+      const margemVGV = _vgvB>0 ? resultadoProj/_vgvB*100 : null;
+      const cdiEq = 13.0; // referência CDI a.a. atual p/ comparação
+      return rfSec('5. Indicadores do Investidor — projetados no fim do empreendimento','#22c9a0')
+        +rfResultRow('TIR projetada do sócio', tirAA!==null? tirAA.toFixed(1)+'% a.a.' : 'n/d', tirAA!==null&&tirAA>cdiEq?'#22c9a0':'#f4a942', false,
+          'Taxa interna de retorno do fluxo real do sócio: aportes (saídas) e retiradas (entradas) nas datas em que ocorreram, mais o recebimento final estimado (capital exposto + resultado projetado) em '+fimEst.toLocaleDateString('pt-BR',{month:'2-digit',year:'numeric'})+' (conclusão estimada pelo ritmo de execução + 3 meses de cauda). Compare com CDI ~'+cdiEq+'% a.a.: acima, o empreendimento paga o risco; abaixo, renda fixa teria sido melhor.')
+        +rfResultRow('ROI projetado', roi.toFixed(1)+'%', roi>0?'#22c9a0':'#e05c7e', false,
+          'Resultado projetado ('+fmt(resultadoProj)+') ÷ total aportado ('+fmt(tAp)+'). Retorno simples sobre o capital investido, sem considerar o tempo.')
+        +rfResultRow('Múltiplo do capital (MOIC)', moic.toFixed(2)+'×', moic>1?'#22c9a0':'#e05c7e', false,
+          'Tudo que volta ao sócio (retiradas já feitas + exposto + resultado projetado) ÷ aportes. 1,00× = empatou; 1,50× = cada real aportado vira um e cinquenta.')
+        +(margemVGV!==null? rfResultRow('Margem líquida sobre o VGV', margemVGV.toFixed(1)+'%', margemVGV>15?'#22c9a0':margemVGV>8?'#f4a942':'#e05c7e', false,
+          'Resultado projetado ÷ VGV. Referência de incorporação residencial: 15–25% saudável; abaixo de 8% acende alerta.') : '')
+        +rfResultRow('Acompanhe mês a mês', '↻', '#8b949e', false,
+          'Estes indicadores recalculam a cada atualização com os números do momento — a série deles ao longo dos meses mostra se o empreendimento está melhorando ou piorando a rota.');
+    })()
+
     // ── CUSTO POR M² DE OBRA ─────────────────────────────────
     +(function(){
       const areaTotal = areaTotalCfg(CFG);
@@ -4876,29 +4942,6 @@ document.getElementById('drillModal').addEventListener('click', function(e) {
   if(e.target===this) closeDrill();
 });
 </script>
-
-</body>
-</html>window.fornSetBusca = function(v) {
-  _fornState.busca = v;
-  clearTimeout(window._fornBuscaT);
-  window._fornBuscaT = setTimeout(() => {
-    const sy = window.scrollY;
-    renderFornecedores();
-    const inp = document.getElementById('fornBusca');
-    if (inp) { const fim = inp.value.length; inp.focus(); try{inp.setSelectionRange(fim, fim);}catch(e){} }
-    window.scrollTo(0, sy);
-  }, 350);
-};!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title id="page-title">Painel Gerencial — Formes Engenharia</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<!-- Firebase compat SDK v9 (cache-bust: v3) -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-
 
 </body>
 </html>
