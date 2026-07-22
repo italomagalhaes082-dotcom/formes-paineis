@@ -264,8 +264,11 @@
 @media (max-width:680px){
   #tab13 .papel { padding:16px 12px; border-radius:8px; }
   #tab13 .papel h1 { font-size:17px; }
-  #tab13 .papel table { font-size:10px; display:block; overflow-x:auto; white-space:nowrap; }
-  #tab13 .papel td, #tab13 .papel th { padding:3px 5px; font-size:10px !important; }
+  /* tabelas ENCAIXADAS na largura da tela: layout fixo, nomes quebram linha, números não */
+  #tab13 .papel table { display:table; width:100%; table-layout:fixed; font-size:9.5px; white-space:normal; }
+  #tab13 .papel th:first-child, #tab13 .papel td:first-child { width:50%; word-break:break-word; }
+  #tab13 .papel td.num, #tab13 .papel th.num { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #tab13 .papel td, #tab13 .papel th { padding:3px 4px; font-size:9.5px !important; }
   #tab13 .kpi-papel b { font-size:14px; } #tab13 .kpi-papel { margin:3px 10px 3px 0; }
 }
 #tab13 .papel .num { text-align:right; font-family:'DM Mono',monospace; }
@@ -1007,7 +1010,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v22.07.26-a · CFO + relatório mobile</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v22.07.26-b · tabelas encaixadas</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:3px solid ${color}">
