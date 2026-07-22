@@ -69,6 +69,8 @@ dspJ.push(dsp('RAFAEL SANTOS CLIMATIZACAO','10/04/2025','INFRA AR CONDICIONADO C
 dspJ.push(dsp('ANDRE LUIS BARBOSA','05/05/2025','ADIANTAMENTO DE CAIXA OBRA',2000,'Mão de obra - Terceiros'));
 dspJ.push(dsp('ANDRE LUIS BARBOSA','12/05/2025','PAGTO SEMANA',1260,'Mão de obra - Terceiros'));
 dspJ.push(dsp('MESTRE','20/05/2025','COMPRAS SUPERMERCADO SAO LUIS',450,'Fornecedor - Aquisição de materiais'));
+dspJ.push(dsp('ANDRE LIMA VERDE','01/06/2025','FRETE PORCELANATO',540,'Mão de obra - Terceiros'));
+dspJ.push(dsp('ASSAI ATACADISTA','02/06/2025','MATERIAL DE LIMPEZA',45,'Diversos'));
 
 const DATA={ '1mvNNh2r43GeEmW9h90B_NeyfXWkyoc8k2QHnbVZyUH0':{rec:recL,dsp:dspL},
              '1B-AG_5lU9JW8TAjybn4OGwK2E3b676xVIE6Yoz9CRjI':{rec:recB,dsp:dspB},
@@ -174,6 +176,8 @@ async function testEmp(emp, checks){
     ok(t('tab9').includes('Candidatos a ALIMENTAÇÃO'),'Alimentação: card de candidatos');
     ok(t('tab9').includes('÷R$14') || t('tab9').includes('operário·dias'),'Alimentação: divisibilidade da diária André (1260=14×90)');
     ok(t('tab9').includes('SUPERMERCADO') || t('tab9').includes('mercado'),'Alimentação: compra de mercado detectada');
+    ok(!t('tab9').includes('LIMA VERDE'),'Alimentação: homônimo (Lima Verde) EXCLUÍDO');
+    ok(!t('tab9').includes('MATERIAL DE LIMPEZA'),'Alimentação: limpeza no atacadista EXCLUÍDA');
     w.switchTab(6); await new Promise(r=>setTimeout(r,200));
     const rfEl=w.document.getElementById('rf_pctObraExec');
     if(rfEl){ rfEl.value='50'; rfEl.dispatchEvent(new w.Event('input')); await new Promise(r=>setTimeout(r,150)); }

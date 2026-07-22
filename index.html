@@ -1013,7 +1013,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v22.07.26-d · candidatos alimentação</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v22.07.26-e · filtro alimentação v2</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:3px solid ${color}">
@@ -2133,6 +2133,9 @@ async function renderRelatorio() {
       <h1>${CFG.nome} — Relatório Gerencial</h1>
       <div style="font-size:11px;color:#666">Formes Engenharia · emitido em ${hoje} · <strong style="color:#1a1f24">dados até ${dadosAte}</strong> (último lançamento de receita/despesa)</div>
       <div style="font-size:10px;color:#999">fonte: planilha …${String(SHEET_ID).slice(-6)} · painel formes-paineis.netlify.app</div>
+      <div style="margin-top:10px;padding:8px 12px;background:#f4f6f8;border-radius:8px">
+        ${kp('DESPESA TOTAL', fmt(tDesp))}${kp('Receita total', fmt((_RECEITAS||[]).reduce((s,r)=>s+r.valReceb,0)))}${kp('Lançamentos', _DESPESAS.length.toLocaleString('pt-BR'))}
+      </div>
       <h2>Capital dos Sócios</h2>
       ${kp('Aportado',fmt(tAp))}${kp('Retirado',fmt(tRet))}${kp('Exposto',fmt(tAp-tRet))}${kp('Aportes',_APORTES.length)}${kp('Retiradas',_RETIRADAS.length)}
       <h2>Obra</h2>
@@ -2893,19 +2896,26 @@ async function runAuditoria(progressCb) {
       const dU=_audNorm(r.descOriginal||r.descricao||''); const fU=_audNorm(r.fornecedor||'');
       if ((empAtual==='jazz'||empAtual==='liberty') && RE_CAIXINHA.test(dU))
         cands.caixinha.push(r);
-      else if ((empAtual==='jazz'||empAtual==='liberty') && fU.includes('ANDRE') && r.valor>=200 && r.valor<=40000) {
-        // diária de alimentação: valor = operários × dias × (14..18) → divisível exato, quociente plausível
-        for (const dia of [14,15,16,17,18]) {
-          if (Math.abs(r.valor/dia - Math.round(r.valor/dia)) < 1e-9) {
-            const opDias = r.valor/dia;
-            if (opDias>=20 && opDias<=1500 && !/EMPREIT|MEDICAO|MAO DE OBRA|SERVIC/.test(dU)) {
-              r._diaria = dia; r._opDias = opDias; cands.andreDiaria.push(r); break;
+      else if ((empAtual==='jazz'||empAtual==='liberty') && fU.includes('ANDRE LUIS BARBOSA') && r.valor>=200 && r.valor<=40000) {
+        // diária de alimentação: exige contexto compatível E divisibilidade — nunca só a conta
+        const EXCLUI = /FRETE|FARDA|RESCIS|PINTURA|FOLHA|IMAGEN|ADITIVO|PARCELA|DIARIAS? [A-Z]|MEDICAO|EMPREIT|SERVIC|MATERIAL|PALLET|LOCACAO|FERRAMENTA/;
+        const CONTEXTO = /ALIMENT|CAIXINHA|CHURRASCO|ALMOCO|REFEI|MARMITA|LANCHE|CAFE|QUENTINHA|^PAGTO SEMANA\b|^SEMANA\b|^ADIANTAMENTO\s*$/;
+        if (!EXCLUI.test(dU) && CONTEXTO.test(dU)) {
+          for (const dia of [14,15,16,17,18]) {
+            if (Math.abs(r.valor/dia - Math.round(r.valor/dia)) < 1e-9) {
+              const opDias = r.valor/dia;
+              if (opDias>=20 && opDias<=1500) { r._diaria = dia; r._opDias = opDias; cands.andreDiaria.push(r); break; }
             }
           }
+          if (!r._diaria && CONTEXTO.test(dU)) cands.caixinha.push(r); // contexto de comida sem diária exata: entra como caixinha
         }
       }
-      else if (RE_MERCADO.test(dU) || (RE_MERCADO.test(fU) && r.valor<=8000))
-        cands.mercado.push(r);
+      else if (RE_MERCADO.test(dU)      else {
+        const EXCLUI_MERC = /LIMPEZA|VIBRADOR|EQUIPAMENTO|FERRAMENTA|MATERIAL|EPI|BOTINA|LUVA|CAPACETE|CIMENTO|ARGAMASSA/;
+        const COMIDA = /SUPERMERC|SUPER MERC|MERCADINHO|\bFEIRA\b|ACOUGUE|PADARIA|HORTIFRUT|FRIOS|GENEROS ALIMENT|MARMITA|REFEICAO|QUENTINHA|ALMOCO|\bCARNE\b|FRANGO|\bPAO\b|LANCHE|AGUA MINERAL|CAFE/;
+        if (COMIDA.test(dU) && !EXCLUI_MERC.test(dU)) cands.mercado.push(r);
+        else if (RE_MERCADO.test(fU) && r.valor<=8000 && !EXCLUI_MERC.test(dU) && COMIDA.test(dU)) cands.mercado.push(r);
+      }
     });
     const tot = g => g.reduce((s,r)=>s+r.valor,0);
     const nTot = cands.caixinha.length+cands.andreDiaria.length+cands.mercado.length;
