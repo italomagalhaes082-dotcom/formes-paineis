@@ -1016,7 +1016,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v22.07.26-k · drill alimentação</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v22.07.26-l · rede JCX (nome de fornecedor)</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:3px solid ${color}">
@@ -2085,6 +2085,7 @@ const TIPOS_MATERIAL = [
 ];
 function tipoMaterialDe(descU) { for (const [nome, re] of TIPOS_MATERIAL) if (re.test(descU)) return nome; return null; }
 const RE_JUDICIAL = /JUDICIAL|CUSTAS PROC|ADVOCA|HONORAR|PROCESSO|FORUM|ALVARA JUD|PENHORA|ACAO |LIMINAR/;
+const RE_FORN_COMIDA = /ALIMENTA|RESTAURANT|REFEIC|MARMIT|QUENTINH|LANCH|COZINHA|SELF SERVICE|CHURRASC|SABOR|TEMPERO/;
 const RE_CARTORIO = /CARTOR|TABELIONATO|EMOLUMENTO|ESCRITURA|REGISTRO DE IMO|RECONHEC.*FIRMA|AUTENTICA|ITBI|RGI\b|AVERBAC/;
 
 const FAMILIAS_ANALISE = [
@@ -2173,6 +2174,16 @@ async function renderAlimentacao(force) {
           (aExec?fmt(tot/aExec)+'/m² exec · ':'')+(tot/obraTot*100).toFixed(2)+'% do custo de obra · média '+fmt(tot/mesesAtivos)+'/mês ativo', r.cor);
       }).join('')}
     </div>
+    ${(function(){
+      const linhas=[];
+      R.forEach(r=>Object.entries(r.aliNomeFora||{}).forEach(([f,v])=>{
+        linhas.push({obra:r.nome.split(' ')[0], cor:r.cor, f, ...v});
+      }));
+      if(!linhas.length) return '';
+      linhas.sort((a,b)=>b.total-a.total);
+      const labm=ym=>MESN_A[ym%100-1]+'/'+String(ym).slice(2,4);
+      return `<div class="info-box" style="border:1px solid #e05c7e66;background:#e05c7e0d;margin:12px 0"><span style="color:#e05c7e;font-size:16px">🚩</span><div><strong>Fornecedores com NOME de alimentação classificados FORA da categoria (${linhas.length}):</strong> não entram em nenhum número de alimentação hoje — candidatos quase certos a reclassificação.<br>${linhas.slice(0,10).map(l=>`· <strong style="color:${l.cor}">${l.obra}</strong> · <strong>${l.f.slice(0,34)}</strong> — ${fmt(l.total)} em ${l.n} pagto(s), ${labm(l.ini)}→${labm(l.fim)}, hoje em: ${Object.keys(l.cats).join(', ')}`).join('<br>')}<br><span style="font-size:11px;color:#8b949e">Confirme no chat e a reclassificação entra com rastro — matriz, KPIs, perícia e relatório se corrigem juntos.</span></div></div>`;
+    })()}
     <div class="section-title" style="margin-top:16px">Matriz mensal — todo o período${hintIcon('Célula vermelha: obra ATIVA (custo > R$30 mil) sem alimentação — porque o Bossa pagava no mesmo mês OU porque a obra ainda não tinha alimentação oficial nenhuma (pré-história da categoria). Cinza: obra parada.')}</div>
     <div class="table-wrap" style="max-height:560px;overflow:auto"><table>
       <thead style="position:sticky;top:0;background:var(--card)"><tr><th>Mês</th>${R.map(r=>`<th style="text-align:right;color:${r.cor}">${r.nome.split(' ')[0]}</th>`).join('')}</tr></thead>
@@ -2357,13 +2368,13 @@ async function ensureAnaliseData(force) {
       // séries mensais por família + custo de obra total mensal
       const fam = {}; FAMILIAS_ANALISE.forEach(f=>fam[f.k]={});
       const obraMes = {};
-      const matTipos = {}, moForn = {}, judMes = {}, catAudit = {}, aliForn = {}, aliDet = {}, fornMes = {}, pagGenericos = [];
+      const matTipos = {}, moForn = {}, judMes = {}, catAudit = {}, aliForn = {}, aliDet = {}, aliNomeFora = {}, fornMes = {}, pagGenericos = [];
       let judTotal = 0, cartTotal = 0, despTotal = 0;
       let primeiro = null;
       desp.forEach(r=>{
         const d = parseDate(r.data); if(!d) return;
         const ym = d.getFullYear()*100 + (d.getMonth()+1);
-        const cU = _audNorm(r.categoria||''); const dU = _audNorm(r.descOriginal||r.descricao||'');
+        const cU = _audNorm(r.categoria||''); const dU = _audNorm(r.descOriginal||r.descricao||''); const fU = _audNorm(r.fornecedor||'');
         despTotal += r.valor;
         const catNome = r.categoria || '(sem categoria)';
         const CA = (catAudit[catNome] = catAudit[catNome] || {total:0, incluida:isCustoObra(r.categoria||'')});
@@ -2386,6 +2397,12 @@ async function ensureAnaliseData(force) {
             if (fk && fk!=='—') T.forns[fk]=(T.forns[fk]||0)+r.valor;
           }
         }
+        if (!cU.includes('ALIMENTA') && RE_FORN_COMIDA.test(fU)) {
+          const fk3=(r.fornecedor||'—').trim();
+          const NF=(aliNomeFora[fk3]=aliNomeFora[fk3]||{total:0, ini:ym, fim:ym, cats:{}, n:0});
+          NF.total+=r.valor; NF.n++; if(ym<NF.ini)NF.ini=ym; if(ym>NF.fim)NF.fim=ym;
+          NF.cats[(r.categoria||'—').slice(0,26)]=true;
+        }
         if (cU.includes('ALIMENTA')) {
           const fk2=(r.fornecedor||'—').trim();
           if (fk2!=='—') aliForn[fk2]=(aliForn[fk2]||0)+r.valor;
@@ -2398,7 +2415,7 @@ async function ensureAnaliseData(force) {
         if (RE_CARTORIO.test(cU) || RE_CARTORIO.test(dU)) { cartTotal+=r.valor; }
         else if (RE_JUDICIAL.test(cU) || RE_JUDICIAL.test(dU)) { judTotal+=r.valor; judMes[ym]=(judMes[ym]||0)+r.valor; }
       });
-      return { key:k, nome:c.nome, cor:c.cor, area, fam, obraMes, primeiro, pct: pctObraDe(k), matTipos, moForn, aliForn, aliDet, fornMes, pagGenericos, judTotal, cartTotal, judMes, despTotal, catAudit, estruturaConcluidaEm: c.estruturaConcluidaEm||null, estruturaPrevisaoFim: c.estruturaPrevisaoFim||null };
+      return { key:k, nome:c.nome, cor:c.cor, area, fam, obraMes, primeiro, pct: pctObraDe(k), matTipos, moForn, aliForn, aliDet, aliNomeFora, fornMes, pagGenericos, judTotal, cartTotal, judMes, despTotal, catAudit, estruturaConcluidaEm: c.estruturaConcluidaEm||null, estruturaPrevisaoFim: c.estruturaPrevisaoFim||null };
     }));
     window._analiseData = results;
     return results;
@@ -3130,13 +3147,14 @@ async function runAuditoria(progressCb) {
   // NÃO reclassifica: lista evidências para validação do Ítalo; confirmadas → viram regra efetiva
   { const empAtual = new URLSearchParams(location.search).get('emp')||'liberty';
     const jaAlim = c => _audNorm(c||'').includes('ALIMENTA');
-    const cands = { caixinha:[], andreDiaria:[], mercado:[] };
+    const cands = { caixinha:[], andreDiaria:[], mercado:[], nomeForn:[] };
     const RE_CAIXINHA = /CAIXINHA|ADIANTAMENTO.{0,12}CAIXA|CAIXA.{0,6}OBRA/;
     const RE_MERCADO = /SUPERMERC|SUPER MERC|MERCADINHO|MERCANTIL|ATACAD|ASSAI|\bFEIRA\b|ACOUGUE|PADARIA|HORTIFRUT|FRIOS|GENEROS ALIMENT|MARMITA|REFEICAO|QUENTINHA|ALMOCO|\bCARNE\b|FRANGO/;
     D.forEach(r=>{
       if (jaAlim(r.categoria)) return;                       // já é alimentação: nada a fazer
       const dU=_audNorm(r.descOriginal||r.descricao||''); const fU=_audNorm(r.fornecedor||'');
-      if ((empAtual==='jazz'||empAtual==='liberty') && RE_CAIXINHA.test(dU))
+      if (RE_FORN_COMIDA.test(fU)) cands.nomeForn.push(r);
+      else if ((empAtual==='jazz'||empAtual==='liberty') && RE_CAIXINHA.test(dU))
         cands.caixinha.push(r);
       else if ((empAtual==='jazz'||empAtual==='liberty') && fU.includes('ANDRE LUIS BARBOSA') && r.valor>=200 && r.valor<=40000) {
         // diária de alimentação: exige contexto compatível E divisibilidade — nunca só a conta
@@ -3160,12 +3178,13 @@ async function runAuditoria(progressCb) {
       }
     });
     const tot = g => g.reduce((s,r)=>s+r.valor,0);
-    const nTot = cands.caixinha.length+cands.andreDiaria.length+cands.mercado.length;
+    const nTot = cands.caixinha.length+cands.andreDiaria.length+cands.mercado.length+cands.nomeForn.length;
     if (nTot>0) alerts.push({ sev:"info", icon:"🍛",
       titulo:"Candidatos a ALIMENTAÇÃO DE OBRA — regras do negócio, aguardando sua validação",
-      resumo:`caixinha/adiantamento: ${cands.caixinha.length} (${fmt(tot(cands.caixinha))}) · diária André R$14–18/operário: ${cands.andreDiaria.length} (${fmt(tot(cands.andreDiaria))}) · compras de mercado: ${cands.mercado.length} (${fmt(tot(cands.mercado))})`,
+      resumo:`fornecedor com NOME de alimentação fora da categoria: ${cands.nomeForn.length} (${fmt(tot(cands.nomeForn))}) · caixinha/adiantamento: ${cands.caixinha.length} (${fmt(tot(cands.caixinha))}) · diária André: ${cands.andreDiaria.length} (${fmt(tot(cands.andreDiaria))}) · mercado: ${cands.mercado.length} (${fmt(tot(cands.mercado))})`,
       pergunta:"Nenhum número do painel foi alterado. Revise as amostras: as que refletirem alimentação de verdade, confirme comigo no chat (por regra ou por item) — aí a regra vira reclassificação automática com rastro, como a do Rafael Santos. Nas diárias do André, o painel mostra a conta: valor ÷ diária = operários×dias.",
       itens:[
+        ...cands.nomeForn.slice(0,10).map(r=>_audItem(r.fornecedor, r.data+' · '+String(r.descOriginal||'').slice(0,34)+' · cat: '+(r.categoria||'—').slice(0,22), fmt(r.valor), "#e05c7e")),
         ...cands.caixinha.slice(0,10).map(r=>_audItem(r.fornecedor, r.data+' · '+String(r.descOriginal||'').slice(0,42), fmt(r.valor), "#f4a942")),
         ...cands.andreDiaria.slice(0,12).map(r=>_audItem(r.fornecedor, r.data+' · '+String(r.descOriginal||'').slice(0,30)+' · ÷R$'+r._diaria+' = '+r._opDias+' operário·dias', fmt(r.valor), "#22c9a0")),
         ...cands.mercado.slice(0,10).map(r=>_audItem(r.fornecedor, r.data+' · '+String(r.descOriginal||'').slice(0,42)+' · cat: '+(r.categoria||'—').slice(0,22), fmt(r.valor), "#79c0ff")),

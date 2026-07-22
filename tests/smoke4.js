@@ -70,6 +70,7 @@ for(let i=0;i<6;i++) dspJ.push(dsp('Loja','0'+(i+1)+'/0'+(i+1)+'/2025','CIMENTO 
 dspJ.push(dsp('Mestre','05/03/2025','FOLHA 100',20000,'Mão de obra - Mestre'));
 dspJ.push(dsp('RAFAEL SANTOS CLIMATIZACAO','10/04/2025','INFRA AR CONDICIONADO CASAS 1-6',15000,'Fornecedor - Aquisição de materiais'));
 dspJ.push(dsp('ANDRE LUIS BARBOSA','05/05/2025','ADIANTAMENTO DE CAIXA OBRA',2000,'Mão de obra - Terceiros'));
+dspJ.push(dsp('JCX ALIMENTACAO LTDA','10/03/2025','FORNECIMENTO REFEICOES OBRA',5200,'Mão de obra - Terceiros'));
 dspJ.push(dsp('CIMENTO FORTE','10/01/2025','CIMENTO CP2',60000,'Fornecedor - Aquisição de materiais'));
 dspJ.push(dsp('ANDRE LUIS BARBOSA','20/01/2025','PAGTO FOLHA 40',18000,'Mão de obra - Mestre'));
 dspJ.push(dsp('ANDRE LUIS BARBOSA','20/02/2025','PAGTO FOLHA 41',18000,'Mão de obra - Mestre'));
@@ -183,6 +184,7 @@ async function testEmp(emp, checks){
     w.switchTab(9); await new Promise(r=>setTimeout(r,700));
     ok(t('tab9').includes('Reclassificações automáticas aplicadas'),'Item 1: rastro da reclassificação Rafael Santos');
     ok(t('tab9').includes('Candidatos a ALIMENTAÇÃO'),'Alimentação: card de candidatos');
+    ok(t('tab9').includes('JCX'),'JCX: candidato na Auditoria pela regra do nome');
     ok(t('tab9').includes('÷R$14') || t('tab9').includes('operário·dias'),'Alimentação: divisibilidade da diária André (1260=14×90)');
     ok(t('tab9').includes('SUPERMERCADO') || t('tab9').includes('mercado'),'Alimentação: compra de mercado detectada');
     ok(!/LIMA VERDE[\s\S]{0,160}operário·dias/.test(t('tab9')),'Alimentação: homônimo (Lima Verde) fora da regra da diária');
@@ -232,6 +234,7 @@ async function testEmp(emp, checks){
     ok(AL.includes('% do custo de obra'),'Alimentação: KPIs por obra');
     ok(AL.includes('Versão relatório'),'Alimentação: botão do relatório');
     ok(AL.includes('aliDrill'),'Drill: células da matriz clicáveis');
+    ok(AL.includes('NOME de alimentação') && AL.includes('JCX'),'JCX: fornecedor com nome de comida fora da categoria detectado na aba');
     w.aliDrill('bossa',202501); await new Promise(r=>setTimeout(r,200));
     const OV=w.document.getElementById('aliDrillOv');
     ok(OV && OV.innerHTML.includes('RESTAURANTE BOM PRATO') && OV.innerHTML.includes('4.000'),'Drill: lista do mês com fornecedor e valor');
