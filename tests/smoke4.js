@@ -51,6 +51,8 @@ const dspB=[R(32)];
 dspB.push(dsp('HARMONY EMPREENDIMENTOS IMOBILIARIOS LTDA','05/07/2024','1 PAGTO PERMUTANTE - BOSSA',400000,'Permuta')); // devido ~367k → antecipação
 dspB.push(dsp('CZ SECURITIZADORA S/A','10/03/2025','DEVOLUCAO AFAC CZ',750000,'Devolução de Afac'));
 dspB.push(dsp('Loja','05/02/2025','ACO',60000,'Fornecedor - Aquisição de materiais'));
+dspB.push(dsp('RESTAURANTE BOM PRATO','12/01/2025','ALMOCO EQUIPE',4000,'Alimentação da Obra'));
+dspB.push(dsp('RESTAURANTE BOM PRATO','12/02/2025','ALMOCO EQUIPE',4000,'Alimentação da Obra'));
 dspB.push(dsp('Mestre','05/02/2025','PAGTO MAO DE OBRA FOLHA 22',30000,'Mão de obra - Mestre'));
 
 // ── JAZZ: mock mínimo 2 abas
