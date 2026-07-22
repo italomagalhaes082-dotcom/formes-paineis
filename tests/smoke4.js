@@ -225,6 +225,15 @@ async function testEmp(emp, checks){
     ok(AL.includes('Matriz mensal'),'Alimentação: matriz mensal das 3 obras');
     ok(AL.includes('Janelas suspeitas'),'Alimentação: detector de janelas (jazz ativo sem alimentação × bossa pagando)');
     ok(AL.includes('% do custo de obra'),'Alimentação: KPIs por obra');
+    ok(AL.includes('Versão relatório'),'Alimentação: botão do relatório');
+    w.aliToggleRel(); await new Promise(r=>setTimeout(r,600));
+    const ALR=t('tab14');
+    ok(ALR.includes('Relatório Comparativo'),'Relatório alimentação: papel renderiza');
+    ok(ALR.includes('Indicadores por obra') && ALR.includes('Matriz mensal'),'Relatório alimentação: seções principais');
+    ok(ALR.includes('Janelas suspeitas'),'Relatório alimentação: leitura investigativa');
+    ok(ALR.includes('Nota metodológica'),'Relatório alimentação: transparência de método');
+    ok(ALR.includes('Imprimir'),'Relatório alimentação: botão PDF');
+    w.aliToggleRel(); await new Promise(r=>setTimeout(r,400));
     ok(AN.includes('custo de obra filtrado'),'Filtro: totais por obra lado a lado');
     ok(AN.includes('Mão de obra — visão profunda'),'Análise: MO profunda');
     ok(AN.includes('índice controlável')||AN.includes('Custas judiciais'),'Análise: índice judicial (só contencioso)');

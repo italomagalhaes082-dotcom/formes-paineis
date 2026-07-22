@@ -254,36 +254,36 @@
   }
 
 /* ═══ Relatório: papel na tela e impressão A4 ═══ */
-#tab13 .papel { background:#fff; color:#1a1f24; border-radius:12px; padding:28px 30px; max-width:820px; margin:0 auto; font-family:'Space Grotesk',sans-serif; }
-#tab13 .papel h1 { font-size:22px; margin:0 0 2px; } #tab13 .papel h2 { font-size:14px; margin:20px 0 8px; border-bottom:2px solid #1a1f24; padding-bottom:4px; text-transform:uppercase; letter-spacing:1px; }
-#tab13 .papel { overflow:hidden; }
-#tab13 .papel table { width:100%; border-collapse:collapse; font-size:11.5px; table-layout:fixed; }
-#tab13 .papel th:nth-child(1), #tab13 .papel td:nth-child(1) { width:47%; word-break:break-word; }
-#tab13 .papel th:nth-child(2), #tab13 .papel td:nth-child(2) { width:33%; }
-#tab13 .papel th:nth-child(3), #tab13 .papel td:nth-child(3) { width:20%; }
-#tab13 .papel td.num { white-space:nowrap; overflow:hidden; text-overflow:clip; }
+#tab13 .papel , #tab14 .papel { background:#fff; color:#1a1f24; border-radius:12px; padding:28px 30px; max-width:820px; margin:0 auto; font-family:'Space Grotesk',sans-serif; }
+#tab13 .papel h1 , #tab14 .papel h1 { font-size:22px; margin:0 0 2px; } #tab13 .papel h2 , #tab14 .papel h2 { font-size:14px; margin:20px 0 8px; border-bottom:2px solid #1a1f24; padding-bottom:4px; text-transform:uppercase; letter-spacing:1px; }
+#tab13 .papel , #tab14 .papel { overflow:hidden; }
+#tab13 .papel table , #tab14 .papel table { width:100%; border-collapse:collapse; font-size:11.5px; table-layout:fixed; }
+#tab13 .papel th:nth-child(1), #tab13 .papel td:nth-child(1) , #tab14 .papel td:nth-child(1) { width:47%; word-break:break-word; }
+#tab13 .papel th:nth-child(2), #tab13 .papel td:nth-child(2) , #tab14 .papel td:nth-child(2) { width:33%; }
+#tab13 .papel th:nth-child(3), #tab13 .papel td:nth-child(3) , #tab14 .papel td:nth-child(3) { width:20%; }
+#tab13 .papel td.num , #tab14 .papel td.num { white-space:nowrap; overflow:hidden; text-overflow:clip; }
 
-#tab13 .papel th { text-align:left; font-size:10px; text-transform:uppercase; color:#666; padding:4px 6px; border-bottom:1px solid #ccc; }
-#tab13 .papel td { padding:4px 6px; border-bottom:1px solid #eee; color:#1a1f24 !important; background:transparent !important; font-size:11.5px; }
-#tab13 .papel th { color:#555 !important; background:transparent !important; }
-#tab13 .papel table { table-layout:auto; }
+#tab13 .papel th , #tab14 .papel th { text-align:left; font-size:10px; text-transform:uppercase; color:#666; padding:4px 6px; border-bottom:1px solid #ccc; }
+#tab13 .papel td , #tab14 .papel td { padding:4px 6px; border-bottom:1px solid #eee; color:#1a1f24 !important; background:transparent !important; font-size:11.5px; }
+#tab13 .papel th , #tab14 .papel th { color:#555 !important; background:transparent !important; }
+#tab13 .papel table , #tab14 .papel table { table-layout:auto; }
 @media (max-width:680px){
-  #tab13 .papel { padding:16px 12px; border-radius:8px; }
-  #tab13 .papel h1 { font-size:17px; }
-  #tab13 .papel table { font-size:9.5px; }
-  #tab13 .papel td, #tab13 .papel th { padding:3px 4px; font-size:9.5px !important; }
-  #tab13 .kpi-papel b { font-size:14px; } #tab13 .kpi-papel { margin:3px 10px 3px 0; }
+  #tab13 .papel , #tab14 .papel { padding:16px 12px; border-radius:8px; }
+  #tab13 .papel h1 , #tab14 .papel h1 { font-size:17px; }
+  #tab13 .papel table , #tab14 .papel table { font-size:9.5px; }
+  #tab13 .papel td, #tab13 .papel th , #tab14 .papel th { padding:3px 4px; font-size:9.5px !important; }
+  #tab13 .kpi-papel b , #tab14 .kpi-papel b { font-size:14px; } #tab13 .kpi-papel , #tab14 .kpi-papel { margin:3px 10px 3px 0; }
 }
-#tab13 .papel .num { text-align:right; font-family:'DM Mono',monospace; }
-#tab13 .kpi-papel { display:inline-block; margin:4px 14px 4px 0; } 
-#tab13 .kpi-papel b { font-size:16px; display:block; } #tab13 .kpi-papel span { font-size:9.5px; color:#666; text-transform:uppercase; letter-spacing:.5px; }
+#tab13 .papel .num , #tab14 .papel .num { text-align:right; font-family:'DM Mono',monospace; }
+#tab13 .kpi-papel , #tab14 .kpi-papel { display:inline-block; margin:4px 14px 4px 0; } 
+#tab13 .kpi-papel b , #tab14 .kpi-papel b { font-size:16px; display:block; } #tab13 .kpi-papel span , #tab14 .kpi-papel span { font-size:9.5px; color:#666; text-transform:uppercase; letter-spacing:.5px; }
 @media print {
   @page { size: A4; margin: 11mm; }
   body * { visibility: hidden !important; }
-  #tab13, #tab13 * { visibility: visible !important; }
-  #tab13 { position:absolute; left:0; top:0; width:100%; }
-  #tab13 .papel { border-radius:0; padding:0; max-width:none; box-shadow:none; }
-  #tab13 .no-print { display:none !important; }
+  #tab13, #tab13 *, #tab14, #tab14 * { visibility: visible !important; }
+  #tab13, #tab14 { position:absolute; left:0; top:0; width:100%; }
+  #tab13 .papel , #tab14 .papel { border-radius:0; padding:0; max-width:none; box-shadow:none; }
+  #tab13 .no-print, #tab14 .no-print { display:none !important; }
 }
 </style>
 </head>
@@ -1016,7 +1016,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v22.07.26-g · aba alimentação</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v22.07.26-h · relatório alimentação</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:3px solid ${color}">
@@ -2097,6 +2097,7 @@ const FAMILIAS_ANALISE = [
 const MESN_A=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 function _ymLabel(ym){ return MESN_A[ym%100-1]+'/'+String(ym).slice(2,4); }
 
+window.aliToggleRel = function() { window._aliRelMode = !window._aliRelMode; renderAlimentacao(); };
 async function renderAlimentacao(force) {
   const el = document.getElementById('tab14');
   if (!el) return;
@@ -2132,7 +2133,9 @@ async function renderAlimentacao(force) {
   const lab=ym=>MESN_A[ym%100-1]+'/'+String(ym).slice(2,4);
   const k=(l,v,s,c,h)=>`<div class="kpi" style="border-top:3px solid ${c}"><div class="kpi-label">${l}${h?hintIcon(h):''}</div><div class="kpi-value" style="color:${c};font-size:15px">${v}</div>${s?`<div class="kpi-sub">${s}</div>`:''}</div>`;
   const fechados=todos.filter(ym=>ym<ymHoje);
+  if (window._aliRelMode) { el.innerHTML = aliRelatorioHtml(R, todos, fechados, ymHoje, janelas, val, obraAtiva, lab, sum, bossa); return; }
   el.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button onclick="aliToggleRel()" style="background:#22c9a0;color:#04140f;border:0;border-radius:8px;padding:8px 16px;cursor:pointer;font-family:'DM Mono',monospace;font-weight:700">📄 Versão relatório / PDF</button></div>`+`
     <div class="info-box" style="border:1px solid #22c9a040;margin-bottom:12px"><span>🍛</span><div><strong>Alimentação de obra — comparativo integral das três obras.</strong> Números pela categoria oficial; os candidatos a reclassificação (caixinha/André/mercado) só entram após sua validação na Auditoria. Meses de obra parada não contam como lacuna.</div></div>
     ${janelas.length?`<div class="info-box" style="border:1px solid #e05c7e66;background:#e05c7e0d;margin-bottom:12px"><span style="color:#e05c7e;font-size:16px">🕵️</span><div><strong>Janelas suspeitas — obra ativa SEM alimentação identificada, com o Bossa pagando normalmente (${janelas.length}):</strong><br>${janelas.map(j=>`· <strong>${j.obra}</strong>: ${lab(j.inicio)} → ${lab(j.fim)} (${j.meses} meses) — candidata ao período em que a alimentação estava embutida na folha do André (adiantamento para mantimentos)`).join('<br>')}<br><span style="font-size:11px;color:#8b949e">Confirmando o período, aplico a regra da diária/folha do André nessa janela e a alimentação real das obras se realinha.</span></div></div>`:''}
     <div class="kpi-grid" style="grid-template-columns:repeat(${R.length},1fr)">
@@ -2162,6 +2165,58 @@ async function renderAlimentacao(force) {
         const u3=fechados.slice(-3).reduce((s,ym)=>s+val(r,ym),0)/3;
         return k(r.nome.split(' ')[0]+' · 12m', fmt(u12), 'ritmo últimos 3m: '+fmt(u3)+'/mês', r.cor);
       }).join('')}
+    </div>`;
+}
+
+function aliRelatorioHtml(R, todos, fechados, ymHoje, janelas, val, obraAtiva, lab, sum, bossa) {
+  const hoje=new Date().toLocaleDateString('pt-BR');
+  let ultData=null; (_DESPESAS||[]).forEach(r=>{const d=parseDate(r.data); if(d&&(!ultData||d>ultData)) ultData=d;});
+  const kp=(l,v)=>`<div class="kpi-papel"><b>${v}</b><span>${l}</span></div>`;
+  const totG=R.reduce((s,r)=>s+sum(r.fam.alimentacao),0);
+  const linhas=R.map(r=>{
+    const tot=sum(r.fam.alimentacao); const aExec=r.pct>0? r.area*r.pct/100:0; const obraTot=sum(r.obraMes)||1;
+    const ativos=todos.filter(ym=>val(r,ym)>0).length||1;
+    const u3=fechados.slice(-3).reduce((s,ym)=>s+val(r,ym),0)/3;
+    return {r, tot, m2:aExec?tot/aExec:null, pctC:tot/obraTot*100, media:tot/ativos, u3};
+  });
+  const ord=linhas.filter(l=>l.m2).sort((a,b)=>b.m2-a.m2);
+  const razao = ord.length>=2 && ord[ord.length-1].m2>0 ? (ord[0].m2/ord[ord.length-1].m2) : null;
+  return `
+    <div class="no-print" style="max-width:820px;margin:0 auto 12px;display:flex;justify-content:space-between;align-items:center">
+      <button onclick="aliToggleRel()" style="background:#30363d;color:#c9d1d9;border:0;border-radius:8px;padding:8px 14px;cursor:pointer;font-family:'DM Mono',monospace">← voltar à análise</button>
+      <button onclick="window.print()" style="background:#4f8ef7;color:#fff;border:0;border-radius:8px;padding:9px 18px;cursor:pointer;font-family:'DM Mono',monospace">🖨️ Imprimir / Salvar PDF</button>
+    </div>
+    <div class="papel">
+      <h1>Alimentação de Obra — Relatório Comparativo</h1>
+      <div style="font-size:11px;color:#666">Formes Engenharia · Jazz Exclusive × Bossa Nova × Liberty Unique · emitido em ${hoje} · <strong style="color:#1a1f24">dados até ${ultData?ultData.toLocaleDateString('pt-BR'):'—'}</strong></div>
+      <div style="margin-top:10px;padding:8px 12px;background:#f4f6f8;border-radius:8px">
+        ${kp('ALIMENTAÇÃO DO GRUPO', fmt(totG))}${kp('Período analisado', lab(todos[0])+' → '+lab(todos[todos.length-1]))}${razao?kp('Maior ÷ menor (R$/m²)', razao.toFixed(1)+'×'):''}
+      </div>
+      <h2>Indicadores por obra</h2>
+      <table><thead><tr><th>Obra</th><th class="num">Total</th><th class="num">R$/m² exec.</th><th class="num">% custo obra</th><th class="num">Média/mês ativo</th><th class="num">Ritmo 3m</th></tr></thead><tbody>
+        ${linhas.map(l=>`<tr><td><strong>${l.r.nome}</strong></td><td class="num">${fmt(l.tot)}</td><td class="num">${l.m2?fmt(l.m2):'—'}</td><td class="num">${l.pctC.toFixed(2)}%</td><td class="num">${fmt(l.media)}</td><td class="num">${fmt(l.u3)}/mês</td></tr>`).join('')}
+      </tbody></table>
+      ${janelas.length?`<h2>Janelas suspeitas — leitura investigativa</h2>
+      <div style="font-size:11.5px;line-height:1.55">${janelas.map(j=>`· <strong>${j.obra}</strong>: ${lab(j.inicio)} → ${lab(j.fim)} (${j.meses} meses) com obra ativa e alimentação não identificada, enquanto o Bossa pagava normalmente.`).join('<br>')}
+      <br><br><strong>Interpretação:</strong> nesses períodos, a alimentação do ${janelas.map(j=>j.obra).filter((v,i,a)=>a.indexOf(v)===i).join(' e do ')} muito provavelmente estava embutida na folha do André (adiantamentos para mantimentos e/ou diária de R$ 14–18 por operário/dia) — ou seja, a diferença de alimentação entre as obras é de <em>classificação</em>, não de consumo. A confirmação do período pelo gestor permitirá reclassificar e realinhar o comparativo.</div>`:''}
+      <h2>Fornecedores de alimentação — top 8 por obra</h2>
+      ${R.map(r=>{
+        const top=Object.entries(r.aliForn||{}).sort((a,b)=>b[1]-a[1]).slice(0,8);
+        if(!top.length) return `<div style="font-size:11px;margin:6px 0"><strong>${r.nome}:</strong> nenhum fornecedor na categoria oficial.</div>`;
+        return `<div style="font-size:11px;margin:6px 0 10px"><strong>${r.nome}</strong></div>
+        <table><thead><tr><th>Fornecedor</th><th class="num">Total</th><th class="num">%</th></tr></thead><tbody>
+        ${top.map(([f,v])=>`<tr><td>${f.slice(0,42)}</td><td class="num">${fmt(v)}</td><td class="num">${(v/(sum(r.fam.alimentacao)||1)*100).toFixed(1)}%</td></tr>`).join('')}
+        </tbody></table>`;}).join('')}
+      <h2>Matriz mensal — período integral</h2>
+      <table><thead><tr><th>Mês</th>${R.map(r=>`<th class="num">${r.nome.split(' ')[0]}</th>`).join('')}</tr></thead><tbody>
+        ${todos.slice().reverse().map(ym=>`<tr><td>${lab(ym)}</td>${R.map(r=>{
+          const v=val(r,ym); const ativa=obraAtiva(r,ym);
+          const susp = ativa && v<500 && r.key!=='bossa' && bossa && val(bossa,ym)>2000;
+          return `<td class="num" style="${susp?'background:#fde8ec;color:#b2233f;font-weight:700':''}">${!ativa&&v===0?'·':v===0?'0':fmt(v)}</td>`;}).join('')}</tr>`).join('')}
+      </tbody></table>
+      <div style="font-size:9.5px;color:#999;margin-top:6px">Célula destacada: obra ativa no mês (custo de obra > R$ 30 mil) sem alimentação identificada, com o Bossa pagando (> R$ 2 mil). "·" = obra sem movimento relevante no mês.</div>
+      <h2>Nota metodológica</h2>
+      <div style="font-size:10.5px;color:#444;line-height:1.5">Valores da categoria oficial de Alimentação da Obra de cada planilha. Candidatos a reclassificação (caixinha/adiantamentos do André, diária por operário, compras de mercado pelo mestre) estão mapeados na Auditoria e aguardam validação do gestor — após confirmação, este relatório passa a refleti-los automaticamente. R$/m² executado usa área real × % de execução informado no Resultado Final de cada obra (Jazz misto 45×144 + 21×118).</div>
     </div>`;
 }
 
@@ -2238,7 +2293,7 @@ async function ensureAnaliseData(force) {
       // séries mensais por família + custo de obra total mensal
       const fam = {}; FAMILIAS_ANALISE.forEach(f=>fam[f.k]={});
       const obraMes = {};
-      const matTipos = {}, moForn = {}, judMes = {}, catAudit = {};
+      const matTipos = {}, moForn = {}, judMes = {}, catAudit = {}, aliForn = {};
       let judTotal = 0, cartTotal = 0, despTotal = 0;
       let primeiro = null;
       desp.forEach(r=>{
@@ -2263,6 +2318,10 @@ async function ensureAnaliseData(force) {
             if (fk && fk!=='—') T.forns[fk]=(T.forns[fk]||0)+r.valor;
           }
         }
+        if (cU.includes('ALIMENTA')) {
+          const fk2=(r.fornecedor||'—').trim();
+          if (fk2!=='—') aliForn[fk2]=(aliForn[fk2]||0)+r.valor;
+        }
         if (cU.includes('MAO DE OBRA')) {
           const fk=(r.fornecedor||'—').trim();
           if (fk!=='—') moForn[fk]=(moForn[fk]||0)+r.valor;
@@ -2270,7 +2329,7 @@ async function ensureAnaliseData(force) {
         if (RE_CARTORIO.test(cU) || RE_CARTORIO.test(dU)) { cartTotal+=r.valor; }
         else if (RE_JUDICIAL.test(cU) || RE_JUDICIAL.test(dU)) { judTotal+=r.valor; judMes[ym]=(judMes[ym]||0)+r.valor; }
       });
-      return { key:k, nome:c.nome, cor:c.cor, area, fam, obraMes, primeiro, pct: pctObraDe(k), matTipos, moForn, judTotal, cartTotal, judMes, despTotal, catAudit, estruturaConcluidaEm: c.estruturaConcluidaEm||null, estruturaPrevisaoFim: c.estruturaPrevisaoFim||null };
+      return { key:k, nome:c.nome, cor:c.cor, area, fam, obraMes, primeiro, pct: pctObraDe(k), matTipos, moForn, aliForn, judTotal, cartTotal, judMes, despTotal, catAudit, estruturaConcluidaEm: c.estruturaConcluidaEm||null, estruturaPrevisaoFim: c.estruturaPrevisaoFim||null };
     }));
     window._analiseData = results;
     return results;
