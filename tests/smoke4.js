@@ -231,6 +231,11 @@ async function testEmp(emp, checks){
     ok(AL.includes('Janelas suspeitas'),'Alimentação: detector de janelas (jazz ativo sem alimentação × bossa pagando)');
     ok(AL.includes('% do custo de obra'),'Alimentação: KPIs por obra');
     ok(AL.includes('Versão relatório'),'Alimentação: botão do relatório');
+    ok(AL.includes('aliDrill'),'Drill: células da matriz clicáveis');
+    w.aliDrill('bossa',202501); await new Promise(r=>setTimeout(r,200));
+    const OV=w.document.getElementById('aliDrillOv');
+    ok(OV && OV.innerHTML.includes('RESTAURANTE BOM PRATO') && OV.innerHTML.includes('4.000'),'Drill: lista do mês com fornecedor e valor');
+    OV.style.display='none';
     ok(AL.includes('Perícia das janelas'),'Perícia: seção presente');
     ok(/Janelas suspeitas[\s\S]{0,600}Liberty/.test(AL),'Janela pré-alimentação do Liberty detectada (sem referência ao Bossa)');
     ok(AL.includes('dentro da janela'),'Perícia: André dentro×fora');
