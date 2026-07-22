@@ -252,6 +252,24 @@
     table{min-width:500px}
     .cdi-big{font-size:42px}
   }
+
+/* ═══ Relatório: papel na tela e impressão A4 ═══ */
+#tab13 .papel { background:#fff; color:#1a1f24; border-radius:12px; padding:28px 30px; max-width:820px; margin:0 auto; font-family:'Space Grotesk',sans-serif; }
+#tab13 .papel h1 { font-size:22px; margin:0 0 2px; } #tab13 .papel h2 { font-size:14px; margin:20px 0 8px; border-bottom:2px solid #1a1f24; padding-bottom:4px; text-transform:uppercase; letter-spacing:1px; }
+#tab13 .papel table { width:100%; border-collapse:collapse; font-size:11.5px; } 
+#tab13 .papel th { text-align:left; font-size:10px; text-transform:uppercase; color:#666; padding:4px 6px; border-bottom:1px solid #ccc; }
+#tab13 .papel td { padding:4px 6px; border-bottom:1px solid #eee; }
+#tab13 .papel .num { text-align:right; font-family:'DM Mono',monospace; }
+#tab13 .kpi-papel { display:inline-block; margin:4px 14px 4px 0; } 
+#tab13 .kpi-papel b { font-size:16px; display:block; } #tab13 .kpi-papel span { font-size:9.5px; color:#666; text-transform:uppercase; letter-spacing:.5px; }
+@media print {
+  @page { size: A4; margin: 11mm; }
+  body * { visibility: hidden !important; }
+  #tab13, #tab13 * { visibility: visible !important; }
+  #tab13 { position:absolute; left:0; top:0; width:100%; }
+  #tab13 .papel { border-radius:0; padding:0; max-width:none; box-shadow:none; }
+  #tab13 .no-print { display:none !important; }
+}
 </style>
 </head>
 <body>
@@ -360,6 +378,7 @@
       <button class="tab" onclick="switchTab(10)">🏪 Fornecedores</button>
       <button class="tab" id="tabBtnSoc" onclick="switchTab(11)">🤝 Sociedade</button>
       <button class="tab" onclick="switchTab(12)">📈 Análise</button>
+      <button class="tab" onclick="switchTab(13)">📄 Relatório</button>
     </div>
   </div>
   <div class="content">
@@ -376,6 +395,7 @@
     <div class="tab-content" id="tab10"></div>
     <div class="tab-content" id="tab11"></div>
     <div class="tab-content" id="tab12"></div>
+    <div class="tab-content" id="tab13"></div>
   </div>
 </div>
 
@@ -978,7 +998,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v13.07.26-c · censo de aportes</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v14.07.26-a · ABC · MO · relatório</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:3px solid ${color}">
@@ -2034,6 +2054,20 @@ window.fornConsolFiltra = function(q){
 };
 
 // ═══════════ 📈 ANÁLISE COMPARATIVA — visão de auditor ═══════════
+// Tipos de material extraídos do descritivo — base da Curva ABC (padrão dos ERPs de construção)
+const TIPOS_MATERIAL = [
+  ['Cimento', /CIMENTO/], ['Concreto', /CONCRETO|USINAD/], ['Aço/Ferragem', /ACO CA|VERGALH|FERRO |TRELICA|ARAME/],
+  ['Bloco/Tijolo', /BLOCO|TIJOLO/], ['Argamassa/Rejunte', /ARGAMASSA|REJUNTE|\bCAL\b/],
+  ['Areia/Brita/Aterro', /AREIA|BRITA|ATERRO|CARRADA|SEIXO/], ['Cerâmica/Porcelanato', /PORCELANATO|CERAMIC|\bPISO\b|REVESTIMENTO/],
+  ['Telha/Cobertura', /TELHA|CUMEEIRA/], ['Madeira', /MADEIRA|TABUA|CAIBRO|RIPA|COMPENSADO/],
+  ['Tinta/Pintura', /TINTA|SELADOR|TEXTURA|MASSA CORRIDA/], ['Elétrico', /\bFIO\b|\bCABO\b|DISJUNTOR|ELETRODUTO|TOMADA|LUMINARIA/],
+  ['Hidráulico', /\bTUBO\b|\bPVC\b|CONEX|HIDRAUL|REGISTRO|CAIXA D.AGUA/], ['Esquadria/Vidro', /JANELA|\bPORTA\b|VIDRO|ALUMINIO|ESQUADRIA/],
+  ['Gesso/Drywall', /GESSO|DRYWALL|FORRO/], ['Granito/Mármore', /GRANITO|MARMORE|CALACATA|BANCADA/],
+  ['Impermeabilização', /IMPERMEAB|MANTA|VEDACIT/],
+];
+function tipoMaterialDe(descU) { for (const [nome, re] of TIPOS_MATERIAL) if (re.test(descU)) return nome; return null; }
+const RE_JUDICIAL = /JUDICIAL|CUSTAS|CARTOR|ADVOCA|HONORAR|PROCESSO|FORUM|ALVARA JUD|PENHORA/;
+
 const FAMILIAS_ANALISE = [
   { k:'materiais',   nome:'Materiais',    cor:'#4f8ef7', match:c=>c.includes('AQUISICAO DE MATERIAIS')||c.includes('MATERIA') },
   { k:'mo',          nome:'Mão de obra',  cor:'#f4a942', match:c=>c.includes('MAO DE OBRA') },
@@ -2043,6 +2077,59 @@ const FAMILIAS_ANALISE = [
 ];
 const MESN_A=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 function _ymLabel(ym){ return MESN_A[ym%100-1]+'/'+String(ym).slice(2,4); }
+
+async function renderRelatorio() {
+  const el = document.getElementById('tab13');
+  if (!el) return;
+  const hoje = new Date().toLocaleDateString('pt-BR');
+  const tAp=_APORTES.reduce((s,r)=>s+r.valor,0), tRet=_RETIRADAS.reduce((s,r)=>s+r.valor,0);
+  const tDesp=_DESPESAS.reduce((s,r)=>s+r.valor,0);
+  const porCat={}; _DESPESAS.forEach(r=>{const c=r.categoria||'(sem)'; porCat[c]=(porCat[c]||0)+r.valor;});
+  const topCat=Object.entries(porCat).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  const porForn={}; _DESPESAS.forEach(r=>{const f=(r.fornecedor||'—'); if(f!=='—') porForn[f]=(porForn[f]||0)+r.valor;});
+  const topForn=Object.entries(porForn).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  const custoObra=_DESPESAS.filter(r=>isCustoObra(r.categoria||'')).reduce((s,r)=>s+r.valor,0);
+  const area=areaTotalCfg(CFG); const pct=parseFloat(rfGet('pctObraExec', CFG.pctObraDefault||0))||0;
+  const kp=(l,v)=>`<div class="kpi-papel"><b>${v}</b><span>${l}</span></div>`;
+  // vendas (curada, se houver)
+  let vendasHtml='';
+  if (CFG.abaGestaoVendas) { await loadGestaoVendas();
+    if (_GV && _GV.length) {
+      let vgv=0,nQ=0,nA=0,nDev=0,nDisp=0,dN=0,dDev=0,dRec=0,dCp=0,gRev=0;
+      _GV.forEach(g=>{ if(g.status.includes('DISPON')){nDisp++;} else { vgv+=g.valor;
+        if(g.status.includes('QUIT'))nQ++; else if(g.status.includes('DEVENDO'))nDev++; else nA++; }
+        dN+=g.nDist; dDev+=g.devolvido; dRec+=(g.recebDist||0); dCp+=g.comPerdidas; gRev+=g.ganhoRev; });
+      vendasHtml=`<h2>Vendas e Distratos</h2>
+        ${kp('VGV vigente',fmt(vgv))}${kp('Quitadas',nQ)}${kp('Em andamento',nA)}${kp('Entregues devendo',nDev)}${kp('Disponíveis',nDisp)}
+        ${kp('Distratos',dN)}${kp('Retido líquido',fmt(dRec-dDev-dCp))}${kp('Ganho revenda',fmt(gRev))}`;
+    } }
+  el.innerHTML = `
+    <div class="no-print" style="max-width:820px;margin:0 auto 12px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:12px;color:#8b949e">Relatório executivo · pronto para celular e impressão A4</span>
+      <button onclick="window.print()" style="background:#4f8ef7;color:#fff;border:0;border-radius:8px;padding:9px 18px;cursor:pointer;font-family:'DM Mono',monospace">🖨️ Imprimir / Salvar PDF</button>
+    </div>
+    <div class="papel">
+      <h1>${CFG.nome} — Relatório Gerencial</h1>
+      <div style="font-size:11px;color:#666">Formes Engenharia · emitido em ${hoje} · fonte: planilha …${String(SHEET_ID).slice(-6)} · painel formes-paineis.netlify.app</div>
+      <h2>Capital dos Sócios</h2>
+      ${kp('Aportado',fmt(tAp))}${kp('Retirado',fmt(tRet))}${kp('Exposto',fmt(tAp-tRet))}${kp('Aportes',_APORTES.length)}${kp('Retiradas',_RETIRADAS.length)}
+      <h2>Obra</h2>
+      ${kp('Custo de obra pago',fmt(custoObra))}${kp('Área total',area.toLocaleString('pt-BR')+' m²')}${kp('% executado',pct+'%')}
+      ${pct>0?kp('Custo/m² executado',fmt(custoObra/(area*pct/100))+'/m²'):''}
+      ${pct>0?kp('Projeção final/m²',fmt((custoObra/(pct/100))/area)+'/m²'):''}
+      ${CFG.mixCasas?`<div style="font-size:10px;color:#666;margin-top:4px">${CFG.mixCasas}</div>`:''}
+      ${vendasHtml}
+      <h2>Despesas — Top 10 categorias</h2>
+      <table><thead><tr><th>Categoria</th><th class="num">Total</th><th class="num">%</th></tr></thead><tbody>
+        ${topCat.map(([c,v])=>`<tr><td>${c}</td><td class="num">${fmt(v)}</td><td class="num">${(v/tDesp*100).toFixed(1)}%</td></tr>`).join('')}
+      </tbody></table>
+      <h2>Fornecedores — Top 10</h2>
+      <table><thead><tr><th>Fornecedor</th><th class="num">Total pago</th><th class="num">%</th></tr></thead><tbody>
+        ${topForn.map(([f,v])=>`<tr><td>${f.slice(0,44)}</td><td class="num">${fmt(v)}</td><td class="num">${(v/tDesp*100).toFixed(1)}%</td></tr>`).join('')}
+      </tbody></table>
+      <div style="margin-top:18px;font-size:9.5px;color:#999">Gerado automaticamente pelo painel gerencial. Valores conforme lançamentos das abas RECEITAS/DESPESAS TOTAIS na data de emissão.</div>
+    </div>`;
+}
 
 async function renderAnalise(force) {
   const el = document.getElementById('tab12');
@@ -2058,18 +2145,35 @@ async function renderAnalise(force) {
       // séries mensais por família + custo de obra total mensal
       const fam = {}; FAMILIAS_ANALISE.forEach(f=>fam[f.k]={});
       const obraMes = {};
+      const matTipos = {}, moForn = {}, judMes = {};
+      let judTotal = 0, despTotal = 0;
       let primeiro = null;
       desp.forEach(r=>{
         const d = parseDate(r.data); if(!d) return;
         const ym = d.getFullYear()*100 + (d.getMonth()+1);
-        const cU = _audNorm(r.categoria||'');
+        const cU = _audNorm(r.categoria||''); const dU = _audNorm(r.descOriginal||r.descricao||'');
+        despTotal += r.valor;
         if (isCustoObra(r.categoria||'')) {
           obraMes[ym]=(obraMes[ym]||0)+r.valor;
           if (!primeiro || ym<primeiro) primeiro=ym;
         }
         FAMILIAS_ANALISE.forEach(f=>{ if(f.match(cU)) fam[f.k][ym]=(fam[f.k][ym]||0)+r.valor; });
+        if (cU.includes('MATERIA')) {
+          const tp = tipoMaterialDe(dU);
+          if (tp) {
+            const T=(matTipos[tp]=matTipos[tp]||{total:0,meses:{},forns:{}});
+            T.total+=r.valor; T.meses[ym]=(T.meses[ym]||0)+r.valor;
+            const fk=_audNorm(r.fornecedor).replace(/\b(LTDA|ME|EPP|EIRELI)\b\.?/g,'').trim();
+            if (fk && fk!=='—') T.forns[fk]=(T.forns[fk]||0)+r.valor;
+          }
+        }
+        if (cU.includes('MAO DE OBRA')) {
+          const fk=(r.fornecedor||'—').trim();
+          if (fk!=='—') moForn[fk]=(moForn[fk]||0)+r.valor;
+        }
+        if (RE_JUDICIAL.test(cU) || RE_JUDICIAL.test(dU)) { judTotal+=r.valor; judMes[ym]=(judMes[ym]||0)+r.valor; }
       });
-      return { key:k, nome:c.nome, cor:c.cor, area, fam, obraMes, primeiro, pct: pctObraDe(k) };
+      return { key:k, nome:c.nome, cor:c.cor, area, fam, obraMes, primeiro, pct: pctObraDe(k), matTipos, moForn, judTotal, judMes, despTotal };
     }));
     window._analiseData = results;
     paintAnalise(results);
@@ -2205,6 +2309,99 @@ function paintAnalise(R) {
             return `<td style="text-align:right;font-size:10.5px"><strong style="color:#f4a942">${v?fmt(v)+'/m²':'—'}</strong></td>`;}).join('')}
           <td style="font-size:9.5px;color:#8b949e;text-align:right">se o custo/executado<br>se mantiver até 100%</td></tr>
       </tbody></table></div>
+
+    <div class="section-title">🧱 Curva ABC de Materiais — grupo${hintIcon('Tipos de material extraídos dos descritivos (nas categorias de aquisição). Classe A = itens que somam 80% do gasto: onde negociar vale mais. Fornecedor único em item classe A = risco de dependência e de preço.')}</div>
+    ${(function(){
+      const M={};
+      R.forEach(r=>Object.entries(r.matTipos||{}).forEach(([tp,v])=>{
+        const g=(M[tp]=M[tp]||{total:0,obras:{},forns:{}});
+        g.total+=v.total; g.obras[r.key]=v.total;
+        Object.entries(v.forns).forEach(([f,x])=>g.forns[f]=(g.forns[f]||0)+x);
+      }));
+      const lista=Object.entries(M).sort((a,b)=>b[1].total-a[1].total);
+      const tot=lista.reduce((s,[,g])=>s+g.total,0)||1;
+      let acum=0;
+      return `<div class="table-wrap" style="margin-bottom:16px"><table>
+        <thead><tr><th>Classe</th><th>Material</th>${R.map(r=>`<th style="text-align:right;color:${r.cor}">${r.nome.split(' ')[0]}</th>`).join('')}<th style="text-align:right">Grupo</th><th style="text-align:right">% acum.</th><th style="text-align:right">Fornecedores</th></tr></thead>
+        <tbody>${lista.map(([tp,g])=>{
+          acum+=g.total; const pa=acum/tot*100;
+          const classe = pa<=80?'A':pa<=95?'B':'C';
+          const nf=Object.keys(g.forns).length;
+          const domin=Object.entries(g.forns).sort((a,b)=>b[1]-a[1])[0];
+          const dompct=domin? domin[1]/g.total*100 : 0;
+          return `<tr>
+            <td><span style="font-weight:800;color:${classe==='A'?'#e05c7e':classe==='B'?'#f4a942':'#8b949e'}">${classe}</span></td>
+            <td style="font-size:11.5px">${tp}</td>
+            ${R.map(r=>`<td style="text-align:right;font-size:10.5px">${g.obras[r.key]?fmt(g.obras[r.key]):'—'}</td>`).join('')}
+            <td style="text-align:right;font-weight:700;font-size:11px">${fmt(g.total)}</td>
+            <td style="text-align:right;color:#8b949e;font-size:10px">${pa.toFixed(0)}%</td>
+            <td style="text-align:right;font-size:10px;color:${nf===1?'#e05c7e':dompct>80?'#f4a942':'#8b949e'}">${nf===1?'⚠ único':nf+(dompct>80?' (1 domina '+dompct.toFixed(0)+'%)':'')}</td></tr>`;}).join('')}
+        </tbody></table></div>`;
+    })()}
+
+    <div class="section-title">👷 Mão de obra — visão profunda${hintIcon('Composição folha própria × empreiteiros, MO por m² executado (comparável entre obras) e os maiores prestadores do grupo. Concentração alta em um empreiteiro = risco de dependência e alavanca de negociação dele, não sua.')}</div>
+    ${(function(){
+      const linhas=R.map(r=>{
+        const mo=sum(r.fam.mo), sal=sum(r.fam.salarios), tot=mo+sal;
+        const aExec=r.pct>0? r.area*r.pct/100 : 0;
+        return {r, mo, sal, tot, m2: aExec>0? tot/aExec : null, u6m: ultN(r.fam.mo,6)/6};
+      });
+      const F={};
+      R.forEach(r=>Object.entries(r.moForn||{}).forEach(([f,v])=>{
+        const g=(F[f]=F[f]||{total:0,obras:new Set()}); g.total+=v; g.obras.add(r.nome.split(' ')[0]);
+      }));
+      const topF=Object.entries(F).sort((a,b)=>b[1].total-a[1].total).slice(0,10);
+      const totMOg=linhas.reduce((s,l)=>s+l.tot,0)||1;
+      return `<div class="kpi-grid" style="grid-template-columns:repeat(${R.length},1fr)">
+        ${linhas.map(l=>`<div class="kpi" style="border-top:3px solid ${l.r.cor}"><div class="kpi-label">${l.r.nome.split(' ')[0]}</div>
+          <div class="kpi-value" style="color:${l.r.cor};font-size:16px">${l.m2?fmt(l.m2)+'/m²':'—'}</div>
+          <div class="kpi-sub">MO+salários ${fmt(l.tot)} · terceiros ${(l.mo/(l.tot||1)*100).toFixed(0)}% · média 6m ${fmt(l.u6m)}/mês</div></div>`).join('')}
+      </div>
+      <div class="table-wrap" style="margin:10px 0 16px"><table>
+        <thead><tr><th>#</th><th>Prestador (grupo)</th><th style="text-align:right">Total MO</th><th style="text-align:right">% da MO do grupo</th><th>Obras</th></tr></thead>
+        <tbody>${topF.map(([f,g],i)=>`<tr><td style="color:#8b949e">${i+1}</td><td style="font-size:11.5px">${f.slice(0,38)}</td>
+          <td style="text-align:right;font-weight:700">${fmt(g.total)}</td>
+          <td style="text-align:right;color:${g.total/totMOg>0.3?'#f4a942':'#8b949e'}">${(g.total/totMOg*100).toFixed(1)}%${g.total/totMOg>0.3?' ⚠':''}</td>
+          <td style="font-size:10px;color:#8b949e">${[...g.obras].join(' · ')}</td></tr>`).join('')}
+        </tbody></table></div>`;
+    })()}
+
+    <div class="section-title">⚖️ Custas judiciais e cartorárias — índice${hintIcon('Lançamentos com termos judiciais/cartorários no descritivo ou categoria, como % do total de despesas de cada obra. Referência de mercado: manter abaixo de 1% é saudável; crescimento na série pede atenção ao contencioso.')}</div>
+    <div class="kpi-grid" style="grid-template-columns:repeat(${R.length+1},1fr)">
+      ${R.map(r=>{
+        const pct=r.despTotal>0? r.judTotal/r.despTotal*100 : 0;
+        return k(r.nome.split(' ')[0], pct.toFixed(2)+'%', fmt(r.judTotal), pct>1?'#e05c7e':pct>0.5?'#f4a942':'#22c9a0');
+      }).join('')}
+      ${(function(){ const jt=R.reduce((s,r)=>s+r.judTotal,0), dt=R.reduce((s,r)=>s+r.despTotal,0)||1;
+        return k('GRUPO', (jt/dt*100).toFixed(2)+'%', fmt(jt)+' em '+fmt(dt), jt/dt>0.01?'#e05c7e':'#22c9a0','Índice consolidado. Inclui custas, cartórios, honorários e processos.'); })()}
+    </div>
+
+    <div class="section-title" style="margin-top:16px">♻️ Indícios de desperdício e compra tardia${hintIcon('Sem quantidades nos lançamentos, desperdício não se mede diretamente — estes são INDÍCIOS: material estrutural comprado com a obra quase pronta (>90%) sugere retrabalho, perda ou desvio de destino. Material/m² muito diferente entre obras de padrão parecido também.')}</div>
+    ${(function(){
+      const ESTRUT=['Cimento','Concreto','Aço/Ferragem','Bloco/Tijolo','Areia/Brita/Aterro'];
+      const achados=[];
+      R.forEach(r=>{
+        if (!(r.pct>=90)) return;
+        const corte = fechados.slice(-6);
+        ESTRUT.forEach(tp=>{
+          const v=r.matTipos[tp]; if(!v) return;
+          const rec=corte.reduce((s,ym)=>s+(v.meses[ym]||0),0);
+          if (rec>15000) achados.push(`${r.nome.split(' ')[0]}: ${fmt(rec)} em <strong>${tp}</strong> nos últimos 6 meses com obra a ${r.pct}% — fase de acabamento comprando material de estrutura`);
+        });
+      });
+      // material/m² divergente entre Bossa e Liberty (padrões próximos)
+      const b=R.find(r=>r.key==='bossa'), l=R.find(r=>r.key==='liberty');
+      if (b&&l&&b.pct>0&&l.pct>0){
+        ['Cimento','Cerâmica/Porcelanato','Aço/Ferragem'].forEach(tp=>{
+          const vb=(b.matTipos[tp]?.total||0)/(b.area*b.pct/100), vl=(l.matTipos[tp]?.total||0)/(l.area*l.pct/100);
+          if (vb>0&&vl>0){ const raz=Math.max(vb,vl)/Math.min(vb,vl);
+            if (raz>1.5) achados.push(`<strong>${tp}</strong>/m² executado: ${vb>vl?'Bossa':'Liberty'} gasta ${raz.toFixed(1)}× o outro (${fmt(Math.max(vb,vl))} vs ${fmt(Math.min(vb,vl))}/m²) — casas de padrão próximo; investigar preço ou perda`); }
+        });
+      }
+      return achados.length
+        ? `<div class="info-box" style="border:1px solid #f4a94266;background:#f4a9420d"><span style="color:#f4a942">♻️</span><div>${achados.map(a=>'· '+a).join('<br>')}</div></div>`
+        : `<div class="info-box"><span>✓</span><div>Nenhum indício relevante nos critérios atuais (compra estrutural tardia · material/m² divergente entre obras de padrão próximo).</div></div>`;
+    })()}
 
     <div class="section-title">📉 Tendência por família — último trimestre vs anterior</div>
     <div class="table-wrap"><table>
@@ -3294,6 +3491,7 @@ function switchTab(i) {
   else if(i===10) renderFornecedores();
   else if(i===11) renderSociedade();
   else if(i===12) renderAnalise();
+  else if(i===13) renderRelatorio();
   else setTimeout(()=>buildCharts(i),80);
 }
 

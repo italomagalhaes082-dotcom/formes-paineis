@@ -203,6 +203,15 @@ async function testEmp(emp, checks){
     ok(AN.includes('Tendência por família'),'Análise: tendências');
     ok(AN.includes('área EXECUTADA'),'Análise: custo/m² executado por obra');
     ok(AN.includes('projeção'),'Análise: projeção de custo final/m²');
+    ok(AN.includes('Curva ABC'),'Análise: curva ABC de materiais');
+    ok(AN.includes('Mão de obra — visão profunda'),'Análise: MO profunda');
+    ok(AN.includes('Custas judiciais'),'Análise: índice judicial');
+    ok(AN.includes('desperdício')||AN.includes('Indícios'),'Análise: indícios de desperdício');
+    w.switchTab(13); await new Promise(r=>setTimeout(r,400));
+    const REL=t('tab13');
+    ok(REL.includes('Relatório Gerencial'),'Relatório: papel renderiza');
+    ok(REL.includes('Top 10 categorias') && REL.includes('Fornecedores — Top 10'),'Relatório: tops presentes');
+    ok(REL.includes('Imprimir'),'Relatório: botão de impressão');
     // busca de despesas: digitar não perde o texto (debounce re-render preserva)
     w.switchTab(5); await new Promise(r=>setTimeout(r,300));
     const inp=w.document.getElementById('despBusca');
