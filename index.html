@@ -303,6 +303,25 @@
   #tab13 .papel , #tab14 .papel { border-radius:0; padding:0; max-width:none; box-shadow:none; }
   #tab13 .no-print, #tab14 .no-print { display:none !important; }
 }
+
+/* ── Gráficos SVG (referência visual v3) ── */
+.chart{width:100%;height:auto;display:block}
+.chart .ax{fill:#6E6E73;font-size:11px;font-family:var(--font);font-variant-numeric:tabular-nums}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:.6875rem;color:var(--muted);margin-bottom:10px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:14px;height:2px;border-radius:2px;display:inline-block}
+.hbar{display:grid;grid-template-columns:1fr auto;gap:8px 12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)}
+.hbar:last-child{border-bottom:0}
+.hbar__name{font-size:.9375rem}
+.hbar__val{font-size:.9375rem;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.hbar__track{grid-column:1/-1;height:3px;background:var(--surface-3);border-radius:2px;overflow:hidden}
+.hbar__track>i{display:block;height:100%;background:var(--accent)}
+.stack{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--surface-3)}
+.stack>i{display:block;height:100%}
+.stack-key{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.stack-key div{display:flex;align-items:center;gap:8px;font-size:.6875rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.stack-key b{width:8px;height:8px;border-radius:2px;flex:0 0 auto}
+.stack-key span:first-of-type{flex:1;color:var(--text)}
 </style>
 </head>
 <body>
@@ -415,6 +434,7 @@
       <button class="tab" onclick="switchTab(12)">📈 Análise</button>
       <button class="tab" onclick="switchTab(13)">📄 Relatório</button>
       <button class="tab" onclick="switchTab(14)">🍛 Alimentação</button>
+      <button class="tab" onclick="switchTab(15)">📐 Indicadores Financeiros</button>
     </div>
   </div>
   <div class="content">
@@ -433,6 +453,7 @@
     <div class="tab-content" id="tab12"></div>
     <div class="tab-content" id="tab13"></div>
     <div class="tab-content" id="tab14"></div>
+    <div class="tab-content" id="tab15"></div>
   </div>
 </div>
 
@@ -1036,7 +1057,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-a · visual v3 + dispositivo</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-b · indicadores financeiros</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:3px solid ${color}">
@@ -2115,6 +2136,71 @@ const FAMILIAS_ANALISE = [
   { k:'alimentacao', nome:'Alimentação',  cor:'#30D158', match:c=>c.includes('ALIMENTA') },
   { k:'equipamentos',nome:'Aluguel equip.',cor:'#a371f7', match:c=>c.includes('ALUGUEL DE EQUIPAMENTOS')||c.includes('ALUGUEL EQUIP') },
 ];
+// ═══ Motores de gráfico SVG — referência visual v3 (sem dependência externa) ═══
+function fxEsc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function fxK(v){ var a=Math.abs(v);
+  if (a>=1e6) return 'R$ '+(v/1e6).toFixed(a>=1e7?0:1).replace('.',',')+' mi';
+  if (a>=1e3) return 'R$ '+(v/1e3).toFixed(0)+' mil';
+  return 'R$ '+Math.round(v); }
+function fxPct(v){ return (v>0?'+':'')+v.toFixed(1).replace('.',',')+'%'; }
+function fxLinhas(alvo, cfg){
+  if(!alvo) return; var W=680,H=230,P={l:58,r:14,t:14,b:26};
+  var L=cfg.labels||[], S=cfg.series||[];
+  if(!L.length||!S.length){ alvo.innerHTML='<div style="color:var(--text-3);font-size:12px;padding:18px 0">Sem dados no período.</div>'; return; }
+  var todos=S.reduce(function(a,s){return a.concat(s.values);},[]);
+  var max=Math.max.apply(null,todos)*1.1||1;
+  var x=function(i){ return P.l+i*(W-P.l-P.r)/Math.max(L.length-1,1); };
+  var y=function(v){ return H-P.b-(v/max)*(H-P.t-P.b); };
+  var fm=cfg.fmt||fxK, g='';
+  for(var t=0;t<=4;t++){ var v=max*t/4, yy=y(v);
+    g+='<line x1="'+P.l+'" x2="'+(W-P.r)+'" y1="'+yy+'" y2="'+yy+'" stroke="rgba(255,255,255,.06)"/>';
+    g+='<text x="'+(P.l-8)+'" y="'+(yy+4)+'" text-anchor="end" class="ax">'+fm(v)+'</text>'; }
+  L.forEach(function(l,i){ if(i%(cfg.cada||1)===0)
+    g+='<text x="'+x(i)+'" y="'+(H-7)+'" text-anchor="middle" class="ax">'+fxEsc(l)+'</text>'; });
+  S.forEach(function(s){
+    var d=s.values.map(function(v,i){ return (i?'L':'M')+x(i).toFixed(1)+','+y(v).toFixed(1); }).join(' ');
+    if(s.area) g+='<path d="'+d+' L'+x(L.length-1)+','+(H-P.b)+' L'+x(0)+','+(H-P.b)+' Z" fill="'+s.area+'"/>';
+    g+='<path d="'+d+'" fill="none" stroke="'+s.color+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"'+(s.tracejado?' stroke-dasharray="5 5"':'')+'/>'; });
+  alvo.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" class="chart" role="img" aria-label="'+fxEsc(cfg.alt||'gráfico de linhas')+'">'+g+'</svg>';
+}
+function fxBarras(alvo, cfg){
+  if(!alvo) return; var W=680,H=230,P={l:58,r:14,t:14,b:26};
+  var G=cfg.grupos||[], S=cfg.series||[];
+  if(!G.length||!S.length){ alvo.innerHTML='<div style="color:var(--text-3);font-size:12px;padding:18px 0">Sem dados no período.</div>'; return; }
+  var todos=S.reduce(function(a,s){return a.concat(s.values);},[]);
+  var max=Math.max.apply(null,todos)*1.15||1;
+  var faixa=(W-P.l-P.r)/G.length, larg=Math.min(38,(faixa*.62)/S.length);
+  var y=function(v){ return H-P.b-(v/max)*(H-P.t-P.b); };
+  var fm=cfg.fmt||fxK, g='';
+  for(var t=0;t<=4;t++){ var v=max*t/4, yy=y(v);
+    g+='<line x1="'+P.l+'" x2="'+(W-P.r)+'" y1="'+yy+'" y2="'+yy+'" stroke="rgba(255,255,255,.06)"/>';
+    g+='<text x="'+(P.l-8)+'" y="'+(yy+4)+'" text-anchor="end" class="ax">'+fm(v)+'</text>'; }
+  G.forEach(function(nome,i){
+    var centro=P.l+faixa*i+faixa/2;
+    var x0=centro-(larg*S.length)/2;
+    S.forEach(function(s,j){
+      var v=s.values[i]||0, yy=y(v);
+      g+='<rect x="'+(x0+j*larg+1)+'" y="'+yy+'" width="'+(larg-2)+'" height="'+Math.max(0,(H-P.b-yy))+'" rx="3" fill="'+s.color+'"/>'; });
+    if(i%(cfg.cada||1)===0)
+      g+='<text x="'+centro+'" y="'+(H-7)+'" text-anchor="middle" class="ax">'+fxEsc(nome)+'</text>'; });
+  alvo.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" class="chart" role="img" aria-label="'+fxEsc(cfg.alt||'gráfico de barras')+'">'+g+'</svg>';
+}
+function fxBarrasH(alvo, itens){
+  if(!alvo) return;
+  if(!itens||!itens.length){ alvo.innerHTML='<div style="color:var(--text-3);font-size:12px;padding:18px 0">Sem dados.</div>'; return; }
+  var max=Math.max.apply(null,itens.map(function(i){return i.valor;}))||1;
+  alvo.innerHTML=itens.map(function(it){
+    return '<div class="hbar"><span class="hbar__name">'+fxEsc(it.nome)+'</span>'
+      +'<span class="hbar__val">'+(it.rotulo||fmt(it.valor))+'</span>'
+      +'<span class="hbar__track"><i style="width:'+(it.valor/max*100).toFixed(1)+'%'+(it.cor?';background:'+it.cor:'')+'"></i></span></div>'; }).join('');
+}
+// helper de cartão para as seções com gráfico
+function fxCard(titulo, idGrafico, legenda, hint){
+  return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px">'
+    +'<div style="font-size:1.0625rem;font-weight:600;letter-spacing:-.02em;margin-bottom:10px">'+titulo+(hint?hintIcon(hint):'')+'</div>'
+    +(legenda||'')+'<div id="'+idGrafico+'"></div></div>';
+}
+
 const MESN_A=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 function _ymLabel(ym){ return MESN_A[ym%100-1]+'/'+String(ym).slice(2,4); }
 
@@ -2169,6 +2255,93 @@ window.aliDrill = function(key, ym) {
   </div>`;
   ov.style.display='flex';
 };
+// ═══════════ 📐 INDICADORES FINANCEIROS — visão de CFO ═══════════
+function renderIndicadores() {
+  const el = document.getElementById('tab15');
+  if (!el) return;
+  // garante que o motor do Resultado Final já rodou (fonte única dos indicadores)
+  if (!window._indicadoresRF) { try { renderResultadoFinal(); } catch(e){} }
+  const I = window._indicadoresRF;
+  const pct = parseFloat(rfGet('pctObraExec', CFG.pctObraDefault||0))||0;
+  const area = areaTotalCfg(CFG);
+
+  // ── séries mensais: receita, despesa, capital exposto ──
+  const mesRec={}, mesDesp={};
+  (_RECEITAS||[]).forEach(r=>{ const d=parseDate(r.data); if(d) { const ym=d.getFullYear()*100+d.getMonth()+1; mesRec[ym]=(mesRec[ym]||0)+(r.valReceb||0); } });
+  (_DESPESAS||[]).forEach(r=>{ const d=parseDate(r.data); if(d) { const ym=d.getFullYear()*100+d.getMonth()+1; mesDesp[ym]=(mesDesp[ym]||0)+r.valor; } });
+  const hoje=new Date(), ymHoje=hoje.getFullYear()*100+hoje.getMonth()+1;
+  const yms=[...new Set([...Object.keys(mesRec),...Object.keys(mesDesp)].map(Number))].sort((a,b)=>a-b).filter(ym=>ym<ymHoje);
+  const ult=yms.slice(-18);
+  const labs=ult.map(_ymLabel);
+
+  // capital exposto acumulado (aportes − retiradas) mês a mês
+  const mov={};
+  (_APORTES||[]).forEach(a=>{ const d=parseDate(a.data); if(d){ const ym=d.getFullYear()*100+d.getMonth()+1; mov[ym]=(mov[ym]||0)+a.valor; } });
+  (_RETIRADAS||[]).forEach(r=>{ const d=parseDate(r.data); if(d){ const ym=d.getFullYear()*100+d.getMonth()+1; mov[ym]=(mov[ym]||0)-r.valor; } });
+  const ymsExp=[...new Set(Object.keys(mov).map(Number))].sort((a,b)=>a-b).filter(ym=>ym<=ymHoje);
+  let run=0; const expSerie=[], expLabs=[];
+  ymsExp.forEach(ym=>{ run+=mov[ym]; expSerie.push(run); expLabs.push(_ymLabel(ym)); });
+
+  // burn rate: média de despesa dos últimos 6 meses fechados
+  const burn = ult.slice(-6).reduce((s,ym)=>s+(mesDesp[ym]||0),0)/Math.max(1,ult.slice(-6).length);
+
+  const kpi=(l,v,s,c,h)=>`<div class="kpi" style="border-top:3px solid ${c}"><div class="kpi-label">${l}${h?hintIcon(h):''}</div><div class="kpi-value" style="color:${c};font-size:1.6rem">${v}</div>${s?`<div class="kpi-sub">${s}</div>`:''}</div>`;
+
+  let html = `<div class="info-box" style="border:1px solid #0A84FF40;margin-bottom:14px"><span>📐</span><div><strong>Indicadores financeiros de ${CFG.nome}.</strong> Projeções derivadas do Resultado Final — atualize lá o VGV, os percentuais e o <strong>% de obra executada</strong> (hoje ${pct}%) e todos os números desta aba acompanham.</div></div>`;
+
+  if (I) {
+    html += `<div class="section-title">Retorno projetado ao sócio</div>
+      <div class="kpi-grid">
+        ${kpi('TIR projetada', I.tirAA!==null? I.tirAA.toFixed(1)+'% a.a.':'n/d', I.tirAA!==null?(I.tirAA>I.cdiEq?'acima do CDI ('+I.cdiEq+'% a.a.)':'abaixo do CDI ('+I.cdiEq+'% a.a.)'):'faltam parâmetros no RF', I.tirAA!==null&&I.tirAA>I.cdiEq?'#30D158':'#FFD60A','Fluxo real do sócio (aportes e retiradas nas datas efetivas) mais o recebimento final estimado em '+I.fimEst.toLocaleDateString('pt-BR',{month:'2-digit',year:'numeric'})+'.')}
+        ${kpi('ROI projetado', I.roi.toFixed(1)+'%', 'sobre '+fmt(I.tAp)+' aportados', I.roi>0?'#30D158':'#FF453A')}
+        ${kpi('MOIC', I.moic.toFixed(2)+'×', 'quanto volta por real aportado', I.moic>1?'#30D158':'#FF453A')}
+        ${I.margemVGV!==null? kpi('Margem sobre VGV', I.margemVGV.toFixed(1)+'%', 'referência do setor: 15–25%', I.margemVGV>15?'#30D158':I.margemVGV>8?'#FFD60A':'#FF453A') : kpi('Margem sobre VGV','n/d','informe o VGV no Resultado Final','#6E6E73')}
+      </div>
+      <div class="section-title" style="margin-top:16px">Posição de capital e obra</div>
+      <div class="kpi-grid">
+        ${kpi('Capital exposto', fmt(I.exposto), fmt(I.tAp)+' aportado − '+fmt(I.tRet)+' retirado', '#0A84FF')}
+        ${kpi('Resultado projetado', fmt(I.resultadoProj), 'no encerramento estimado', I.resultadoProj>0?'#30D158':'#FF453A')}
+        ${kpi('Custo de obra a incorrer', fmt(I.obraAIncorrer||0), 'para chegar a 100% ('+pct+'% hoje)', '#FFD60A')}
+        ${kpi('Queima de caixa', fmt(burn)+'/mês', 'média dos últimos 6 meses fechados', '#FF453A','Despesa total média mensal. Contra o capital exposto, indica por quantos meses a obra se sustenta sem novo aporte.')}
+      </div>`;
+  } else {
+    html += `<div class="info-box" style="border:1px solid #FFD60A66"><span style="color:#FFD60A">⚠</span><div>Preencha <strong>VGV</strong> e <strong>% de obra executada</strong> na aba Resultado Final para liberar TIR, ROI, MOIC e margem.</div></div>`;
+  }
+
+  html += `<div class="section-title" style="margin-top:16px">Evolução</div>
+    ${fxCard('Receita × despesa por mês','g_ind_rd','<div class="legend"><span><i style="background:#30D158"></i>Receita</span><span><i style="background:#FF453A"></i>Despesa</span></div>','Últimos 18 meses fechados. O cruzamento das linhas mostra quando a obra passou a se pagar.')}
+    ${fxCard('Capital exposto ao longo do tempo','g_ind_exp','<div class="legend"><span><i style="background:#0A84FF"></i>Aportado − retirado (acumulado)</span></div>','Saldo que os sócios ainda têm dentro do empreendimento a cada mês. O pico é a exposição máxima; a queda indica devolução de capital.')}
+    ${fxCard('Despesa mensal — queima de caixa','g_ind_burn','','Barras de despesa total por mês fechado.')}`;
+
+  if (I) {
+    const metas = [
+      {nome:'TIR vs CDI ('+I.cdiEq+'% a.a.)', valor: I.tirAA!==null? Math.max(0,I.tirAA) : 0, rotulo: I.tirAA!==null? I.tirAA.toFixed(1)+'%':'n/d', cor: I.tirAA!==null&&I.tirAA>I.cdiEq?'#30D158':'#FFD60A'},
+      {nome:'Margem sobre VGV (meta 15%)', valor: I.margemVGV!==null? Math.max(0,I.margemVGV) : 0, rotulo: I.margemVGV!==null? I.margemVGV.toFixed(1)+'%':'n/d', cor: (I.margemVGV||0)>15?'#30D158':'#FFD60A'},
+      {nome:'ROI projetado', valor: Math.max(0,I.roi), rotulo: I.roi.toFixed(1)+'%', cor: I.roi>0?'#30D158':'#FF453A'},
+      {nome:'Execução da obra (meta 100%)', valor: pct, rotulo: pct+'%', cor:'#0A84FF'},
+    ];
+    html += `<div class="section-title" style="margin-top:16px">Indicadores contra meta</div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px"><div id="g_ind_meta"></div></div>`;
+    window._indMetas = metas;
+  }
+  el.innerHTML = html;
+
+  // desenha depois do innerHTML
+  if (labs.length) {
+    fxLinhas(document.getElementById('g_ind_rd'), { labels: labs, cada: Math.ceil(labs.length/8),
+      series:[ {values: ult.map(ym=>mesRec[ym]||0), color:'#30D158', area:'rgba(48,209,88,.10)'},
+               {values: ult.map(ym=>mesDesp[ym]||0), color:'#FF453A'} ], alt:'receita e despesa por mês' });
+    fxBarras(document.getElementById('g_ind_burn'), { grupos: labs, cada: Math.ceil(labs.length/8),
+      series:[ {values: ult.map(ym=>mesDesp[ym]||0), color:'#FF453A'} ], alt:'despesa mensal' });
+  }
+  if (expSerie.length) {
+    const n = expSerie.length > 24 ? expSerie.length-24 : 0;
+    fxLinhas(document.getElementById('g_ind_exp'), { labels: expLabs.slice(n), cada: Math.ceil((expLabs.length-n)/8),
+      series:[ {values: expSerie.slice(n), color:'#0A84FF', area:'rgba(10,132,255,.12)'} ], alt:'capital exposto acumulado' });
+  }
+  if (window._indMetas) fxBarrasH(document.getElementById('g_ind_meta'), window._indMetas);
+}
+
 async function renderAlimentacao(force) {
   const el = document.getElementById('tab14');
   if (!el) return;
@@ -3889,6 +4062,7 @@ function switchTab(i) {
   else if(i===12) renderAnalise();
   else if(i===13) renderRelatorio();
   else if(i===14) renderAlimentacao();
+  else if(i===15) renderIndicadores();
   else setTimeout(()=>buildCharts(i),80);
 }
 
@@ -4306,6 +4480,9 @@ function renderRFCalc() {
       const _vgvB = vgvTotal || vgvReal || 0;
       const margemVGV = _vgvB>0 ? resultadoProj/_vgvB*100 : null;
       const cdiEq = 13.0; // referência CDI a.a. atual p/ comparação
+      // fonte única de verdade: a aba Indicadores Financeiros consome estes mesmos números
+      window._indicadoresRF = { tirAA, roi, moic, margemVGV, exposto, tAp, tRet, resultadoProj,
+                                custoObra, pctObraExec, vgv:_vgvB, fimEst, cdiEq, obraProj, obraAIncorrer };
       return rfSec('5. Indicadores do Investidor — projetados no fim do empreendimento','#30D158')
         +rfResultRow('TIR projetada do sócio', tirAA!==null? tirAA.toFixed(1)+'% a.a.' : 'n/d', tirAA!==null&&tirAA>cdiEq?'#30D158':'#FFD60A', false,
           'Taxa interna de retorno do fluxo real do sócio: aportes (saídas) e retiradas (entradas) nas datas em que ocorreram, mais o recebimento final estimado (capital exposto + resultado projetado) em '+fimEst.toLocaleDateString('pt-BR',{month:'2-digit',year:'numeric'})+' (conclusão estimada pelo ritmo de execução + 3 meses de cauda). Compare com CDI ~'+cdiEq+'% a.a.: acima, o empreendimento paga o risco; abaixo, renda fixa teria sido melhor.')

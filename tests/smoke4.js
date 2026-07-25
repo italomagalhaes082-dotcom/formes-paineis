@@ -266,6 +266,15 @@ async function testEmp(emp, checks){
     w.switchTab(6); await new Promise(r=>setTimeout(r,250));
     const RF6=t('tab6');
     ok(RF6.includes('Indicadores do Investidor'),'RF: seção CFO');
+    // aba 15 — Indicadores Financeiros
+    w.switchTab(15); await new Promise(r=>setTimeout(r,400));
+    const IND=t('tab15');
+    ok(IND.includes('Retorno projetado ao sócio'),'Indicadores: bloco de retorno');
+    ok(IND.includes('MOIC') && IND.includes('TIR projetada'),'Indicadores: TIR e MOIC');
+    ok(IND.includes('Queima de caixa'),'Indicadores: burn rate');
+    const svgs = w.document.querySelectorAll('#tab15 svg.chart').length;
+    ok(svgs>=2,'Indicadores: gráficos SVG renderizados ('+svgs+')');
+    ok(w._indicadoresRF && typeof w._indicadoresRF.moic==='number','Indicadores: fonte única vinda do Resultado Final');
     ok(RF6.includes('TIR projetada') && RF6.includes('MOIC'),'RF: TIR e MOIC presentes');
     // busca de despesas: digitar não perde o texto (debounce re-render preserva)
     w.switchTab(5); await new Promise(r=>setTimeout(r,300));
