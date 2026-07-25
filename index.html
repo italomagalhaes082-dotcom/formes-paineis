@@ -1057,7 +1057,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-b · indicadores financeiros</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-c · gráficos em todas as abas</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:3px solid ${color}">
@@ -2267,7 +2267,7 @@ function renderIndicadores() {
 
   // ── séries mensais: receita, despesa, capital exposto ──
   const mesRec={}, mesDesp={};
-  (_RECEITAS||[]).forEach(r=>{ const d=parseDate(r.data); if(d) { const ym=d.getFullYear()*100+d.getMonth()+1; mesRec[ym]=(mesRec[ym]||0)+(r.valReceb||0); } });
+  (_RECEITAS||[]).forEach(r=>{ const d=parseDate(r.dataComp||r.data); if(d) { const ym=d.getFullYear()*100+d.getMonth()+1; mesRec[ym]=(mesRec[ym]||0)+(r.valReceb||0); } });
   (_DESPESAS||[]).forEach(r=>{ const d=parseDate(r.data); if(d) { const ym=d.getFullYear()*100+d.getMonth()+1; mesDesp[ym]=(mesDesp[ym]||0)+r.valor; } });
   const hoje=new Date(), ymHoje=hoje.getFullYear()*100+hoje.getMonth()+1;
   const yms=[...new Set([...Object.keys(mesRec),...Object.keys(mesDesp)].map(Number))].sort((a,b)=>a-b).filter(ym=>ym<ymHoje);
@@ -5483,6 +5483,100 @@ window.toggleDrillObs = function(ri) {
 document.getElementById('drillModal').addEventListener('click', function(e) {
   if(e.target===this) closeDrill();
 });
+
+/* ═══════════ Gráficos nas demais abas (camada sobre os renderizadores existentes) ═══════════
+   Envolve cada render sem reescrevê-lo: injeta um cartão no topo da aba e desenha. */
+(function(){
+  function injetar(tabId, cardHtml, draw){
+    const el = document.getElementById(tabId); if(!el) return;
+    if (el.querySelector('[data-fxgraf]')) el.querySelector('[data-fxgraf]').remove();
+    const box = document.createElement('div'); box.setAttribute('data-fxgraf','1');
+    box.innerHTML = cardHtml; el.insertBefore(box, el.firstChild);
+    try { draw(); } catch(e) { console.warn('gráfico:', e); }
+  }
+  function serieMensal(rows, campo, meses, campoData){
+    const m={}; (rows||[]).forEach(r=>{ const d=parseDate(campoData? r[campoData] : (r.data||r.dataComp)); if(!d) return;
+      const ym=d.getFullYear()*100+d.getMonth()+1; m[ym]=(m[ym]||0)+(campo? (r[campo]||0) : r.valor); });
+    const hoje=new Date(), ymH=hoje.getFullYear()*100+hoje.getMonth()+1;
+    const yms=Object.keys(m).map(Number).sort((a,b)=>a-b).filter(ym=>ym<ymH).slice(-(meses||18));
+    return { labels: yms.map(_ymLabel), values: yms.map(ym=>m[ym]||0) };
+  }
+  function envolver(nome, fn){
+    const orig = window[nome]; if (typeof orig !== 'function') return;
+    window[nome] = function(){
+      const r = orig.apply(this, arguments);
+      if (r && typeof r.then === 'function') { r.then(()=>{ try{fn();}catch(e){} }); }
+      else { setTimeout(()=>{ try{fn();}catch(e){} }, 30); }
+      return r;
+    };
+  }
+
+  // 💰 Despesas — evolução mensal + maiores categorias
+  envolver('renderDespesas', function(){
+    const s = serieMensal(_DESPESAS, null, 18);
+    const porCat={}; (_DESPESAS||[]).forEach(r=>{ const c=r.categoria||'(sem categoria)'; porCat[c]=(porCat[c]||0)+r.valor; });
+    const top=Object.entries(porCat).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([n,v])=>({nome:n, valor:v}));
+    injetar('tab5',
+      fxCard('Despesa por mês','g_desp_mes','<div class="legend"><span><i style="background:#FF453A"></i>Despesa total</span></div>','Últimos 18 meses fechados, todas as categorias.')
+      + fxCard('Maiores categorias','g_desp_cat','','Top 8 por valor acumulado.'),
+      function(){
+        fxLinhas(document.getElementById('g_desp_mes'), {labels:s.labels, cada:Math.ceil(s.labels.length/8),
+          series:[{values:s.values, color:'#FF453A', area:'rgba(255,69,58,.10)'}], alt:'despesa mensal'});
+        fxBarrasH(document.getElementById('g_desp_cat'), top);
+      });
+  });
+
+  // 🏪 Fornecedores — top 10 por volume
+  envolver('renderFornecedores', function(){
+    const map={}; (_DESPESAS||[]).forEach(r=>{ const f=r.fornecedor||'—'; if(f==='—') return; map[f]=(map[f]||0)+r.valor; });
+    const top=Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([n,v])=>({nome:n.slice(0,38), valor:v}));
+    injetar('tab10', fxCard('Top 10 fornecedores por volume','g_forn_top','','Peso financeiro de cada fornecedor — base para negociação.'),
+      function(){ fxBarrasH(document.getElementById('g_forn_top'), top); });
+  });
+
+  // 🤝 Sociedade — aportes por sócio
+  envolver('renderSociedade', function(){
+    const map={}; (_APORTES||[]).forEach(a=>{ const s=a.socio||'—'; map[s]=(map[s]||0)+a.valor; });
+    const itens=Object.entries(map).sort((a,b)=>b[1]-a[1]).map(([n,v])=>({nome:n.slice(0,34), valor:v}));
+    if(!itens.length) return;
+    injetar('tab11', fxCard('Aporte acumulado por sócio','g_soc_ap','','Total aportado por cada sócio no empreendimento.'),
+      function(){ fxBarrasH(document.getElementById('g_soc_ap'), itens); });
+  });
+
+  // 🏠 Gestão de Vendas — recebimento mensal
+  envolver('renderGestaoVendas', function(){
+    const vendas=(_RECEITAS||[]).filter(r=>r.tipo==='Venda'||r.tipo==='VendaDistratada'||r.tipo==='INCC');
+    const s=serieMensal(vendas,'valReceb',18,'dataComp');
+    if(!s.labels.length) return;
+    injetar('tab7', fxCard('Recebimento de vendas por mês','g_gv_mes','<div class="legend"><span><i style="background:#30D158"></i>Recebido</span></div>','Entradas de venda e INCC nos últimos 18 meses fechados.'),
+      function(){ fxLinhas(document.getElementById('g_gv_mes'), {labels:s.labels, cada:Math.ceil(s.labels.length/8),
+        series:[{values:s.values, color:'#30D158', area:'rgba(48,209,88,.10)'}], alt:'recebimento mensal'}); });
+  });
+
+  // 📊 Consolidado — comparativo das três obras
+  envolver('renderConsolidado', function(){
+    const R = window._consolData; if(!R || !R.length) return;
+    const itens = R.map(r=>({nome:r.nome, valor:r.tDesp||0, cor:r.cor}));
+    injetar('tab8', fxCard('Despesa total por empreendimento','g_cons_obras','','Comparativo direto do volume financeiro das três obras.'),
+      function(){ fxBarrasH(document.getElementById('g_cons_obras'), itens); });
+  });
+
+  // 🍛 Alimentação — série mensal comparada das três obras
+  envolver('renderAlimentacao', function(){
+    if (window._aliRelMode) return;                 // no modo relatório o papel manda
+    const R = window._analiseData; if(!R || !R.length) return;
+    const hoje=new Date(), ymH=hoje.getFullYear()*100+hoje.getMonth()+1;
+    const yms=[...new Set(R.flatMap(r=>Object.keys(r.fam.alimentacao).map(Number)))].sort((a,b)=>a-b).filter(ym=>ym<ymH).slice(-18);
+    if(!yms.length) return;
+    injetar('tab14',
+      fxCard('Alimentação por mês — três obras','g_ali_mes',
+        '<div class="legend">'+R.map(r=>'<span><i style="background:'+r.cor+'"></i>'+r.nome.split(' ')[0]+'</span>').join('')+'</div>',
+        'Séries mensais lado a lado: os vales de uma obra com as outras pagando são as janelas investigadas abaixo.'),
+      function(){ fxLinhas(document.getElementById('g_ali_mes'), {labels:yms.map(_ymLabel), cada:Math.ceil(yms.length/8),
+        series:R.map(r=>({values:yms.map(ym=>r.fam.alimentacao[ym]||0), color:r.cor})), alt:'alimentação mensal das três obras'}); });
+  });
+})();
+
 </script>
 
 </body>

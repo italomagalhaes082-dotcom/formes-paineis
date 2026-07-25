@@ -139,6 +139,10 @@ async function testEmp(emp, checks){
     ok(t('tab3').includes('28/12/2024') && t('tab3').includes('16/03/2026'),'Retiradas com dia>12 presentes no histórico');
     w.switchTab(0); await new Promise(r=>setTimeout(r,100));
     ok(t('tab0').includes('Rendimentos de Aplicações'),'KPI Rendimentos na aba Geral');
+    // regressão dataComp: com receitas presentes, a série de receita da aba 15 não pode vir vazia
+    w.switchTab(15); await new Promise(r=>setTimeout(r,450));
+    const boxRD = w.document.querySelector('#tab15 #g_ind_rd');
+    ok(boxRD && !!boxRD.querySelector('svg') && !boxRD.textContent.includes('Sem dados'),'Regressão dataComp: série de receita monta (liberty)');
     w.switchTab(11); await new Promise(r=>setTimeout(r,150));
     const S=t('tab11');
     ok(S.includes('Permutantes'),'Sociedade: bloco permutantes');
@@ -275,6 +279,17 @@ async function testEmp(emp, checks){
     const svgs = w.document.querySelectorAll('#tab15 svg.chart').length;
     ok(svgs>=2,'Indicadores: gráficos SVG renderizados ('+svgs+')');
     ok(w._indicadoresRF && typeof w._indicadoresRF.moic==='number','Indicadores: fonte única vinda do Resultado Final');
+    // gráficos nas demais abas
+    const comGrafico = [];
+    for (const idx of [5,7,8,10,11,14]) {
+      w.switchTab(idx); await new Promise(r=>setTimeout(r,500));
+      if (w.document.querySelector('#tab'+idx+' [data-fxgraf] svg.chart, #tab'+idx+' [data-fxgraf] .hbar')) comGrafico.push(idx);
+    }
+    ok(comGrafico.length>=5,'Gráficos: abas com visual novo ('+comGrafico.join(', ')+')');
+    w.switchTab(5); await new Promise(r=>setTimeout(r,400));
+    ok(t('tab5').includes('Despesa por mês') && t('tab5').includes('Maiores categorias'),'Gráficos: aba Despesas com evolução e categorias');
+    ok(t('tab10').includes('Top 10 fornecedores'),'Gráficos: aba Fornecedores com ranking visual');
+
     ok(RF6.includes('TIR projetada') && RF6.includes('MOIC'),'RF: TIR e MOIC presentes');
     // busca de despesas: digitar não perde o texto (debounce re-render preserva)
     w.switchTab(5); await new Promise(r=>setTimeout(r,300));
