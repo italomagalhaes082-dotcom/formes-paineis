@@ -305,8 +305,8 @@
 }
 
 /* ── Gráficos SVG (referência visual v3) ── */
-.chart{width:100%;height:auto;display:block}
-.chart .ax{fill:#6E6E73;font-size:11px;font-family:var(--font);font-variant-numeric:tabular-nums}
+.chart{width:100%;height:auto;display:block;max-width:1180px;margin:0 auto}
+.chart .ax{fill:#6E6E73;font-size:12px;font-family:var(--font);font-variant-numeric:tabular-nums}
 .legend{display:flex;flex-wrap:wrap;gap:12px;font-size:.6875rem;color:var(--muted);margin-bottom:10px}
 .legend span{display:inline-flex;align-items:center;gap:6px}
 .legend i{width:14px;height:2px;border-radius:2px;display:inline-block}
@@ -1057,7 +1057,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-c · gráficos em todas as abas</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-d · curvas suaves + escala real</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:3px solid ${color}">
@@ -2143,8 +2143,54 @@ function fxK(v){ var a=Math.abs(v);
   if (a>=1e3) return 'R$ '+(v/1e3).toFixed(0)+' mil';
   return 'R$ '+Math.round(v); }
 function fxPct(v){ return (v>0?'+':'')+v.toFixed(1).replace('.',',')+'%'; }
+// Escala real: o SVG é desenhado na largura de pixels do container, então textos e
+// traços têm o tamanho verdadeiro em qualquer tela (antes o viewBox fixo esticava tudo).
+function fxDim(alvo){
+  var w = (alvo && alvo.clientWidth) || 0;
+  if (!w) w = 680;
+  var W = Math.max(300, Math.min(1180, Math.round(w)));
+  var H = Math.round(Math.max(190, Math.min(300, W * 0.34)));
+  return {W:W, H:H};
+}
+// Interpolação cúbica monotônica (Fritsch–Carlson): curva fluida que NUNCA extrapola
+// os pontos reais — essencial em série financeira, onde um vale falso mentiria.
+function fxCaminhoSuave(pts){
+  var n = pts.length;
+  if (n < 2) return n ? 'M'+pts[0][0].toFixed(1)+','+pts[0][1].toFixed(1) : '';
+  if (n === 2) return 'M'+pts[0][0].toFixed(1)+','+pts[0][1].toFixed(1)+' L'+pts[1][0].toFixed(1)+','+pts[1][1].toFixed(1);
+  var d = [], m = [], i;
+  for (i = 0; i < n-1; i++) d.push((pts[i+1][1]-pts[i][1])/(pts[i+1][0]-pts[i][0] || 1));
+  m.push(d[0]);
+  for (i = 1; i < n-1; i++) m.push(d[i-1]*d[i] <= 0 ? 0 : (d[i-1]+d[i])/2);
+  m.push(d[n-2]);
+  for (i = 0; i < n-1; i++){
+    if (d[i] === 0){ m[i] = 0; m[i+1] = 0; continue; }
+    var a = m[i]/d[i], b = m[i+1]/d[i], s = a*a + b*b;
+    if (s > 9){ var t = 3/Math.sqrt(s); m[i] = t*a*d[i]; m[i+1] = t*b*d[i]; }
+  }
+  var p = 'M'+pts[0][0].toFixed(1)+','+pts[0][1].toFixed(1);
+  for (i = 0; i < n-1; i++){
+    var dx = (pts[i+1][0]-pts[i][0])/3;
+    p += ' C'+(pts[i][0]+dx).toFixed(1)+','+(pts[i][1]+m[i]*dx).toFixed(1)
+       + ' '+(pts[i+1][0]-dx).toFixed(1)+','+(pts[i+1][1]-m[i+1]*dx).toFixed(1)
+       + ' '+pts[i+1][0].toFixed(1)+','+pts[i+1][1].toFixed(1);
+  }
+  return p;
+}
+// redesenha os gráficos quando a janela muda de tamanho (a escala depende da largura)
+window.addEventListener('resize', function(){
+  clearTimeout(window._fxResizeT);
+  window._fxResizeT = setTimeout(function(){
+    document.querySelectorAll('[data-fxchart]').forEach(function(el){
+      if (!el._fxcfg || !el.clientWidth) return;
+      (el._fxtipo === 'barras' ? fxBarras : fxLinhas)(el, el._fxcfg);
+    });
+  }, 180);
+});
 function fxLinhas(alvo, cfg){
-  if(!alvo) return; var W=680,H=230,P={l:58,r:14,t:14,b:26};
+  if(!alvo) return;
+  alvo.setAttribute('data-fxchart','1'); alvo._fxcfg = cfg; alvo._fxtipo = 'linhas';
+  var D = fxDim(alvo), W = D.W, H = D.H, P = {l:56, r:12, t:12, b:24};
   var L=cfg.labels||[], S=cfg.series||[];
   if(!L.length||!S.length){ alvo.innerHTML='<div style="color:var(--text-3);font-size:12px;padding:18px 0">Sem dados no período.</div>'; return; }
   var todos=S.reduce(function(a,s){return a.concat(s.values);},[]);
@@ -2153,37 +2199,42 @@ function fxLinhas(alvo, cfg){
   var y=function(v){ return H-P.b-(v/max)*(H-P.t-P.b); };
   var fm=cfg.fmt||fxK, g='';
   for(var t=0;t<=4;t++){ var v=max*t/4, yy=y(v);
-    g+='<line x1="'+P.l+'" x2="'+(W-P.r)+'" y1="'+yy+'" y2="'+yy+'" stroke="rgba(255,255,255,.06)"/>';
-    g+='<text x="'+(P.l-8)+'" y="'+(yy+4)+'" text-anchor="end" class="ax">'+fm(v)+'</text>'; }
-  L.forEach(function(l,i){ if(i%(cfg.cada||1)===0)
-    g+='<text x="'+x(i)+'" y="'+(H-7)+'" text-anchor="middle" class="ax">'+fxEsc(l)+'</text>'; });
+    g+='<line x1="'+P.l+'" x2="'+(W-P.r)+'" y1="'+yy.toFixed(1)+'" y2="'+yy.toFixed(1)+'" stroke="rgba(255,255,255,.06)"/>';
+    g+='<text x="'+(P.l-8)+'" y="'+(yy+4).toFixed(1)+'" text-anchor="end" class="ax">'+fm(v)+'</text>'; }
+  var passo = cfg.cada || Math.max(1, Math.ceil(L.length/Math.max(4, Math.floor(W/110))));
+  L.forEach(function(l,i){ if(i%passo===0)
+    g+='<text x="'+x(i).toFixed(1)+'" y="'+(H-6)+'" text-anchor="middle" class="ax">'+fxEsc(l)+'</text>'; });
   S.forEach(function(s){
-    var d=s.values.map(function(v,i){ return (i?'L':'M')+x(i).toFixed(1)+','+y(v).toFixed(1); }).join(' ');
-    if(s.area) g+='<path d="'+d+' L'+x(L.length-1)+','+(H-P.b)+' L'+x(0)+','+(H-P.b)+' Z" fill="'+s.area+'"/>';
+    var pts = s.values.map(function(v,i){ return [x(i), y(v)]; });
+    var d = cfg.reto ? pts.map(function(p,i){ return (i?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1); }).join(' ')
+                     : fxCaminhoSuave(pts);
+    if(s.area) g+='<path d="'+d+' L'+x(L.length-1).toFixed(1)+','+(H-P.b)+' L'+x(0).toFixed(1)+','+(H-P.b)+' Z" fill="'+s.area+'" stroke="none"/>';
     g+='<path d="'+d+'" fill="none" stroke="'+s.color+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"'+(s.tracejado?' stroke-dasharray="5 5"':'')+'/>'; });
-  alvo.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" class="chart" role="img" aria-label="'+fxEsc(cfg.alt||'gráfico de linhas')+'">'+g+'</svg>';
+  alvo.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" width="100%" height="'+H+'" preserveAspectRatio="xMidYMid meet" class="chart" role="img" aria-label="'+fxEsc(cfg.alt||'gráfico de linhas')+'">'+g+'</svg>';
 }
 function fxBarras(alvo, cfg){
-  if(!alvo) return; var W=680,H=230,P={l:58,r:14,t:14,b:26};
+  if(!alvo) return;
+  alvo.setAttribute('data-fxchart','1'); alvo._fxcfg = cfg; alvo._fxtipo = 'barras';
+  var D = fxDim(alvo), W = D.W, H = D.H, P = {l:56, r:12, t:12, b:24};
   var G=cfg.grupos||[], S=cfg.series||[];
   if(!G.length||!S.length){ alvo.innerHTML='<div style="color:var(--text-3);font-size:12px;padding:18px 0">Sem dados no período.</div>'; return; }
   var todos=S.reduce(function(a,s){return a.concat(s.values);},[]);
   var max=Math.max.apply(null,todos)*1.15||1;
-  var faixa=(W-P.l-P.r)/G.length, larg=Math.min(38,(faixa*.62)/S.length);
+  var faixa=(W-P.l-P.r)/G.length, larg=Math.max(3, Math.min(30,(faixa*.66)/S.length));
   var y=function(v){ return H-P.b-(v/max)*(H-P.t-P.b); };
   var fm=cfg.fmt||fxK, g='';
   for(var t=0;t<=4;t++){ var v=max*t/4, yy=y(v);
-    g+='<line x1="'+P.l+'" x2="'+(W-P.r)+'" y1="'+yy+'" y2="'+yy+'" stroke="rgba(255,255,255,.06)"/>';
-    g+='<text x="'+(P.l-8)+'" y="'+(yy+4)+'" text-anchor="end" class="ax">'+fm(v)+'</text>'; }
+    g+='<line x1="'+P.l+'" x2="'+(W-P.r)+'" y1="'+yy.toFixed(1)+'" y2="'+yy.toFixed(1)+'" stroke="rgba(255,255,255,.06)"/>';
+    g+='<text x="'+(P.l-8)+'" y="'+(yy+4).toFixed(1)+'" text-anchor="end" class="ax">'+fm(v)+'</text>'; }
+  var passo = cfg.cada || Math.max(1, Math.ceil(G.length/Math.max(4, Math.floor(W/110))));
   G.forEach(function(nome,i){
-    var centro=P.l+faixa*i+faixa/2;
-    var x0=centro-(larg*S.length)/2;
+    var centro=P.l+faixa*i+faixa/2, x0=centro-(larg*S.length)/2;
     S.forEach(function(s,j){
       var v=s.values[i]||0, yy=y(v);
-      g+='<rect x="'+(x0+j*larg+1)+'" y="'+yy+'" width="'+(larg-2)+'" height="'+Math.max(0,(H-P.b-yy))+'" rx="3" fill="'+s.color+'"/>'; });
-    if(i%(cfg.cada||1)===0)
-      g+='<text x="'+centro+'" y="'+(H-7)+'" text-anchor="middle" class="ax">'+fxEsc(nome)+'</text>'; });
-  alvo.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" class="chart" role="img" aria-label="'+fxEsc(cfg.alt||'gráfico de barras')+'">'+g+'</svg>';
+      g+='<rect x="'+(x0+j*larg+1).toFixed(1)+'" y="'+yy.toFixed(1)+'" width="'+Math.max(1,larg-2).toFixed(1)+'" height="'+Math.max(0,H-P.b-yy).toFixed(1)+'" rx="2" fill="'+s.color+'"/>'; });
+    if(i%passo===0)
+      g+='<text x="'+centro.toFixed(1)+'" y="'+(H-6)+'" text-anchor="middle" class="ax">'+fxEsc(nome)+'</text>'; });
+  alvo.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" width="100%" height="'+H+'" preserveAspectRatio="xMidYMid meet" class="chart" role="img" aria-label="'+fxEsc(cfg.alt||'gráfico de barras')+'">'+g+'</svg>';
 }
 function fxBarrasH(alvo, itens){
   if(!alvo) return;

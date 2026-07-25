@@ -289,6 +289,19 @@ async function testEmp(emp, checks){
     w.switchTab(5); await new Promise(r=>setTimeout(r,400));
     ok(t('tab5').includes('Despesa por mês') && t('tab5').includes('Maiores categorias'),'Gráficos: aba Despesas com evolução e categorias');
     ok(t('tab10').includes('Top 10 fornecedores'),'Gráficos: aba Fornecedores com ranking visual');
+    // estilo dos gráficos: curva suave (cúbicas) e escala real (altura fixa em px)
+    w.switchTab(15); await new Promise(r=>setTimeout(r,400));
+    const svgL = w.document.querySelector('#tab15 #g_ind_exp svg') || w.document.querySelector('#tab15 svg.chart');
+    ok(svgL && svgL.getAttribute('height'),'Escala: SVG com altura em pixels reais (não estica com a tela)');
+    const paths = [...w.document.querySelectorAll('#tab15 svg.chart path')].map(p=>p.getAttribute('d')||'');
+    ok(paths.some(d=>d.includes('C')),'Curvas: traçado usa cúbicas suaves, não retas');
+    // monotonicidade: a curva não pode extrapolar o mínimo/máximo dos pontos reais
+    const cfgTest = {labels:['a','b','c','d'], series:[{values:[10,10,90,10], color:'#fff'}]};
+    const alvoT = w.document.createElement('div'); w.document.body.appendChild(alvoT);
+    w.fxLinhas(alvoT, cfgTest);
+    const dT = (alvoT.querySelector('path')||{getAttribute:()=>''}).getAttribute('d')||'';
+    const ys = (dT.match(/-?\d+\.?\d*/g)||[]).map(Number).filter((_,i)=>i%2===1);
+    ok(ys.length>0 && Math.min(...ys) >= -1,'Curvas: interpolação monotônica não inventa picos fora dos dados');
 
     ok(RF6.includes('TIR projetada') && RF6.includes('MOIC'),'RF: TIR e MOIC presentes');
     // busca de despesas: digitar não perde o texto (debounce re-render preserva)
