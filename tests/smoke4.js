@@ -295,6 +295,11 @@ async function testEmp(emp, checks){
     ok(svgL && svgL.getAttribute('height'),'Escala: SVG com altura em pixels reais (não estica com a tela)');
     const paths = [...w.document.querySelectorAll('#tab15 svg.chart path')].map(p=>p.getAttribute('d')||'');
     ok(paths.some(d=>d.includes('C')),'Curvas: traçado usa cúbicas suaves, não retas');
+    // paleta sóbria: nenhuma cor vívida (iOS) pode reaparecer no documento
+    const vividas = ['#30D158','#FF453A','#FFD60A','#0A84FF','#a371f7','#f85149','#3fb950'];
+    const doc = w.document.documentElement.innerHTML;
+    const achadas = vividas.filter(c => doc.toLowerCase().includes(c.toLowerCase()));
+    ok(achadas.length===0,'Paleta: sem cores vívidas na renderização'+(achadas.length?' ('+achadas.join(', ')+')':''));
     // monotonicidade: a curva não pode extrapolar o mínimo/máximo dos pontos reais
     const cfgTest = {labels:['a','b','c','d'], series:[{values:[10,10,90,10], color:'#fff'}]};
     const alvoT = w.document.createElement('div'); w.document.body.appendChild(alvoT);
