@@ -147,6 +147,19 @@ async function testEmp(emp, checks){
     ok(REC.includes('Natureza (classificação do painel)'),'Receitas: ranking por natureza');
     ok(REC.includes('Inconsistências encontradas'),'Receitas: bloco de inconsistências dos descritivos');
     ok(typeof w._recDescartadas !== 'undefined','Receitas: descartes da carga são registrados');
+    // exploração genérica: qualquer soma classificada abre a lista que a compõe
+    ok(typeof w.openDrillLista==='function' && typeof w.drillAnalise==='function','Drill genérico: funções disponíveis');
+    w.switchTab(12); await new Promise(r=>setTimeout(r,900));
+    const AN2=t('tab12');
+    const liga = ["drillAnalise('familia'","drillAnalise('material'","drillAnalise('prestador'","drillAnalise('catObra'"].filter(x=>AN2.includes(x));
+    ok(liga.length>=4,'Drill: tabelas da Análise exploráveis ('+liga.length+'/4)');
+    ok(Array.isArray(w._analiseRows) && w._analiseRows.length>0,'Drill: lançamentos das 3 obras retidos para exploração ('+(w._analiseRows||[]).length+')');
+    w.drillAnalise('familia','materiais'); await new Promise(r=>setTimeout(r,200));
+    const md=w.document.getElementById('drillModal');
+    ok(md && md.style.display==='block' && w.document.getElementById('drill-rows').children.length>0,'Drill: clique em família abre os lançamentos');
+    w.document.getElementById('drill-sort').value='data_asc'; w.renderDrillRows();
+    ok(w.document.getElementById('drill-rows').children.length>0,'Drill: ordenação funciona na lista genérica');
+    w.closeDrill();
     ok(REC.includes('ver todas'),'Receitas: KPI abre todos os lançamentos');
     ok(!!w.document.querySelector('#tab16 svg.chart') || REC.includes('Sem dados'),'Receitas: gráfico mensal');
     // drill: todos os lançamentos, com busca e ordenação (mesma mecânica de Despesas)

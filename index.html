@@ -1059,7 +1059,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-i · descartes visíveis</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-j · somas exploráveis</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -2076,7 +2076,7 @@ function volPaint(fornKey){
       <div class="section-title">📊 Ranking por Categoria de Despesa${hintIcon("Todas as despesas das 3 obras agrupadas pela categoria (já com as reclassificações confirmadas aplicadas). Compare o peso de cada tipo de gasto entre as obras e no grupo.")}</div>
       <div class="table-wrap" style="margin-bottom:16px"><table>
         <thead><tr><th>Categoria</th>${R.map(r=>`<th style="text-align:right;color:${r.cor}">${r.nome.split(' ')[0]}</th>`).join('')}<th style="text-align:right">Grupo</th><th style="text-align:right">%</th><th style="text-align:right">12m</th></tr></thead>
-        <tbody>${cats.map(([cat,g])=>`<tr>
+        <tbody>${cats.map(([cat,g])=>`<tr style="cursor:pointer" onclick="drillAnalise('catObra','${cat.replace(/'/g,"\\'")}')" title="ver os lançamentos das três obras">
           <td style="font-size:11.5px">${cat}</td>
           ${R.map(r=>`<td style="text-align:right;font-size:11px">${g.obras[r.key]?fmt(g.obras[r.key]):'—'}</td>`).join('')}
           <td style="text-align:right;font-weight:700;font-size:11.5px">${fmt(g.total)}</td>
@@ -2486,7 +2486,7 @@ function renderReceitas() {
       <div class="info-box" style="border:1px solid #BF6B6066;background:rgba(191,107,96,.06);margin-bottom:10px"><span style="color:#BF6B60">⚠</span><div><strong>${D.length} lançamento(s), somando ${fmt(total)}, não entram em nenhum cálculo do painel.</strong><br>A regra atual ignora todo lançamento de origem "Lançamento Financeiro" sem número de casa no descritivo. Aportes e rendimentos são capturados antes e não estão nesta lista — o que resta aqui é receita de verdade.</div></div>
       <div class="table-wrap" style="margin-bottom:14px"><table>
         <thead><tr><th>Categoria descartada</th><th style="text-align:right">Valor</th><th style="text-align:right">Lançtos</th><th>Exemplo de descritivo</th></tr></thead>
-        <tbody>${lista.map(([c,g])=>`<tr>
+        <tbody>${lista.map(([c,g])=>`<tr style="cursor:pointer" onclick="openDrillLista('⚠️ Descartados · ${c.replace(/'/g,"\\'")}', (window._recDescartadas||[]).filter(function(x){return (x.cat||'(sem categoria)')==='${c.replace(/'/g,"\\'")}';}).map(function(x){return {data:x.data, valor:x.valor, categoria:x.cat, descricao:x.desc, fornecedor:x.cliente||'—', obs:'Descartado pela regra de carga'};}), '#BF6B60')" title="ver os lançamentos descartados">
           <td style="font-size:11.5px">${c}</td>
           <td style="text-align:right;font-weight:600;color:#BF6B60">${fmt(g.v)}</td>
           <td style="text-align:right;color:var(--muted);font-size:10.5px">${g.n}</td>
@@ -2662,8 +2662,8 @@ async function renderAlimentacao(force) {
         const tot=sum(r.fam.alimentacao); const aExec=r.pct>0? r.area*r.pct/100 : 0;
         const mesesAtivos=todos.filter(ym=>val(r,ym)>0).length||1;
         const obraTot=sum(r.obraMes)||1;
-        return k(r.nome.split(' ')[0], fmt(tot),
-          (aExec?fmt(tot/aExec)+'/m² exec · ':'')+(tot/obraTot*100).toFixed(2)+'% do custo de obra · média '+fmt(tot/mesesAtivos)+'/mês ativo', r.cor);
+        return '<div onclick="drillAnalise(\'alimentacao\',\''+r.key+'\')" style="cursor:pointer" title="ver todos os lançamentos de alimentação desta obra">'+k(r.nome.split(' ')[0], fmt(tot),
+          (aExec?fmt(tot/aExec)+'/m² exec · ':'')+(tot/obraTot*100).toFixed(2)+'% do custo de obra · média '+fmt(tot/mesesAtivos)+'/mês ativo', r.cor)+'</div>';
       }).join('')}
     </div>
     ${(function(){
@@ -2907,6 +2907,8 @@ async function ensureAnaliseData(force) {
         if (RE_CARTORIO.test(cU) || RE_CARTORIO.test(dU)) { cartTotal+=r.valor; }
         else if (RE_JUDICIAL.test(cU) || RE_JUDICIAL.test(dU)) { judTotal+=r.valor; judMes[ym]=(judMes[ym]||0)+r.valor; }
       });
+      desp.forEach(r=>{ r._obra = c.nome; r._obraKey = k; });
+      window._analiseRows = (window._analiseRows||[]).filter(r=>r._obraKey!==k).concat(desp);
       return { key:k, nome:c.nome, cor:c.cor, area, fam, obraMes, primeiro, pct: pctObraDe(k), matTipos, moForn, aliForn, aliDet, aliNomeFora, fornMes, pagGenericos, judTotal, cartTotal, judMes, despTotal, catAudit, estruturaConcluidaEm: c.estruturaConcluidaEm||null, estruturaPrevisaoFim: c.estruturaPrevisaoFim||null };
     }));
     window._analiseData = results;
@@ -3002,8 +3004,8 @@ function paintAnalise(R) {
       <thead><tr><th>Família</th>${R.map(r=>`<th style="text-align:right;color:${r.cor}">${r.nome.split(' ')[0]}</th>`).join('')}<th style="text-align:right">Grupo</th></tr></thead>
       <tbody>${tabFam.map(({f,cols,tG})=>`
         <tr><td><span style="color:${f.cor}">●</span> <strong style="font-size:11.5px">${f.nome}</strong></td>
-          ${cols.map(c=>`<td style="text-align:right;font-size:10.5px">${fmt(c.t)}<br><span style="color:#A1A1A6">${fmt(c.m2)}/m² · ${c.pct.toFixed(1)}%</span></td>`).join('')}
-          <td style="text-align:right;font-weight:700;font-size:11px">${fmt(tG)}</td></tr>`).join('')}
+          ${cols.map((c,ci)=>`<td style="text-align:right;font-size:10.5px;cursor:pointer" onclick="drillAnalise('familia','${f.k}','${R[ci].key}')" title="ver os lançamentos">${fmt(c.t)}<br><span style="color:#A1A1A6">${fmt(c.m2)}/m² · ${c.pct.toFixed(1)}%</span></td>`).join('')}
+          <td style="text-align:right;font-weight:700;font-size:11px;cursor:pointer" onclick="drillAnalise('familia','${f.k}')" title="ver os lançamentos das três obras">${fmt(tG)}</td></tr>`).join('')}
       </tbody></table></div>
 
     <div class="section-title">⚙️ Índice Materiais ÷ Mão de obra${hintIcon('Materiais ÷ (mão de obra + salários de obra), mês a mês. Alto no início (fundação/estrutura compra muito material), cai no acabamento (MO intensiva). Comparar obras na mesma fase revela eficiência de compra e dimensionamento de equipe.')}</div>
@@ -3078,7 +3080,7 @@ function paintAnalise(R) {
           const vals=R.map(r=>g.obras[r.key]||0);
           const assimetrica = g.incluida && Math.max(...vals)>200000 && Math.min(...vals)===0;
           const foraGrande = !g.incluida && g.total>100000;
-          return `<tr style="${assimetrica||foraGrande?'background:#C4A55C12':''}">
+          return `<tr style="cursor:pointer;${assimetrica||foraGrande?'background:#C4A55C12':''}" onclick="drillAnalise('catObra','${cat.replace(/'/g,"\\'")}')" title="ver os lançamentos desta categoria">
             <td style="text-align:center">${g.incluida?'<span style=color:#6D9E7F>✓</span>':'<span style=color:#A1A1A6>✗</span>'}${foraGrande?' <span style=color:#C4A55C>⚠</span>':''}${assimetrica?' <span style=color:#BF6B60>⇄</span>':''}</td>
             <td style="font-size:11px">${cat}</td>
             ${vals.map(v=>`<td style="text-align:right;font-size:10.5px;color:${v===0?'#1A1A1D':'inherit'}">${v?fmt(v):'0'}</td>`).join('')}
@@ -3106,7 +3108,7 @@ function paintAnalise(R) {
           const nf=Object.keys(g.forns).length;
           const domin=Object.entries(g.forns).sort((a,b)=>b[1]-a[1])[0];
           const dompct=domin? domin[1]/g.total*100 : 0;
-          return `<tr>
+          return `<tr style="cursor:pointer" onclick="drillAnalise('material','${tp.replace(/'/g,"\\'")}')" title="ver os lançamentos deste material">
             <td><span style="font-weight:800;color:${classe==='A'?'#BF6B60':classe==='B'?'#C4A55C':'#A1A1A6'}">${classe}</span></td>
             <td style="font-size:11.5px">${tp}</td>
             ${R.map(r=>`<td style="text-align:right;font-size:10.5px">${g.obras[r.key]?fmt(g.obras[r.key]):'—'}</td>`).join('')}
@@ -3136,7 +3138,7 @@ function paintAnalise(R) {
       </div>
       <div class="table-wrap" style="margin:10px 0 16px"><table>
         <thead><tr><th>#</th><th>Prestador (grupo)</th><th style="text-align:right">Total MO</th><th style="text-align:right">% da MO do grupo</th><th>Obras</th></tr></thead>
-        <tbody>${topF.map(([f,g],i)=>`<tr><td style="color:#A1A1A6">${i+1}</td><td style="font-size:11.5px">${f.slice(0,38)}</td>
+        <tbody>${topF.map(([f,g],i)=>`<tr style="cursor:pointer" onclick="drillAnalise('prestador','${f.replace(/'/g,"\\'")}')" title="ver os pagamentos deste prestador"><td style="color:#A1A1A6">${i+1}</td><td style="font-size:11.5px">${f.slice(0,38)}</td>
           <td style="text-align:right;font-weight:700">${fmt(g.total)}</td>
           <td style="text-align:right;color:${g.total/totMOg>0.3?'#C4A55C':'#A1A1A6'}">${(g.total/totMOg*100).toFixed(1)}%${g.total/totMOg>0.3?' ⚠':''}</td>
           <td style="font-size:10px;color:#A1A1A6">${[...g.obras].join(' · ')}</td></tr>`).join('')}
@@ -3147,7 +3149,7 @@ function paintAnalise(R) {
     <div class="kpi-grid" style="grid-template-columns:repeat(${R.length+1},1fr)">
       ${R.map(r=>{
         const pct=r.despTotal>0? r.judTotal/r.despTotal*100 : 0;
-        return k(r.nome.split(' ')[0], pct.toFixed(2)+'%', fmt(r.judTotal)+' em contencioso', pct>1?'#BF6B60':pct>0.5?'#C4A55C':'#6D9E7F');
+        return '<div onclick="drillAnalise(\'judicial\',\''+r.key+'\')" style="cursor:pointer" title="ver os lançamentos judiciais">'+k(r.nome.split(' ')[0], pct.toFixed(2)+'%', fmt(r.judTotal)+' em contencioso', pct>1?'#BF6B60':pct>0.5?'#C4A55C':'#6D9E7F')+'</div>';
       }).join('')}
       ${(function(){ const jt=R.reduce((s,r)=>s+r.judTotal,0), dt=R.reduce((s,r)=>s+r.despTotal,0)||1;
         return k('GRUPO', (jt/dt*100).toFixed(2)+'%', fmt(jt), jt/dt>0.01?'#BF6B60':jt/dt>0.005?'#C4A55C':'#6D9E7F'); })()}
@@ -5701,6 +5703,53 @@ function _recParaDrill(arr){
              obs: partes.join(' · '), _rec: r };
   });
 }
+// Exploração genérica: qualquer soma exibida no painel pode abrir a lista que a compõe,
+// com busca e as mesmas cinco ordenações. Aceita despesas, receitas ou linhas já normalizadas.
+window.openDrillLista = function(titulo, rows, cor, eyebrow) {
+  _drillType = 'lista';
+  _drillData = (rows||[]).map(r=>{
+    if (r && r.valReceb!==undefined && r.dataComp!==undefined) return _recParaDrill([r])[0];
+    return { data: r.data, valor: r.valor, categoria: r.categoria || r.cat || '—',
+             descricao: r.descricao || r.desc || '(sem descritivo)',
+             fornecedor: r.fornecedor || r.cliente || '—',
+             obs: r.obs || (r._obra ? 'Obra: '+r._obra : '') };
+  });
+  document.getElementById('drill-eyebrow').textContent = eyebrow || 'Composição da soma';
+  document.getElementById('drill-title').innerHTML = '<span style="color:'+(cor||'#6C8FB5')+'">'+titulo+'</span>';
+  document.getElementById('drill-search').value = '';
+  document.getElementById('drill-sort').value = 'valor_desc';
+  document.getElementById('drill-socio').style.display = 'none';
+  renderDrillRows();
+  document.getElementById('drillModal').style.display = 'block';
+  document.body.style.overflow = 'hidden';
+};
+// atalhos usados pelas tabelas agregadas das três obras
+window.drillAnalise = function(filtroTipo, arg1, arg2) {
+  const R = window._analiseRows || [];
+  let rows = R, titulo = 'Lançamentos', cor = '#6C8FB5';
+  if (filtroTipo==='familia') {
+    const fam = FAMILIAS_ANALISE.find(f=>f.k===arg1);
+    rows = R.filter(r=> (!arg2 || r._obraKey===arg2) && fam && fam.match(_audNorm(r.categoria||'')));
+    titulo = (fam?fam.nome:arg1) + (arg2? ' · '+arg2 : ' · grupo'); cor = fam?fam.cor:'#6C8FB5';
+  } else if (filtroTipo==='material') {
+    rows = R.filter(r=> _audNorm(r.categoria||'').includes('MATERIA') && tipoMaterialDe(_audNorm(r.descOriginal||r.descricao||''))===arg1);
+    titulo = '🧱 ' + arg1; cor = '#6C8FB5';
+  } else if (filtroTipo==='prestador') {
+    rows = R.filter(r=> _audNorm(r.categoria||'').includes('MAO DE OBRA') && (r.fornecedor||'').trim()===arg1);
+    titulo = '👷 ' + arg1; cor = '#C09257';
+  } else if (filtroTipo==='catObra') {
+    rows = R.filter(r=> (r.categoria||'(sem categoria)')===arg1 && (!arg2 || r._obraKey===arg2));
+    titulo = '📂 ' + arg1 + (arg2? ' · '+arg2 : ''); cor = '#6C8FB5';
+  } else if (filtroTipo==='alimentacao') {
+    rows = R.filter(r=> _audNorm(r.categoria||'').includes('ALIMENTA') && (!arg1 || r._obraKey===arg1));
+    titulo = '🍛 Alimentação' + (arg1? ' · '+arg1 : ' · grupo'); cor = '#5F9E93';
+  } else if (filtroTipo==='judicial') {
+    rows = R.filter(r=> (!arg1 || r._obraKey===arg1) && (RE_JUDICIAL.test(_audNorm(r.categoria||'')) || RE_JUDICIAL.test(_audNorm(r.descOriginal||r.descricao||''))) && !(RE_CARTORIO.test(_audNorm(r.categoria||''))||RE_CARTORIO.test(_audNorm(r.descOriginal||r.descricao||''))));
+    titulo = '⚖️ Custas judiciais' + (arg1? ' · '+arg1 : ' · grupo'); cor = '#BF6B60';
+  }
+  if (!rows.length) { alert('Os lançamentos das três obras ainda estão carregando. Abra a aba Análise uma vez e tente de novo.'); return; }
+  openDrillLista(titulo, rows, cor, 'Composição da soma · '+rows.length+' lançamentos');
+};
 window.openDrill = function(type, filter) {
   _drillType = type;
   let rows = [], eyebrow = '', title = '', color = '#6C8FB5';
@@ -5749,7 +5798,7 @@ window.renderDrillRows = function() {
   const search  = document.getElementById('drill-search').value.toLowerCase();
   const sort    = document.getElementById('drill-sort').value;
   const socio   = document.getElementById('drill-socio').value;
-  const isDespesa = _drillType==='categoria'||_drillType==='despesas'||_drillType==='custo_obra'||_drillType==='receitas'||_drillType==='receita_cat';
+  const isDespesa = _drillType==='categoria'||_drillType==='despesas'||_drillType==='custo_obra'||_drillType==='receitas'||_drillType==='receita_cat'||_drillType==='receita_tipo'||_drillType==='lista';
 
   let rows = _drillData.filter(r => {
     if(socio && r.socio !== socio) return false;
