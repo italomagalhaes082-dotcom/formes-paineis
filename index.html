@@ -1059,7 +1059,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-j · somas exploráveis</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-k · reembolsos classificados</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -2319,6 +2319,55 @@ window.aliDrill = function(key, ym) {
   ov.style.display='flex';
 };
 // ═══════════ 💵 RECEITAS — conferência de classificação e VGV real ═══════════
+// Classificação de reembolsos recebidos — derivada da leitura dos descritivos reais
+// das três planilhas. Cada natureza tem um tratamento contábil diferente: só o
+// financiamento é receita; o resto é RECUPERAÇÃO e deveria abater a despesa de origem.
+const SPES_GRUPO = /BOSSA NOVA|JAZZ RESIDENCE|LIBERTY|CONSTRUTORA E INCORPORADOR|FORMES/i;
+const CLASSES_REEMB = [
+  { k:'financiamento', nome:'🏦 Financiamento e saldo de venda', cor:'#6D9E7F',
+    trata:'RECEITA de venda — entra no VGV recebido',
+    re:/DESBLOQUEIO DE SALDO|SALDO EXCEDENTE FINANC|EXCEDENTE FINANC/i },
+  { k:'estorno', nome:'↩️ Estorno de pagamento indevido', cor:'#BF6B60',
+    trata:'REDUTOR da despesa de origem — pagamento feito errado e devolvido',
+    re:/CONTA ERRADA|ERRO DE CONTA|DUPLICIDADE|FORNECEDOR ERRADO|PAGA ERRADA|PGTO EXCEDENTE|PAGAMENTO EXCEDENTE|DEVOLUÇÃO DE PGTO|COMPENSAÇÃO INDEVIDA|SALÁRIO EXCEDENTE/i },
+  { k:'rateio', nome:'🔁 Rateio entre obras do grupo', cor:'#8E7FA8',
+    trata:'REDUTOR do custo da obra que pagou — a outra SPE devolveu a parte dela',
+    re:null, testaCliente:true },
+  { k:'folha', nome:'👷 Folha e encargos', cor:'#C09257',
+    trata:'REDUTOR de mão de obra e salários',
+    re:/FGTS|CTPS|FOLHA \d|PAGTO FOLHA|DESCONTOS CTPS/i },
+  { k:'material', nome:'📦 Devolução de material e fornecedor', cor:'#6C8FB5',
+    trata:'REDUTOR do custo de obra — material devolvido ou cobrado a maior',
+    re:/CONCRETO|ALUMINIO|CERAMICA|CERA |MADEIRA|BROCA|DISCO|LIXA|EPI|PURIFICADOR|AR CONDICIONADO|CHAVE|CARTEIRO|FORMAS|ESCORA|PEDRAS|BARRAS|ESPUMA|FRETE|VIDRO|ACABAMENTOS ELÉTRIC|MEDIÇÃO|MANTA|CABOS|INFRAESTRUTURA|RIPADO|TELHA|FONTE CARREGADOR/i },
+  { k:'cliente', nome:'🧾 Sinal, reserva e personalização de cliente', cor:'#C4A55C',
+    trata:'Movimento de cliente — confirmar se é sinal recebido (receita) ou devolvido',
+    re:/SINAL|RESERVA|PERSONALIZAÇÃO|PERSONALIZACAO/i },
+  { k:'marketing', nome:'📣 Marketing e administrativo', cor:'#B0697E',
+    trata:'REDUTOR de marketing e despesas administrativas',
+    re:/FOLDER|BOOKS|PASTAS|GRÁFICA|GRAFICA|RESTAURANTE|CONVENÇÃO|CORRETORES|IMAGEN|PLACAS/i },
+];
+function classificarReembolso(desc, cliente){
+  const d = String(desc||''), c = String(cliente||'');
+  // ordem importa: estorno e financiamento vencem o resto; rateio só se nenhum padrão específico bater
+  for (const cl of CLASSES_REEMB) {
+    if (cl.re && cl.re.test(d)) return cl;
+  }
+  if (SPES_GRUPO.test(c)) return CLASSES_REEMB.find(x=>x.k==='rateio');
+  return null;
+}
+function coletarReembolsos(){
+  const saida = [];
+  (window._recDescartadas||[]).forEach(r=>{
+    if (/REEMBOLS/i.test(r.cat||'') || /REEMBOLS|RESSARC|RESTITUI|ESTORNO|DEVOLU/i.test(r.desc||''))
+      saida.push({ data:r.data, cliente:r.cliente, desc:r.desc, cat:r.cat, valor:r.valor, origem:'descartado' });
+  });
+  (_RECEITAS||[]).forEach(r=>{
+    if (/REEMBOLS/i.test(r.cat||'') || /REEMBOLS|RESSARC|RESTITUI|ESTORNO/i.test(r.desc||''))
+      saida.push({ data:r.dataComp, cliente:r.cliente, desc:r.desc, cat:r.cat, valor:r.valReceb||0, origem:'nas receitas' });
+  });
+  return saida.filter(x=>x.valor>0);
+}
+
 function renderReceitas() {
   const el = document.getElementById('tab16');
   if (!el) return;
@@ -2474,6 +2523,35 @@ function renderReceitas() {
         ${vgvCurada?`<tr><td>VGV da apuração curada</td><td style="text-align:right">${fmt(vgvCurada)}</td><td style="font-size:11px;color:${Math.abs(vgvCurada-contratado)>contratado*0.05?'#C4A55C':'var(--muted)'}">Δ ${fmt(vgvCurada-contratado)} vs receitas lançadas</td></tr>`:''}
         <tr><td>VGV informado no Resultado Final</td><td style="text-align:right">${vgvRF>0?fmt(vgvRF):'<span style="color:#BF6B60">não preenchido</span>'}</td><td style="font-size:11px;color:var(--muted)">${vgvRF>0?'Δ '+fmt(vgvRF-(vgvCurada||contratado))+' vs base real':'preencha para liberar TIR, ROI e margem'}</td></tr>
       </tbody></table></div>
+
+    ${(function(){
+      const REE = coletarReembolsos();
+      if (!REE.length) return '';
+      const grupos = {}; const naoClass = [];
+      REE.forEach(r=>{ const cl = classificarReembolso(r.desc, r.cliente);
+        if (!cl) { naoClass.push(r); return; }
+        (grupos[cl.k] = grupos[cl.k] || {cl, itens:[], v:0}); grupos[cl.k].itens.push(r); grupos[cl.k].v += r.valor; });
+      const total = REE.reduce((s,r)=>s+r.valor,0);
+      const ordenados = Object.values(grupos).sort((a,b)=>b.v-a.v);
+      window._reembGrupos = grupos; window._reembNaoClass = naoClass;
+      return `<div class="section-title" style="margin-top:16px">🧠 Reembolsos classificados por natureza${hintIcon('Classificação feita pela leitura dos descritivos e do nome do pagador. Cada natureza tem tratamento contábil diferente — só financiamento é receita; o resto é recuperação e deveria abater a despesa de origem. Clique em qualquer linha para ver os lançamentos.')}</div>
+      <div class="info-box" style="border:1px solid #6C8FB540;margin-bottom:10px"><span>🧠</span><div><strong>${REE.length} reembolsos somando ${fmt(total)}</strong> — classificados a partir do descritivo e do pagador. Nada foi aplicado: é a proposta para sua validação.</div></div>
+      <div class="table-wrap" style="margin-bottom:14px"><table>
+        <thead><tr><th>Natureza</th><th style="text-align:right">Valor</th><th style="text-align:right">%</th><th style="text-align:right">Lançtos</th><th>Tratamento proposto</th></tr></thead>
+        <tbody>${ordenados.map(g=>`<tr style="cursor:pointer" onclick="openDrillLista('${g.cl.nome.replace(/'/g,"\\'")}', (window._reembGrupos['${g.cl.k}']||{itens:[]}).itens.map(function(x){return {data:x.data,valor:x.valor,categoria:x.cat,descricao:x.desc,fornecedor:x.cliente,obs:'Origem: '+x.origem};}), '${g.cl.cor}')" title="ver os lançamentos">
+          <td style="font-size:11.5px"><span style="color:${g.cl.cor}">●</span> ${g.cl.nome}</td>
+          <td style="text-align:right;font-weight:600;color:${g.cl.cor}">${fmt(g.v)}</td>
+          <td style="text-align:right;color:var(--muted);font-size:10.5px">${(g.v/total*100).toFixed(1)}%</td>
+          <td style="text-align:right;color:var(--muted);font-size:10.5px">${g.itens.length}</td>
+          <td style="font-size:10.5px;color:var(--muted)">${g.cl.trata}</td></tr>`).join('')}
+        ${naoClass.length?`<tr style="cursor:pointer" onclick="openDrillLista('❓ Sem padrão reconhecido', (window._reembNaoClass||[]).map(function(x){return {data:x.data,valor:x.valor,categoria:x.cat,descricao:x.desc,fornecedor:x.cliente,obs:'Origem: '+x.origem};}), '#A1A1A6')">
+          <td style="font-size:11.5px"><span style="color:#A1A1A6">●</span> ❓ Sem padrão reconhecido</td>
+          <td style="text-align:right;font-weight:600;color:#A1A1A6">${fmt(naoClass.reduce((s,r)=>s+r.valor,0))}</td>
+          <td style="text-align:right;color:var(--muted);font-size:10.5px">${(naoClass.reduce((s,r)=>s+r.valor,0)/total*100).toFixed(1)}%</td>
+          <td style="text-align:right;color:var(--muted);font-size:10.5px">${naoClass.length}</td>
+          <td style="font-size:10.5px;color:var(--muted)">precisa de leitura sua — descritivo genérico</td></tr>`:''}
+        </tbody></table></div>`;
+    })()}
 
     ${(function(){
       const D = window._recDescartadas || [];

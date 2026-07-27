@@ -147,6 +147,15 @@ async function testEmp(emp, checks){
     ok(REC.includes('Natureza (classificação do painel)'),'Receitas: ranking por natureza');
     ok(REC.includes('Inconsistências encontradas'),'Receitas: bloco de inconsistências dos descritivos');
     ok(typeof w._recDescartadas !== 'undefined','Receitas: descartes da carga são registrados');
+    ok(typeof w.classificarReembolso==='function','Reembolsos: classificador disponível');
+    const cl1=w.classificarReembolso('DESBLOQUEIO DE SALDO - JAZZ','CEF');
+    const cl2=w.classificarReembolso('REEMBOLSO PAGAMENTO CONTA ERRADA','FORNECEDOR X');
+    const cl3=w.classificarReembolso('1 DIARIA DE MINI RETRO','BOSSA NOVA');
+    const cl4=w.classificarReembolso('REEMBOLSO CONCRETO USINADO','CIA CIMENTO');
+    ok(cl1&&cl1.k==='financiamento','Reembolsos: financiamento reconhecido');
+    ok(cl2&&cl2.k==='estorno','Reembolsos: estorno de conta errada reconhecido');
+    ok(cl3&&cl3.k==='rateio','Reembolsos: rateio entre SPEs pelo pagador');
+    ok(cl4&&cl4.k==='material','Reembolsos: devolução de material reconhecida');
     // exploração genérica: qualquer soma classificada abre a lista que a compõe
     ok(typeof w.openDrillLista==='function' && typeof w.drillAnalise==='function','Drill genérico: funções disponíveis');
     w.switchTab(12); await new Promise(r=>setTimeout(r,900));
