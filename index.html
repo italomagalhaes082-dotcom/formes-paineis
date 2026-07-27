@@ -1115,7 +1115,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-u · outliers por quartil</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-v · ordem por valor</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -3603,7 +3603,12 @@ window.gerarRelatorioAud = function(i){
   const a = data.alerts[i];
   const hoje = new Date().toLocaleDateString('pt-BR');
   let ultData=null; (_DESPESAS||[]).forEach(r=>{ const d=parseDate(r.data); if(d&&(!ultData||d>ultData)) ultData=d; });
-  const itens = a.itens.map(_audParseItem);
+  // Padrão de todo relatório: maior valor primeiro, para que a correção mais
+  // relevante seja feita antes. Itens sem valor legível preservam a ordem original.
+  const itens = a.itens.map(_audParseItem)
+    .map((x,i)=>({x,i}))
+    .sort((p,q2)=> (q2.x.num||0)-(p.x.num||0) || p.i-q2.i)
+    .map(o=>o.x);
   const nMostrados = itens.length, nTotal = a.total || nMostrados;
 
   const CTX = audContexto(a.titulo);
@@ -3617,6 +3622,7 @@ window.gerarRelatorioAud = function(i){
     if(!grupos.has(chave)) grupos.set(chave, {de:rot&&rot.de||'', para:rot&&rot.para||'', quem:rot&&rot.quem||'', itens:[], v:0});
     const g = grupos.get(chave); g.itens.push(x); g.v += (x.num||0);
   });
+  grupos.forEach(g=>g.itens.sort((p,q2)=>(q2.num||0)-(p.num||0)));
   const listaG = [...grupos.values()].sort((g1,g2)=>g2.v-g1.v);
   const comMov = listaG.filter(g=>g.para);
   const totalV = listaG.reduce((s,g)=>s+g.v,0);
@@ -3648,7 +3654,7 @@ window.gerarRelatorioAud = function(i){
     <div class="papel" id="audRelPapel">
       <div class="rel-eyebrow">Formes Engenharia · ${CFG.nome} · ordem de serviço — financeiro</div>
       <h1>${a.titulo}</h1>
-      <div class="rel-meta">emitido em ${hoje}${ultData?' · dados até '+ultData.toLocaleDateString('pt-BR'):''} · <strong>${nTotal} lançamento(s)</strong>${nTotal>nMostrados?` · ${nMostrados} listados (maiores valores)`:''}${totalV>0?` · total ${fmt(totalV)}`:''}</div>
+      <div class="rel-meta">emitido em ${hoje}${ultData?' · dados até '+ultData.toLocaleDateString('pt-BR'):''} · <strong>${nTotal} lançamento(s)</strong>${nTotal>nMostrados?` · ${nMostrados} listados (maiores valores)`:''}${totalV>0?` · total ${fmt(totalV)}`:''} · <em>ordenado do maior para o menor valor</em></div>
       <div class="rel-achado"><strong>O que foi encontrado:</strong> ${a.resumo||a.titulo}</div>
       ${CTX.impacto?`<h2>Por que isso importa para o negócio</h2>
       <div class="rel-impacto">${CTX.impacto}</div>`:''}
@@ -6135,7 +6141,7 @@ window.openDrill = function(type, filter) {
   document.getElementById('drill-eyebrow').textContent = eyebrow;
   document.getElementById('drill-title').innerHTML = '<span style="color:'+color+'">'+title+'</span>';
   document.getElementById('drill-search').value = '';
-  document.getElementById('drill-sort').value = 'data_desc';
+  document.getElementById('drill-sort').value = 'valor_desc';   // padrão: maior valor primeiro
 
   // Populate socio filter for aportes/retiradas
   const socioSel = document.getElementById('drill-socio');

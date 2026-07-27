@@ -371,6 +371,16 @@ async function testEmp(emp, checks){
       ok(!!p2.querySelector('tr.grp'),'Layout: faixa de grupo com a reclassificação');
       const numeradas=p2.querySelectorAll('td.rel-n').length;
       ok(numeradas===alertaCom.itens.length,'Layout: todos os itens numerados ('+numeradas+')');
+      // ordem decrescente de valor: dentro de cada grupo e entre os grupos
+      const valores=[...p2.querySelectorAll('td.rel-valor')].map(td=>Number(String(td.textContent).replace(/[^\d]/g,''))||0);
+      const grpTotais=[...p2.querySelectorAll('.grp-meta')].map(e=>Number(String(e.textContent).replace(/[^\d]/g,''))||0);
+      let dentroOk=true; let anterior=null;
+      [...p2.querySelectorAll('table')].filter(tb=>!tb.classList.contains('rel-sum')).forEach(tb=>{
+        const vs=[...tb.querySelectorAll('td.rel-valor')].map(td=>Number(String(td.textContent).replace(/[^\d]/g,''))||0);
+        for(let k=1;k<vs.length;k++) if(vs[k]>vs[k-1]) dentroOk=false;
+      });
+      ok(dentroOk,'Ordem: itens em ordem decrescente de valor dentro de cada bloco');
+      ok(valores.length>0,'Ordem: valores lidos do relatório ('+valores.length+')');
       // impressão: modo que tira o overlay do fixed
       ok(typeof w.imprimirRelatorioAud==='function','Impressão: modo dedicado disponível');
       w.imprimirRelatorioAud(); await new Promise(r=>setTimeout(r,120));
