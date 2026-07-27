@@ -281,7 +281,12 @@
 #audRelOv h1 { font-size:20px; line-height:1.25; margin:0 0 5px; letter-spacing:-.02em; color:#111; font-weight:700; }
 #audRelOv .rel-meta { font-size:10.5px; color:#666; padding-bottom:10px; border-bottom:2px solid #111; }
 #audRelOv h2 { font-size:10px; letter-spacing:1.3px; text-transform:uppercase; color:#8a8f94; margin:20px 0 7px; font-weight:600; }
-#audRelOv .rel-inst { font-size:11.5px; line-height:1.55; color:#333; background:#f6f8f9; border-left:3px solid #6C8FB5; padding:10px 13px; margin-top:12px; }
+#audRelOv .rel-achado { font-size:11.5px; line-height:1.5; color:#333; margin-top:12px; }
+#audRelOv .rel-impacto { font-size:11.5px; line-height:1.6; color:#5a3d16; background:#fdf7ec; border-left:3px solid #C4A55C; padding:11px 14px; }
+#audRelOv .rel-inst { font-size:11.5px; line-height:1.55; color:#333; background:#f6f8f9; border-left:3px solid #6C8FB5; padding:11px 14px; }
+#audRelOv .rel-passos { margin:0 0 0 16px; padding:0; }
+#audRelOv .rel-passos li { margin-bottom:5px; }
+#audRelOv .rel-criterio { margin-top:9px; padding-top:8px; border-top:1px solid #dfe5e9; font-size:10.5px; color:#666; line-height:1.5; }
 #audRelOv table { width:100%; border-collapse:collapse; table-layout:fixed; }
 #audRelOv thead { display:table-header-group; }
 #audRelOv tr { page-break-inside:avoid; }
@@ -1110,7 +1115,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-s · relatório paginado</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-t · relatórios didáticos</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -3492,6 +3497,73 @@ const AUD_VAGAS    = ["PAGAMENTO","PAGTO","DESPESA","SERVICO","SERVICOS","DIVERS
 
 function _audItem(t, s, v, cor) { return { t, s, v, cor: cor||"#e6edf3" }; }
 
+// ═══ Contexto de negócio por tipo de achado ═══
+// Cada achado ganha: por que importa (impacto no negócio), o que fazer (providência
+// em passos) e como agrupar a lista para que a correção seja executável em lote.
+const AUD_CONTEXTO = [
+ { re:/Descritivo sugere uma categoria/i, agrupar:'movimento',
+   impacto:'O custo por categoria é a base de tudo que comparamos: custo de mão de obra por m², curva ABC de materiais, alimentação por obra e a projeção de custo final. Com lançamentos na categoria errada, uma obra parece gastar mais em material e menos em serviço do que realmente gasta — e a comparação entre Jazz, Bossa e Liberty deixa de ser confiável, mesmo que o total geral esteja certo.',
+   acao:['Filtre a planilha pela categoria de origem indicada em cada bloco.','Confira a nota fiscal ou o comprovante de cada lançamento.','Troque a categoria para a indicada em "Para". Se discordar, marque como mantido e escreva o motivo.','Ao final, informe ao gestor quantos foram corrigidos por bloco.'] },
+ { re:/duplicidade|idênticos no mesmo dia/i, agrupar:'quem',
+   impacto:'Pagamento em duplicidade é perda de caixa direta: o dinheiro sai duas vezes e o custo da obra sobe sem contrapartida. Além do prejuízo, infla o custo por m² e a curva ABC, fazendo o fornecedor parecer mais representativo do que é — o que distorce até a negociação futura com ele.',
+   acao:['Localize os dois lançamentos do par no extrato bancário.','Se houver dois débitos reais, solicite o estorno ao fornecedor e registre o protocolo.','Se foi digitação dupla (um débito só), exclua o lançamento repetido da planilha.','Anote no verso o número da NF que comprova cada pagamento legítimo.'] },
+ { re:/sócios \/ partes relacionadas/i, agrupar:'quem',
+   impacto:'Pagamento a sócio ou empresa ligada sem documento de suporte é o achado que mais chama atenção em auditoria e no fisco: pode ser reclassificado como distribuição disfarçada de lucro, com efeito tributário. Também confunde a apuração do capital do sócio, que é a base da TIR e do ROI do empreendimento.',
+   acao:['Para cada pagamento, identifique o documento que o justifica (contrato, NF, medição, recibo).','Separe o que é reembolso de despesa, o que é prestação de serviço e o que é retirada de sócio.','O que for retirada deve ser lançado como retirada, não como despesa da obra.','Arquive os documentos em pasta própria e informe ao contador.'] },
+ { re:/valores redondos|Lei de Benford/i, agrupar:'quem',
+   impacto:'Valores redondos demais e distribuições fora do padrão estatístico normalmente indicam pagamento por estimativa, sem nota fiscal que amarre o valor. Isso significa custo sem comprovação — problema fiscal em caso de fiscalização e, na prática, preço que ninguém conferiu.',
+   acao:['Peça a nota fiscal ou o recibo detalhado de cada pagamento listado.','Confira se o valor pago corresponde ao serviço ou material efetivamente entregue.','Se for adiantamento, registre como tal e faça o acerto quando a medição sair.'] },
+ { re:/concentração em um único fornecedor/i, agrupar:'nenhum',
+   impacto:'Dependência de um fornecedor tira poder de negociação e cria risco de prazo: se ele atrasar, para a obra; se aumentar o preço, não há alternativa pronta. Em itens de classe A da curva ABC, essa concentração é o ponto onde mais se perde dinheiro sem perceber.',
+   acao:['Levante ao menos dois fornecedores alternativos para os itens listados.','Peça cotação comparativa para o próximo pedido.','Se a concentração for por conveniência e não por preço, renegocie com base no volume anual.'] },
+ { re:/Retiradas idênticas/i, agrupar:'quem',
+   impacto:'Duas retiradas iguais em poucos dias podem ser um único saque lançado duas vezes — o que faz o capital exposto do sócio parecer menor do que é — ou dois saques reais, o que muda a proporção entre os sócios e a conta de quem tem quanto no empreendimento.',
+   acao:['Confirme cada retirada no extrato bancário, com data e valor.','Se o débito ocorreu uma vez só, exclua o lançamento repetido.','Se ocorreram os dois, verifique se a proporção entre os sócios continua acordada.'] },
+ { re:/Retiradas em proporção diferente|Proporção sócio a sócio/i, agrupar:'nenhum',
+   impacto:'Quando um sócio retira proporcionalmente mais do que aportou, na prática o outro está financiando a obra com capital próprio sem remuneração por isso. É a origem mais comum de conflito societário em incorporação, e distorce a TIR individual de cada um.',
+   acao:['Compare aportes e retiradas por sócio no período.','Verifique se há acordo escrito para a diferença.','Se não houver, programe o acerto na próxima distribuição.'] },
+ { re:/AFAC/i, agrupar:'quem',
+   impacto:'AFAC devolvido acima do que foi aportado, ou com favorecido não identificado, significa capital saindo da SPE sem lastro — problema societário e fiscal. Também corrompe a base de cálculo do retorno do investidor, que parte exatamente desses números.',
+   acao:['Concilie cada devolução com o aporte que lhe deu origem.','Identifique o favorecido de cada lançamento sem nome.','Corrija a classificação de qualquer devolução que na verdade seja despesa ou retirada.'] },
+ { re:/ilegíveis|Diagnóstico de carga/i, agrupar:'nenhum',
+   impacto:'Lançamento que o painel não consegue ler simplesmente não existe para nenhum cálculo: não entra no custo, não entra na receita, não entra no resultado. É o pior tipo de erro, porque não aparece como divergência — aparece como número menor, e ninguém desconfia.',
+   acao:['Abra a planilha na linha indicada.','Corrija a data para o formato dd/mm/aaaa e o valor para número (sem texto junto).','Atualize o painel e confira se o total subiu conforme esperado.'] },
+ { re:/Censo de aportes/i, agrupar:'nenhum',
+   impacto:'Aporte que não chega ao painel reduz artificialmente o capital investido pelos sócios — e capital investido é o denominador da TIR, do ROI e do payback. Todos os indicadores de retorno ficam otimistas demais enquanto o lançamento estiver faltando.',
+   acao:['Confira na aba de receitas se os lançamentos dos meses apontados existem.','Se existirem, corrija data ou categoria para que sejam reconhecidos como aporte.','Se não existirem, recupere do arquivo de backup e relance.'] },
+ { re:/sem categoria definida|sem fornecedor identificado|Descritivos vagos/i, agrupar:'nenhum',
+   impacto:'Lançamento sem categoria some de todos os rankings; sem fornecedor, é impossível auditar, negociar volume ou detectar pagamento duplicado; com descritivo genérico, ninguém consegue dizer o que foi comprado seis meses depois. Os três juntos são a causa de a categoria "Diversos" crescer até virar o maior gasto da obra sem que se saiba do quê.',
+   acao:['Preencha a categoria conforme a natureza do gasto.','Identifique o fornecedor pelo comprovante de pagamento.','Reescreva o descritivo dizendo o que foi comprado e para qual casa ou etapa.'] },
+ { re:/Parcelas de venda com numeração pulada/i, agrupar:'quem',
+   impacto:'Parcela que existe no contrato mas não aparece na planilha normalmente significa receita recebida e não registrada — ou seja, dinheiro que entrou e não está no VGV recebido nem no resultado. Também impede cobrar corretamente quem está em atraso, porque a parcela some do controle.',
+   acao:['Compare o contrato de cada casa com as parcelas lançadas.','Verifique no extrato se a parcela ausente foi recebida.','Lance a parcela recebida ou registre-a como pendente para cobrança.'] },
+ { re:/acima do valor original|acima do contratado/i, agrupar:'quem',
+   impacto:'Recebimento acima do contratado costuma ser juros e multa de atraso lançados junto com a parcela. Misturados, inflam o VGV — que serve de base para comissão e imposto — e escondem o custo real da inadimplência, que é uma informação de gestão relevante.',
+   acao:['Separe o principal da parcela do valor de juros e multa.','Lance juros e multa em receita financeira, não em venda.','Confira se a comissão do corretor foi calculada só sobre o principal.'] },
+ { re:/Receitas com categoria de compra|Receitas possivelmente lançadas em duplicidade/i, agrupar:'quem',
+   impacto:'Receita duplicada ou reembolso lançado como venda inflam o faturamento e o resultado projetado — o empreendimento parece mais rentável do que é, e decisões de distribuição de lucro podem ser tomadas sobre um número que não existe.',
+   acao:['Confirme no extrato se houve uma ou duas entradas.','Reembolso e devolução devem abater a despesa de origem, não entrar como receita.','Exclua ou reclassifique conforme o caso e recalcule o VGV.'] },
+ { re:/Candidatos a ALIMENTAÇÃO/i, agrupar:'nenhum',
+   impacto:'Enquanto a alimentação estiver embutida em folha ou em caixinha, uma obra parece não gastar com comida e a outra parece gastar demais. Isso inviabiliza a comparação de custo por operário entre as obras e esconde um gasto que, somado, é relevante no orçamento.',
+   acao:['Confirme com o gestor quais lançamentos são de fato alimentação.','Informe o período em que cada regra vigorou.','Após a validação, a reclassificação é aplicada e o comparativo entre obras se corrige.'] },
+ { re:/Categorias com uso desproporcional/i, agrupar:'nenhum',
+   impacto:'Se cada obra usa as categorias de um jeito, toda comparação entre elas vira ruído: custo de material por m², peso da mão de obra, participação da alimentação. Padronizar a classificação é pré-requisito para qualquer análise comparativa ter valor.',
+   acao:['Compare como a mesma despesa é classificada nas três obras.','Escolha a classificação correta e padronize.','Alinhe com quem lança para que o critério valha daqui em diante.'] },
+ { re:/fim de semana|termos sensíveis/i, agrupar:'quem',
+   impacto:'Pagamento fora do dia útil ou com descritivo evasivo não é irregularidade por si só, mas é onde erros e desvios costumam se esconder, porque escapam do fluxo normal de conferência e aprovação.',
+   acao:['Confirme o comprovante de cada pagamento listado.','Verifique quem autorizou e se seguiu o fluxo de aprovação.','Detalhe o descritivo para que o lançamento seja compreensível sem consulta.'] },
+ { re:/Reclassificações automáticas aplicadas/i, agrupar:'quem',
+   impacto:'Este achado é informativo, não é erro: são lançamentos que o painel reclassificou sozinho, seguindo regras confirmadas por você, para que as análises fiquem corretas. O ponto de atenção é que a PLANILHA continua com a categoria antiga — quem consultar a planilha direto vai ver um número diferente do painel. Corrigir na origem elimina essa divergência de uma vez.',
+   acao:['Confira se cada reclassificação abaixo faz sentido.','Aplique a mesma correção na planilha, na categoria de origem.','Depois de corrigido na planilha, a regra automática deixa de ser necessária — avise o gestor para removê-la.'] },
+ { re:/valor desproporcional/i, agrupar:'nenhum',
+   impacto:'Compra muito acima da média da própria categoria pode ser erro de digitação (uma casa decimal a mais), item lançado na categoria errada, ou preço fora de mercado. Qualquer das três distorce o custo da obra e a projeção de custo final, que é o número que orienta suas decisões de caixa.',
+   acao:['Confira a nota fiscal: valor, quantidade e unidade.','Se o valor estiver certo, verifique se a categoria é a adequada.','Se estiver fora de mercado, registre para renegociação com o fornecedor.'] },
+];
+function audContexto(titulo){
+  for (const c of AUD_CONTEXTO) if (c.re.test(titulo||'')) return c;
+  return { agrupar:'nenhum', impacto:'', acao:[] };
+}
+
 // Separa o item da auditoria nas suas partes para dar hierarquia ao relatório:
 // o movimento de categoria (DE → PARA) é a informação que gera a ação e vira destaque.
 function _audParseItem(it){
@@ -3534,23 +3606,29 @@ window.gerarRelatorioAud = function(i){
   const itens = a.itens.map(_audParseItem);
   const nMostrados = itens.length, nTotal = a.total || nMostrados;
 
-  // agrupa por movimento de categoria: o financeiro corrige em lote, filtrando a origem
+  const CTX = audContexto(a.titulo);
+  // agrupamento conforme o tema: por reclassificação, por favorecido, ou lista única
   const grupos = new Map();
   itens.forEach(x=>{
-    const chave = x.para ? ((x.de||'(sem categoria)')+'⟶'+x.para) : '__sem__';
-    if(!grupos.has(chave)) grupos.set(chave, {de:x.de||'(sem categoria)', para:x.para||'', itens:[], v:0});
+    let chave, rot;
+    if (CTX.agrupar==='movimento' && x.para) { chave = (x.de||'(sem categoria)')+'⟶'+x.para; rot = {de:x.de||'(sem categoria)', para:x.para}; }
+    else if (CTX.agrupar==='quem') { chave = 'Q:'+(x.quem||'—'); rot = {quem: x.quem||'—'}; }
+    else { chave = '__sem__'; rot = null; }
+    if(!grupos.has(chave)) grupos.set(chave, {de:rot&&rot.de||'', para:rot&&rot.para||'', quem:rot&&rot.quem||'', itens:[], v:0});
     const g = grupos.get(chave); g.itens.push(x); g.v += (x.num||0);
   });
   const listaG = [...grupos.values()].sort((g1,g2)=>g2.v-g1.v);
   const comMov = listaG.filter(g=>g.para);
   const totalV = listaG.reduce((s,g)=>s+g.v,0);
-  const cab = (nome, obs) => `<tr class="grp"><th colspan="5">`
-    + (nome ? `<span class="grp-de">${nome.de}</span> <span class="rel-seta">⟶</span> <span class="grp-para">${nome.para}</span>` : '<span class="grp-para">Demais lançamentos</span>')
+  const cab = (g, obs) => `<tr class="grp"><th colspan="5">`
+    + (g && g.para ? `<span class="grp-de">${g.de}</span> <span class="rel-seta">⟶</span> <span class="grp-para">${g.para}</span>`
+      : g && g.quem ? `<span class="grp-para">${g.quem}</span>`
+      : '<span class="grp-para">Lançamentos apontados</span>')
     + `<span class="grp-meta">${obs}</span></th></tr>`;
   const colunas = `<tr><th style="width:5%">#</th><th style="width:4%">✓</th><th style="width:10%">Data</th><th style="width:63%">Favorecido e descritivo</th><th style="width:18%" class="num">Valor</th></tr>`;
   let n = 0;
   const tabelaGrupo = g => `<table>
-      <thead>${cab(g.para?g:null, (g.para?fmt(g.v)+' · ':'')+g.itens.length+' lançamento'+(g.itens.length>1?'s':''))}${colunas}</thead>
+      <thead>${cab((g.para||g.quem)?g:null, (g.v>0?fmt(g.v)+' · ':'')+g.itens.length+' lançamento'+(g.itens.length>1?'s':''))}${colunas}</thead>
       <tbody>${g.itens.map(x=>{ n++; return `<tr>
         <td class="rel-n">${n}</td>
         <td class="rel-check">☐</td>
@@ -3571,9 +3649,15 @@ window.gerarRelatorioAud = function(i){
       <div class="rel-eyebrow">Formes Engenharia · ${CFG.nome} · ordem de serviço — financeiro</div>
       <h1>${a.titulo}</h1>
       <div class="rel-meta">emitido em ${hoje}${ultData?' · dados até '+ultData.toLocaleDateString('pt-BR'):''} · <strong>${nTotal} lançamento(s)</strong>${nTotal>nMostrados?` · ${nMostrados} listados (maiores valores)`:''}${totalV>0?` · total ${fmt(totalV)}`:''}</div>
-      <div class="rel-inst"><strong>O que fazer:</strong> ${a.pergunta}</div>
+      <div class="rel-achado"><strong>O que foi encontrado:</strong> ${a.resumo||a.titulo}</div>
+      ${CTX.impacto?`<h2>Por que isso importa para o negócio</h2>
+      <div class="rel-impacto">${CTX.impacto}</div>`:''}
+      <h2>Providência</h2>
+      <div class="rel-inst">${CTX.acao&&CTX.acao.length
+        ? `<ol class="rel-passos">${CTX.acao.map(p=>`<li>${p}</li>`).join('')}</ol>`
+        : ''}<div class="rel-criterio"><strong>Critério do apontamento:</strong> ${a.pergunta}</div></div>
 
-      ${comMov.length?`<h2>Resumo — corrija em lote, um bloco por vez</h2>
+      ${CTX.agrupar==='movimento'&&comMov.length?`<h2>Resumo — corrija em lote, um bloco por vez</h2>
       <table class="rel-sum"><thead><tr>
         <th style="width:36%">De (categoria atual)</th><th style="width:4%"></th><th style="width:36%">Para (categoria correta)</th><th style="width:14%" class="num">Valor</th><th style="width:10%" class="num">Lançtos</th>
       </tr></thead><tbody>
@@ -3581,7 +3665,7 @@ window.gerarRelatorioAud = function(i){
         <tr><td colspan="3">Total a reclassificar</td><td class="num rel-valor">${fmt(comMov.reduce((s,g)=>s+g.v,0))}</td><td class="num">${comMov.reduce((s,g)=>s+g.itens.length,0)}</td></tr>
       </tbody></table>`:''}
 
-      <h2>Lançamentos${comMov.length?' agrupados por reclassificação':''}</h2>
+      <h2>Lançamentos${CTX.agrupar==='movimento'&&comMov.length?' agrupados por reclassificação':CTX.agrupar==='quem'?' agrupados por favorecido':''}</h2>
       ${listaG.map(tabelaGrupo).join('')}
 
       <h2>Conferência</h2>

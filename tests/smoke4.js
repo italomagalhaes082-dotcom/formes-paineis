@@ -322,6 +322,20 @@ async function testEmp(emp, checks){
       const cssAll=[...w.document.querySelectorAll('style')].map(x=>x.textContent).join(' ');
       ok(/print-aud[^}]*position:static/.test(cssAll.replace(/\s+/g,' ')),'Impressão: overlay deixa de ser fixed (evita página repetida)');
       w.document.body.classList.remove('print-aud');
+      // conteúdo didático: impacto no negócio e providência em passos
+      ok(!!p2.querySelector('.rel-impacto'),'Didático: bloco "por que isso importa"');
+      ok(!!p2.querySelector('.rel-passos li'),'Didático: providência em passos numerados');
+      ok(/Critério do apontamento/.test(p2.textContent),'Didático: critério técnico preservado');
+      // cobertura: todo achado da auditoria precisa de contexto de negócio
+      const semCtx=(dadosAud.alerts||[]).filter(al=>{ const c=w.audContexto(al.titulo); return !c.impacto; }).map(al=>al.titulo.slice(0,40));
+      ok(semCtx.length===0,'Didático: todos os achados têm impacto de negócio'+(semCtx.length?' — faltam: '+semCtx.join(' | '):''));
+      // agrupamento por tema
+      const dup=(dadosAud.alerts||[]).find(al=>/duplicidade/i.test(al.titulo));
+      if(dup){ const k=(dadosAud.alerts||[]).indexOf(dup); const o3=w.document.getElementById('audRelOv'); if(o3)o3.remove();
+        w.gerarRelatorioAud(k); await new Promise(r=>setTimeout(r,200));
+        const p3=w.document.getElementById('audRelPapel');
+        ok(/agrupados por favorecido/.test(p3.textContent),'Didático: duplicidade agrupa por favorecido');
+      } else ok(true,'Didático: sem alerta de duplicidade no cenário');
     } else { ok(true,'Relatório: sem alerta de reclassificação neste cenário'); }
     ok(papel && papel.textContent.includes('Responsável pela correção'),'Auditoria: relatório tem campos de conferência');
     ok(papel && papel.querySelectorAll('tbody tr').length === (dadosAud.alerts[idxCom>=0?idxCom:0].itens.length),'Auditoria: relatório lista TODOS os itens do card');
