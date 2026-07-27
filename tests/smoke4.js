@@ -242,6 +242,17 @@ async function testEmp(emp, checks){
     ok(comTotal.length>0,'Auditoria: cards declaram o total real ('+comTotal.length+')');
     const mentirosos = (dadosAud.alerts||[]).filter(a=>typeof a.total==='number' && a.total>a.itens.length && a.itens.length<200);
     ok(mentirosos.length===0,'Auditoria: nenhum card trunca abaixo do teto de exibição');
+    // relatório de correção por card
+    ok(t('tab9').includes('📄 Relatório'),'Auditoria: botão de relatório em cada card');
+    ok(typeof w.gerarRelatorioAud==='function','Auditoria: gerador de relatório disponível');
+    const idxCom = (dadosAud.alerts||[]).findIndex(a=>a.itens && a.itens.length>0);
+    w.gerarRelatorioAud(idxCom>=0?idxCom:0); await new Promise(r=>setTimeout(r,200));
+    const papel = w.document.getElementById('audRelPapel');
+    ok(!!papel,'Auditoria: relatório renderiza em papel');
+    ok(papel && papel.textContent.includes('Lançamentos para correção'),'Auditoria: relatório traz a lista de correção');
+    ok(papel && papel.textContent.includes('Responsável pela correção'),'Auditoria: relatório tem campos de conferência');
+    ok(papel && papel.querySelectorAll('tbody tr').length === (dadosAud.alerts[idxCom>=0?idxCom:0].itens.length),'Auditoria: relatório lista TODOS os itens do card');
+    const ovv=w.document.getElementById('audRelOv'); if(ovv) ovv.remove();
     ok(t('tab9').includes('Candidatos a ALIMENTAÇÃO'),'Alimentação: card de candidatos');
     ok(t('tab9').includes('JCX'),'JCX: candidato na Auditoria pela regra do nome');
     ok(t('tab9').includes('÷R$14') || t('tab9').includes('operário·dias'),'Alimentação: divisibilidade da diária André (1260=14×90)');
