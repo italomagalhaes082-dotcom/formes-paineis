@@ -270,6 +270,13 @@ async function testEmp(emp, checks){
     w.switchTab(6); await new Promise(r=>setTimeout(r,250));
     const RF6=t('tab6');
     ok(RF6.includes('Indicadores do Investidor'),'RF: seção CFO');
+    // parâmetros do RF: chave por empreendimento e aviso quando faltam
+    ok(w.rfKey('vgvTotal')==='rf_jazz_vgvTotal','Parâmetros: chave por empreendimento (sobrevive à troca de planilha)');
+    const antesVgv = w.localStorage.getItem('rf_jazz_vgvTotal');
+    w.localStorage.removeItem('rf_jazz_vgvTotal'); w.localStorage.removeItem('rf_jazz_pctComissao');
+    w.renderResultadoFinal(); await new Promise(r=>setTimeout(r,250));
+    ok(t('tab6').includes('Parâmetros não preenchidos'),'Parâmetros: aviso quando VGV/percentuais faltam');
+    if (antesVgv!==null) w.localStorage.setItem('rf_jazz_vgvTotal', antesVgv);
     // aba 15 — Indicadores Financeiros
     w.switchTab(15); await new Promise(r=>setTimeout(r,400));
     const IND=t('tab15');

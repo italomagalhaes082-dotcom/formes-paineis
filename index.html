@@ -1057,7 +1057,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-e · paleta sóbria</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-f · parâmetros do RF</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -4205,12 +4205,35 @@ async function attemptBioLogin() {
 }
 
 // ── RESULTADO FINAL ────────────────────────────────────────────
-function rfKey(k) { return 'rf_'+CFG.sheetId+'_'+k; }
+function rfEmpKey(){ return new URLSearchParams(location.search).get('emp') || 'liberty'; }
+// A chave dos parâmetros é o EMPREENDIMENTO, não o sheetId: trocar a planilha
+// (como na migração do Jazz para a nativa) não pode apagar VGV, comissão e imposto.
+function rfKey(k) { return 'rf_'+rfEmpKey()+'_'+k; }
+// Planilhas já usadas por cada obra — para resgatar parâmetros salvos sob a chave antiga
+const SHEETS_LEGADOS = { jazz: ['10ImatGNjspUtjVxgpTRl-p9jA42FvhwG'] };
+function rfMigrarParametros() {
+  try {
+    const emp = rfEmpKey();
+    const chaves = ['vgvTotal','vgvRealizado','pctComissao','pctImposto','pctPermuta','incc','pctObraExec'];
+    const origens = [CFG.sheetId].concat(SHEETS_LEGADOS[emp]||[]);
+    let migrados = 0;
+    chaves.forEach(k=>{
+      const destino = 'rf_'+emp+'_'+k;
+      if (localStorage.getItem(destino) !== null) return;      // já tem valor: não sobrescreve
+      for (const sid of origens) {
+        const v = localStorage.getItem('rf_'+sid+'_'+k);
+        if (v !== null && v !== '') { localStorage.setItem(destino, v); migrados++; break; }
+      }
+    });
+    if (migrados) console.log('Parâmetros do Resultado Final resgatados da chave antiga:', migrados);
+  } catch(e) { console.warn('migração de parâmetros:', e); }
+}
 function areaTotalCfg(c) { return (c&&c.areaTotal) || ((c&&c.nCasas||0)*(c&&c.areaCasa||0)); }
 // % de obra de QUALQUER empreendimento: parâmetro salvo do Resultado Final ou padrão da config
 function pctObraDe(key) {
   const c = EMPREENDIMENTOS[key]; if (!c) return 0;
-  const salvo = parseFloat(localStorage.getItem('rf_'+c.sheetId+'_pctObraExec'));
+  let salvo = parseFloat(localStorage.getItem('rf_'+key+'_pctObraExec'));
+  if (!(salvo>0)) salvo = parseFloat(localStorage.getItem('rf_'+c.sheetId+'_pctObraExec'));
   return (salvo>0? salvo : (c.pctObraDefault||0));
 }
 function rfGet(k,def) { return localStorage.getItem(rfKey(k)) ?? String(def??''); }
@@ -4389,6 +4412,8 @@ function renderRFCalc() {
   const el = document.getElementById('rf-calc-container');
   if (!el) return;
 
+  if (!window._rfMigrado) { rfMigrarParametros(); window._rfMigrado = true; }
+
   const vgvTotal    = parseFloat(rfGet('vgvTotal',0))||0;
   const vgvReal     = parseFloat(rfGet('vgvRealizado',0))||0;
   const pctCom      = parseFloat(rfGet('pctComissao',0))||0;
@@ -4444,8 +4469,22 @@ function renderRFCalc() {
 
   // ── HELPERS ──────────────────────────────────────────────────
 
+  // Aviso de parâmetro faltando: sem VGV/percentuais o cálculo vira "custo puro"
+  // e o resultado despenca para negativo — isso precisa ser explícito, nunca silencioso.
+  const _faltando = [];
+  if (!(vgvTotal>0)) _faltando.push('VGV total');
+  if (!(pctCom>0))   _faltando.push('% de comissão');
+  if (!(pctImp>0))   _faltando.push('% de imposto');
+  const _avisoParams = _faltando.length
+    ? '<div style="background:rgba(191,107,96,.08);border:1px solid rgba(191,107,96,.45);border-radius:14px;padding:14px 16px;margin-bottom:14px">'
+      +'<div style="font-weight:600;color:#BF6B60;margin-bottom:4px">⚠ Parâmetros não preenchidos: '+_faltando.join(' · ')+'</div>'
+      +'<div style="font-size:12px;color:var(--muted);line-height:1.5">Sem eles o painel soma apenas os custos e o resultado aparece negativo — não é prejuízo, é parâmetro ausente. '
+      +'Preencha nos campos acima; comissões e impostos a pagar voltam a ser calculados sobre o VGV.</div></div>'
+    : '';
+
   el.innerHTML =
-    '<div style="background:#161b22;border:1px solid #21262d;border-radius:14px;padding:18px;margin-bottom:14px">'
+    _avisoParams
+    + '<div style="background:#161b22;border:1px solid #21262d;border-radius:14px;padding:18px;margin-bottom:14px">'
 
     // ── 1. RECEITA ───────────────────────────────────────────
     +rfSec('1. Receita','#6C8FB5')
