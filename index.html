@@ -435,6 +435,7 @@
       <button class="tab" onclick="switchTab(13)">📄 Relatório</button>
       <button class="tab" onclick="switchTab(14)">🍛 Alimentação</button>
       <button class="tab" onclick="switchTab(15)">📐 Indicadores Financeiros</button>
+      <button class="tab" onclick="switchTab(16)">💵 Receitas</button>
     </div>
   </div>
   <div class="content">
@@ -454,6 +455,7 @@
     <div class="tab-content" id="tab13"></div>
     <div class="tab-content" id="tab14"></div>
     <div class="tab-content" id="tab15"></div>
+    <div class="tab-content" id="tab16"></div>
   </div>
 </div>
 
@@ -1057,7 +1059,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-f · parâmetros do RF</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-g · aba receitas</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -2306,6 +2308,156 @@ window.aliDrill = function(key, ym) {
   </div>`;
   ov.style.display='flex';
 };
+// ═══════════ 💵 RECEITAS — conferência de classificação e VGV real ═══════════
+const _recFiltros = { busca:'', tipo:'todos', so:'todas' };
+window.recSetBusca = function(v){
+  _recFiltros.busca = v;
+  clearTimeout(window._recBuscaT);
+  window._recBuscaT = setTimeout(()=>{
+    const sy = window.scrollY; renderReceitas();
+    const inp = document.getElementById('recBusca');
+    if (inp) { const f=inp.value.length; inp.focus(); try{inp.setSelectionRange(f,f);}catch(e){} }
+    window.scrollTo(0, sy);
+  }, 350);
+};
+window.recSetTipo = function(v){ _recFiltros.tipo = v; renderReceitas(); };
+window.recSetSo   = function(v){ _recFiltros.so = v; renderReceitas(); };
+
+function renderReceitas() {
+  const el = document.getElementById('tab16');
+  if (!el) return;
+  const R = _RECEITAS || [];
+  if (!R.length) { el.innerHTML = '<div class="info-box">Nenhuma receita carregada. Confira a aba RECEITAS TOTAIS da planilha.</div>'; return; }
+
+  const hoje = new Date();
+  const TIPOS = ['Venda','INCC','VendaDistratada','Comissao','Outro'];
+  const somaOrig = a => a.reduce((s,r)=>s+(r.valOrig||0),0);
+  const somaReceb = a => a.reduce((s,r)=>s+(r.valReceb||0),0);
+  const aberto = r => Math.max(0, (r.valOrig||0) - (r.valReceb||0));
+
+  // ── universo e recortes ──
+  const vendas = R.filter(r=>r.tipo==='Venda');
+  const incc   = R.filter(r=>r.tipo==='INCC');
+  const dist   = R.filter(r=>r.tipo==='VendaDistratada');
+  const naoClass = R.filter(r=>r.tipo==='Outro');
+  const semCasa  = R.filter(r=>!r.casa && (r.tipo==='Venda'||r.tipo==='INCC'));
+  const recebidoAcima = R.filter(r=>(r.valOrig||0)>0 && (r.valReceb||0) > (r.valOrig||0)*1.001);
+  const vencidas = R.filter(r=>{ const dv=parseDate(r.dataVenc); return dv && dv<hoje && aberto(r)>1; });
+
+  // ── projeção de VGV pela base real ──
+  const contratado = somaOrig(vendas);
+  const recebidoV  = somaReceb(vendas);
+  const aReceber   = vendas.reduce((s,r)=>s+aberto(r),0);
+  const vgvRF      = parseFloat(rfGet('vgvTotal',0))||0;
+  const vgvCurada  = (typeof _GV!=='undefined' && _GV && _GV.length)
+      ? _GV.filter(g=>!String(g.status||'').toUpperCase().includes('DISPON')).reduce((s,g)=>s+(g.valor||0),0) : 0;
+
+  // ── duplicatas prováveis ──
+  const dup = [];
+  { const mapa = {};
+    R.forEach(r=>{ const k=_audNorm(r.cliente).slice(0,18)+'|'+Math.round(r.valReceb||0);
+      if (!(r.valReceb>0)) return;
+      (mapa[k]=mapa[k]||[]).push(r); });
+    Object.values(mapa).forEach(g=>{ if(g.length<2) return;
+      g.sort((a,b)=>(parseDate(a.dataComp)||0)-(parseDate(b.dataComp)||0));
+      for(let i=1;i<g.length;i++){ const d1=parseDate(g[i-1].dataComp), d2=parseDate(g[i].dataComp);
+        if(d1&&d2&&Math.abs(d2-d1)<=7*86400000) dup.push([g[i-1],g[i]]); } });
+  }
+
+  const kpi=(l,v,s,c,h)=>`<div class="kpi" style="border-top:2px solid ${c}"><div class="kpi-label">${l}${h?hintIcon(h):''}</div><div class="kpi-value" style="color:${c}">${v}</div>${s?`<div class="kpi-sub">${s}</div>`:''}</div>`;
+
+  // ── tabela filtrada ──
+  let lista = R.slice();
+  if (_recFiltros.tipo!=='todos') lista = lista.filter(r=>r.tipo===_recFiltros.tipo);
+  if (_recFiltros.so==='aberto')  lista = lista.filter(r=>aberto(r)>1);
+  if (_recFiltros.so==='vencidas')lista = lista.filter(r=>{ const dv=parseDate(r.dataVenc); return dv&&dv<hoje&&aberto(r)>1; });
+  if (_recFiltros.so==='naoclass')lista = lista.filter(r=>r.tipo==='Outro' || !r.casa);
+  if (_recFiltros.busca.trim()){
+    const b=_audNorm(_recFiltros.busca);
+    lista = lista.filter(r=>_audNorm(r.cliente).includes(b)||_audNorm(r.desc).includes(b)||_audNorm(r.cat||'').includes(b)||String(r.casa||'').includes(b));
+  }
+  lista.sort((a,b)=>(parseDate(b.dataComp)||0)-(parseDate(a.dataComp)||0));
+  const LIM=300, mostradas=lista.slice(0,LIM);
+
+  el.innerHTML = `
+    <div class="info-box" style="border:1px solid #6C8FB540;margin-bottom:12px"><span>💵</span><div><strong>Receitas de ${CFG.nome}</strong> — ${R.length.toLocaleString('pt-BR')} lançamentos. Aqui se confere a classificação (tipo e casa) e se apura o <strong>VGV pela base real</strong>, independente do valor informado no Resultado Final.</div></div>
+
+    <div class="kpi-grid">
+      ${kpi('Recebido total', fmt(somaReceb(R)), R.length+' lançamentos', '#6D9E7F')}
+      ${kpi('Contratado (vendas)', fmt(contratado), vendas.length+' parcelas de venda', '#6C8FB5','Soma do valor ORIGINAL das parcelas de venda — o que foi contratado, independente do que já entrou.')}
+      ${kpi('Saldo a receber', fmt(aReceber), (contratado>0?(aReceber/contratado*100).toFixed(1)+'% do contratado':'—'), '#C4A55C','Contratado menos recebido, parcela a parcela.')}
+      ${kpi('INCC recebido', fmt(somaReceb(incc)), incc.length+' lançamentos · não incide comissão', '#8E7FA8')}
+    </div>
+
+    <div class="section-title" style="margin-top:16px">📊 Projeção de VGV pela base real${hintIcon('Compara três fontes do mesmo número: as parcelas lançadas nas receitas, a apuração curada de vendas e o valor digitado no Resultado Final. Divergência entre elas é erro de lançamento, de apuração ou de parâmetro — nunca as três estão certas ao mesmo tempo.')}</div>
+    <div class="table-wrap" style="margin-bottom:14px"><table>
+      <thead><tr><th>Fonte</th><th style="text-align:right">Valor</th><th>Observação</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Receitas lançadas</strong> (contratado)</td><td style="text-align:right;font-weight:600">${fmt(contratado)}</td><td style="font-size:11px;color:var(--muted)">soma das parcelas de venda desta planilha</td></tr>
+        <tr><td>Recebido até hoje</td><td style="text-align:right">${fmt(recebidoV)}</td><td style="font-size:11px;color:var(--muted)">${contratado>0?(recebidoV/contratado*100).toFixed(1)+'% do contratado':''}</td></tr>
+        <tr><td>Ainda a receber</td><td style="text-align:right">${fmt(aReceber)}</td><td style="font-size:11px;color:var(--muted)">parcelas em aberto${vencidas.length?` · <span style="color:#BF6B60">${vencidas.length} já vencida(s)</span>`:''}</td></tr>
+        ${vgvCurada?`<tr><td>VGV da apuração curada</td><td style="text-align:right">${fmt(vgvCurada)}</td><td style="font-size:11px;color:${Math.abs(vgvCurada-contratado)>contratado*0.05?'#C4A55C':'var(--muted)'}">${contratado>0?'Δ '+fmt(vgvCurada-contratado)+' vs receitas lançadas':''}</td></tr>`:''}
+        <tr><td>VGV informado no Resultado Final</td><td style="text-align:right">${vgvRF>0?fmt(vgvRF):'<span style="color:#BF6B60">não preenchido</span>'}</td><td style="font-size:11px;color:${vgvRF>0&&Math.abs(vgvRF-(vgvCurada||contratado))>(vgvCurada||contratado)*0.05?'#C4A55C':'var(--muted)'}">${vgvRF>0?'Δ '+fmt(vgvRF-(vgvCurada||contratado))+' vs base real':'preencha para liberar TIR, ROI e margem'}</td></tr>
+      </tbody></table></div>
+
+    ${fxCard('Recebimento por mês','g_rec_mes','<div class="legend"><span><i style="background:#6D9E7F"></i>Recebido</span></div>','Últimos 18 meses fechados, todos os tipos de receita.')}
+    ${fxCard('Composição por tipo','g_rec_tipo','','Quanto cada natureza de receita representa no total recebido.')}
+
+    <div class="section-title" style="margin-top:16px">🔍 Conferência de classificação</div>
+    <div class="kpi-grid">
+      ${kpi('Sem tipo definido', naoClass.length, fmt(somaReceb(naoClass))+' — caem em "Outro"', naoClass.length?'#C4A55C':'#6D9E7F','Lançamentos que o painel não conseguiu classificar como venda, INCC, distrato ou comissão: ficam de fora das análises por natureza.')}
+      ${kpi('Sem casa identificada', semCasa.length, fmt(somaReceb(semCasa))+' — não entram por casa', semCasa.length?'#C4A55C':'#6D9E7F','Venda ou INCC sem número de casa no descritivo: não aparecem na Gestão de Vendas nem nos cruzamentos por unidade.')}
+      ${kpi('Recebido acima do contratado', recebidoAcima.length, fmt(recebidoAcima.reduce((s,r)=>s+((r.valReceb||0)-(r.valOrig||0)),0))+' de excedente', recebidoAcima.length?'#BF6B60':'#6D9E7F','Parcelas cujo valor recebido supera o original — juros, multa lançada junto, ou erro de digitação.')}
+      ${kpi('Prováveis duplicatas', dup.length, 'mesmo cliente e valor em até 7 dias', dup.length?'#C4A55C':'#6D9E7F')}
+    </div>
+    ${vencidas.length?`<div class="info-box" style="border:1px solid #C4A55C66;background:rgba(196,165,92,.06);margin-top:12px"><span style="color:#C4A55C">⏰</span><div><strong>Inadimplência: ${vencidas.length} parcela(s) vencida(s) e em aberto, somando ${fmt(vencidas.reduce((s,r)=>s+aberto(r),0))}.</strong><br>${vencidas.slice(0,6).map(r=>`· ${r.dataVenc} · ${String(r.cliente).slice(0,30)}${r.casa?' (CS '+r.casa+')':''} — ${fmt(aberto(r))}`).join('<br>')}${vencidas.length>6?`<br><span style="font-size:11px;color:var(--muted)">…e mais ${vencidas.length-6}. Use o filtro "vencidas" abaixo.</span>`:''}</div></div>`:''}
+    ${naoClass.length?`<div class="info-box" style="margin-top:10px"><span>🏷️</span><div><strong>Amostra dos não classificados:</strong><br>${naoClass.slice(0,6).map(r=>`· ${r.dataComp} · ${String(r.cliente).slice(0,26)} · "${String(r.desc).slice(0,40)}" — ${fmt(r.valReceb)}`).join('<br>')}<br><span style="font-size:11px;color:var(--muted)">Padronizar o descritivo com "CASA nn" e a origem/categoria resolve a maioria.</span></div></div>`:''}
+
+    <div class="section-title" style="margin-top:16px">Lançamentos</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <input type="text" id="recBusca" placeholder="🔍  cliente, descritivo, casa…" value="${_recFiltros.busca}"
+        oninput="recSetBusca(this.value)"
+        style="flex:1;min-width:200px;background:var(--card2);border:1px solid var(--border);border-radius:9px;padding:9px 12px;color:var(--text);font-family:var(--font);font-size:13px">
+      <select onchange="recSetTipo(this.value)" style="background:var(--card2);border:1px solid var(--border);border-radius:9px;padding:9px 12px;color:var(--text);font-size:13px">
+        <option value="todos"${_recFiltros.tipo==='todos'?' selected':''}>todos os tipos</option>
+        ${TIPOS.map(t=>`<option value="${t}"${_recFiltros.tipo===t?' selected':''}>${t}</option>`).join('')}
+      </select>
+      <select onchange="recSetSo(this.value)" style="background:var(--card2);border:1px solid var(--border);border-radius:9px;padding:9px 12px;color:var(--text);font-size:13px">
+        <option value="todas"${_recFiltros.so==='todas'?' selected':''}>todas</option>
+        <option value="aberto"${_recFiltros.so==='aberto'?' selected':''}>com saldo em aberto</option>
+        <option value="vencidas"${_recFiltros.so==='vencidas'?' selected':''}>vencidas em aberto</option>
+        <option value="naoclass"${_recFiltros.so==='naoclass'?' selected':''}>sem tipo ou sem casa</option>
+      </select>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-family:'DM Mono',monospace">${lista.length.toLocaleString('pt-BR')} lançamento(s) · recebido ${fmt(somaReceb(lista))} · em aberto ${fmt(lista.reduce((s,r)=>s+aberto(r),0))}${lista.length>LIM?` · exibindo os ${LIM} mais recentes`:''}</div>
+    <div class="table-wrap" style="max-height:620px;overflow:auto"><table>
+      <thead style="position:sticky;top:0;background:var(--card)"><tr><th>Competência</th><th>Cliente</th><th>Descritivo</th><th>Tipo</th><th style="text-align:right">Original</th><th style="text-align:right">Recebido</th><th style="text-align:right">Aberto</th></tr></thead>
+      <tbody>${mostradas.map(r=>{
+        const ab=aberto(r); const dv=parseDate(r.dataVenc); const venc = dv && dv<hoje && ab>1;
+        return `<tr>
+          <td style="font-family:'DM Mono',monospace;font-size:10.5px;white-space:nowrap">${r.dataComp||'—'}</td>
+          <td style="font-size:11.5px">${String(r.cliente||'—').slice(0,30)}</td>
+          <td style="font-size:11px;color:var(--muted)">${String(r.desc||'').slice(0,44)}</td>
+          <td style="font-size:10.5px;color:${r.tipo==='Outro'?'#C4A55C':'var(--muted)'}">${r.tipo}${r.casa?' · CS'+r.casa:''}</td>
+          <td style="text-align:right;font-size:11px">${r.valOrig?fmt(r.valOrig):'—'}</td>
+          <td style="text-align:right;font-size:11px;font-weight:600">${r.valReceb?fmt(r.valReceb):'—'}</td>
+          <td style="text-align:right;font-size:11px;color:${venc?'#BF6B60':ab>1?'#C4A55C':'var(--text-3)'}">${ab>1?fmt(ab)+(venc?' ⏰':''):'—'}</td></tr>`;}).join('')}
+      </tbody></table></div>`;
+
+  // gráficos
+  const s = (function(){
+    const m={}; R.forEach(r=>{ const d=parseDate(r.dataComp); if(!d) return;
+      const ym=d.getFullYear()*100+d.getMonth()+1; m[ym]=(m[ym]||0)+(r.valReceb||0); });
+    const ymH=hoje.getFullYear()*100+hoje.getMonth()+1;
+    const yms=Object.keys(m).map(Number).sort((a,b)=>a-b).filter(ym=>ym<ymH).slice(-18);
+    return {labels:yms.map(_ymLabel), values:yms.map(ym=>m[ym]||0)};
+  })();
+  if (s.labels.length) fxLinhas(document.getElementById('g_rec_mes'),
+    {labels:s.labels, series:[{values:s.values, color:'#6D9E7F', area:'rgba(109,158,127,.13)'}], alt:'recebimento mensal'});
+  const porTipo = TIPOS.map(t=>({nome:t, valor: somaReceb(R.filter(r=>r.tipo===t))})).filter(x=>x.valor>0);
+  fxBarrasH(document.getElementById('g_rec_tipo'), porTipo);
+}
+
 // ═══════════ 📐 INDICADORES FINANCEIROS — visão de CFO ═══════════
 function renderIndicadores() {
   const el = document.getElementById('tab15');
@@ -4114,6 +4266,7 @@ function switchTab(i) {
   else if(i===13) renderRelatorio();
   else if(i===14) renderAlimentacao();
   else if(i===15) renderIndicadores();
+  else if(i===16) renderReceitas();
   else setTimeout(()=>buildCharts(i),80);
 }
 

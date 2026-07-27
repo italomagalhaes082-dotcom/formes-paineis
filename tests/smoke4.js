@@ -139,6 +139,20 @@ async function testEmp(emp, checks){
     ok(t('tab3').includes('28/12/2024') && t('tab3').includes('16/03/2026'),'Retiradas com dia>12 presentes no histórico');
     w.switchTab(0); await new Promise(r=>setTimeout(r,100));
     ok(t('tab0').includes('Rendimentos de Aplicações'),'KPI Rendimentos na aba Geral');
+    // aba Receitas
+    w.switchTab(16); await new Promise(r=>setTimeout(r,400));
+    const REC=t('tab16');
+    ok(REC.includes('Projeção de VGV pela base real'),'Receitas: projeção de VGV com as três fontes');
+    ok(REC.includes('Conferência de classificação'),'Receitas: bloco de conferência');
+    ok(REC.includes('Sem casa identificada') && REC.includes('Sem tipo definido'),'Receitas: checks de classificação');
+    ok(REC.includes('Lançamentos') && REC.includes('recBusca'),'Receitas: tabela com busca');
+    ok(!!w.document.querySelector('#tab16 svg.chart') || REC.includes('Sem dados'),'Receitas: gráfico mensal');
+    // busca preserva o texto (mesmo padrão corrigido em despesas)
+    const ib = w.document.getElementById('recBusca');
+    if (ib) { ib.value='ma'; w.recSetBusca('ma'); await new Promise(r=>setTimeout(r,600)); }
+    const ib2 = w.document.getElementById('recBusca');
+    ok(ib2 && ib2.value==='ma','Receitas: busca preserva o texto após re-render');
+    w.recSetBusca(''); await new Promise(r=>setTimeout(r,500));
     // regressão dataComp: com receitas presentes, a série de receita da aba 15 não pode vir vazia
     w.switchTab(15); await new Promise(r=>setTimeout(r,450));
     const boxRD = w.document.querySelector('#tab15 #g_ind_rd');
