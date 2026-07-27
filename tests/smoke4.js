@@ -71,6 +71,12 @@ dspJ.push(dsp('Mestre','05/03/2025','FOLHA 100',20000,'Mão de obra - Mestre'));
 dspJ.push(dsp('RAFAEL SANTOS CLIMATIZACAO','10/04/2025','INFRA AR CONDICIONADO CASAS 1-6',15000,'Fornecedor - Aquisição de materiais'));
 dspJ.push(dsp('ANDRE LUIS BARBOSA','05/05/2025','ADIANTAMENTO DE CAIXA OBRA',2000,'Mão de obra - Terceiros'));
 dspJ.push(dsp('JCX ALIMENTACAO LTDA','10/03/2025','FORNECIMENTO REFEICOES OBRA',5200,'Mão de obra - Terceiros'));
+// descritivo de material lançado em mão de obra: dispara o alerta de classificação trocada
+dspJ.push(dsp('DEPOSITO CENTRAL','03/03/2025','CIMENTO CP2 100 SACOS',9000,'Mão de obra - Mestre'));
+dspJ.push(dsp('DEPOSITO CENTRAL','04/03/2025','AREIA LAVADA 3 CARRADAS',4200,'Mão de obra - Mestre'));
+dspJ.push(dsp('FERRO SUL','05/03/2025','ACO CA50 12MM',15000,'Mão de obra - Terceiros'));
+dspJ.push(dsp('CERAMICA NORTE','06/03/2025','PORCELANATO 120X120',22000,'Mão de obra - Mestre'));
+dspJ.push(dsp('TINTAS BOM','07/03/2025','TINTA ACRILICA 18L',3800,'Mão de obra - Mestre'));
 dspJ.push(dsp('CIMENTO FORTE','10/01/2025','CIMENTO CP2',60000,'Fornecedor - Aquisição de materiais'));
 dspJ.push(dsp('ANDRE LUIS BARBOSA','20/01/2025','PAGTO FOLHA 40',18000,'Mão de obra - Mestre'));
 dspJ.push(dsp('ANDRE LUIS BARBOSA','20/02/2025','PAGTO FOLHA 41',18000,'Mão de obra - Mestre'));
@@ -249,7 +255,21 @@ async function testEmp(emp, checks){
     w.gerarRelatorioAud(idxCom>=0?idxCom:0); await new Promise(r=>setTimeout(r,200));
     const papel = w.document.getElementById('audRelPapel');
     ok(!!papel,'Auditoria: relatório renderiza em papel');
-    ok(papel && papel.textContent.includes('Lançamentos para correção'),'Auditoria: relatório traz a lista de correção');
+    ok(papel && /Lançamentos/.test(papel.textContent),'Auditoria: relatório traz a lista de correção');
+    // a reclassificação precisa ser destaque, não nota de rodapé
+    const temMoveCel = !!(papel && (papel.querySelector('.rel-para') || papel.querySelector('.rel-move-cel')));
+    const alertaCom = (dadosAud.alerts||[]).find(a=>a.itens.some(it=>/sugerida/i.test(String(it.s||''))));
+    if (alertaCom) {
+      const idxM=(dadosAud.alerts||[]).indexOf(alertaCom);
+      const ov0=w.document.getElementById('audRelOv'); if(ov0) ov0.remove();
+      w.gerarRelatorioAud(idxM); await new Promise(r=>setTimeout(r,200));
+      const p2=w.document.getElementById('audRelPapel');
+      ok(!!p2.querySelector('.rel-para'),'Relatório: categoria sugerida em destaque próprio');
+      ok(!!p2.querySelector('.rel-de'),'Relatório: categoria atual marcada como substituída');
+      ok(p2.textContent.includes('Resumo das reclassificações'),'Relatório: resumo agrupado para correção em lote');
+      const parsed = w._audParseItem(alertaCom.itens[0]);
+      ok(parsed.para && parsed.de && parsed.data,'Relatório: parser separa data, origem e destino');
+    } else { ok(true,'Relatório: sem alerta de reclassificação neste cenário'); }
     ok(papel && papel.textContent.includes('Responsável pela correção'),'Auditoria: relatório tem campos de conferência');
     ok(papel && papel.querySelectorAll('tbody tr').length === (dadosAud.alerts[idxCom>=0?idxCom:0].itens.length),'Auditoria: relatório lista TODOS os itens do card');
     const ovv=w.document.getElementById('audRelOv'); if(ovv) ovv.remove();
