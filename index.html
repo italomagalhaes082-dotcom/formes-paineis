@@ -1059,7 +1059,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-h · receitas espelhando despesas</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-i · descartes visíveis</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -2474,6 +2474,25 @@ function renderReceitas() {
         ${vgvCurada?`<tr><td>VGV da apuração curada</td><td style="text-align:right">${fmt(vgvCurada)}</td><td style="font-size:11px;color:${Math.abs(vgvCurada-contratado)>contratado*0.05?'#C4A55C':'var(--muted)'}">Δ ${fmt(vgvCurada-contratado)} vs receitas lançadas</td></tr>`:''}
         <tr><td>VGV informado no Resultado Final</td><td style="text-align:right">${vgvRF>0?fmt(vgvRF):'<span style="color:#BF6B60">não preenchido</span>'}</td><td style="font-size:11px;color:var(--muted)">${vgvRF>0?'Δ '+fmt(vgvRF-(vgvCurada||contratado))+' vs base real':'preencha para liberar TIR, ROI e margem'}</td></tr>
       </tbody></table></div>
+
+    ${(function(){
+      const D = window._recDescartadas || [];
+      if (!D.length) return '';
+      const porCat = {};
+      D.forEach(r=>{ const c=r.cat||'(sem categoria)'; (porCat[c]=porCat[c]||{v:0,n:0,ex:r}).v+=r.valor; porCat[c].n++; });
+      const lista = Object.entries(porCat).sort((a,b)=>b[1].v-a[1].v);
+      const total = D.reduce((s,r)=>s+r.valor,0);
+      return `<div class="section-title" style="margin-top:16px">⚠️ Lançamentos descartados na carga${hintIcon('Regra herdada do parser: lançamento com origem "Lançamento Financeiro" e sem número de casa no descritivo é ignorado. Boa parte do que ela derruba é receita legítima — INCC, personalização, reembolso de fornecedor — que some de TODOS os cálculos: recebido, VGV, resultado.')}</div>
+      <div class="info-box" style="border:1px solid #BF6B6066;background:rgba(191,107,96,.06);margin-bottom:10px"><span style="color:#BF6B60">⚠</span><div><strong>${D.length} lançamento(s), somando ${fmt(total)}, não entram em nenhum cálculo do painel.</strong><br>A regra atual ignora todo lançamento de origem "Lançamento Financeiro" sem número de casa no descritivo. Aportes e rendimentos são capturados antes e não estão nesta lista — o que resta aqui é receita de verdade.</div></div>
+      <div class="table-wrap" style="margin-bottom:14px"><table>
+        <thead><tr><th>Categoria descartada</th><th style="text-align:right">Valor</th><th style="text-align:right">Lançtos</th><th>Exemplo de descritivo</th></tr></thead>
+        <tbody>${lista.map(([c,g])=>`<tr>
+          <td style="font-size:11.5px">${c}</td>
+          <td style="text-align:right;font-weight:600;color:#BF6B60">${fmt(g.v)}</td>
+          <td style="text-align:right;color:var(--muted);font-size:10.5px">${g.n}</td>
+          <td style="font-size:10.5px;color:var(--muted)">${String(g.ex.desc).slice(0,42)}</td></tr>`).join('')}
+        </tbody></table></div>`;
+    })()}
 
     <div class="section-title">🔎 Inconsistências encontradas na leitura dos descritivos${totalInc?` <span style="color:#C4A55C">(${totalInc})</span>`:''}</div>
     ${totalInc===0?'<div class="info-box"><span>✓</span><div>Nenhuma inconsistência nos critérios atuais.</div></div>':''}
@@ -4883,6 +4902,7 @@ let _RENDIMENTOS = [];
 function parseReceitasRows(allRows) {
   // Retorna {receitas, aportes, rendimentos} — colunas detectadas pelo cabeçalho
   window._censoReceitas = { brutas: allRows.length, porAnoAportes: {}, primeirasLinhas: allRows.slice(1,4).map(r=>String(r&&r[3]||'').slice(0,12)) };
+  window._recDescartadas = [];
   const M = detectCols(allRows, "rec");
   const rows = allRows.slice(M.hdr + 1);
   const receitas=[], aportes=[], rendimentos=[];
@@ -4921,7 +4941,17 @@ function parseReceitasRows(allRows) {
       if (valReceb > 0) rendimentos.push({ data: dataComp, valor: valReceb, desc });
       return;
     }
-    if (oriU.includes('LANÇAMENTO FINANCEIRO') && !extrairCasa(desc)) return;
+    if (oriU.includes('LANÇAMENTO FINANCEIRO') && !extrairCasa(desc)) {
+      // Regra herdada: lançamento financeiro sem casa no descritivo é ignorado.
+      // Registra tudo que ela derruba — parte é receita legítima (INCC, personalização,
+      // reembolso de fornecedor) e some de todos os cálculos sem deixar rastro.
+      const _v = valReceb || valOrig;
+      if (_v > 0) {
+        window._recDescartadas = window._recDescartadas || [];
+        window._recDescartadas.push({ data: dataComp, cliente, desc, cat: catRaw || '(sem categoria)', valor: _v });
+      }
+      return;
+    }
     const casa = extrairCasa(desc);
     const tipo = isIncc(desc) || catU.includes('INCC') || catU.includes('IGPM') ? 'INCC'
                : descU.includes('DISTR') ? 'VendaDistratada'

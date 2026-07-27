@@ -146,6 +146,7 @@ async function testEmp(emp, checks){
     ok(REC.includes('Categorias da planilha'),'Receitas: ranking de categorias como em Despesas');
     ok(REC.includes('Natureza (classificação do painel)'),'Receitas: ranking por natureza');
     ok(REC.includes('Inconsistências encontradas'),'Receitas: bloco de inconsistências dos descritivos');
+    ok(typeof w._recDescartadas !== 'undefined','Receitas: descartes da carga são registrados');
     ok(REC.includes('ver todas'),'Receitas: KPI abre todos os lançamentos');
     ok(!!w.document.querySelector('#tab16 svg.chart') || REC.includes('Sem dados'),'Receitas: gráfico mensal');
     // drill: todos os lançamentos, com busca e ordenação (mesma mecânica de Despesas)
