@@ -83,6 +83,12 @@ dspJ.push(dsp('MARMORARIA SUL','09/03/2025','MAO DE OBRA DE PEDRA SOLEIRAS',5200
 // precedência 2: compra em depósito -> deve sugerir AQUISIÇÃO DE MATERIAIS
 dspJ.push(dsp('JOEL MATERIAIS','10/03/2025','COMPRA MESTRE OBRA',6400,'Mão de obra - Mestre'));
 dspJ.push(dsp('DEPOSITO SAO JORGE','11/03/2025','MATERIAL DIVERSO MESTRE',5100,'Mão de obra - Mestre'));
+// serviço de obra sem dizer "mão de obra" -> deve sugerir MO
+dspJ.push(dsp('JOSE EDIVAN BATISTA','12/03/2025','SERVICOS ASSENTAMENTO PORCELANATO CS 54',2480,'Seguranca/Vigia/Manutenção'));
+dspJ.push(dsp('ANTONIO GESSO','13/03/2025','REBOCO DE GESSO CS 44',3100,'Aquisição de Materiais'));
+// produto que CITA reboco/chapisco -> deve continuar como material (falso positivo a evitar)
+dspJ.push(dsp('COMERCIAL MAIA','14/03/2025','CUNHA E ESPONJA DE REBOCO NF 1380587',890,'Aquisição de Materiais'));
+dspJ.push(dsp('CREA CE','15/03/2025','ART DE EXECUCAO',250,'Taxas/Licenças/Alvará'));
 dspJ.push(dsp('CIMENTO FORTE','10/01/2025','CIMENTO CP2',60000,'Fornecedor - Aquisição de materiais'));
 dspJ.push(dsp('ANDRE LUIS BARBOSA','20/01/2025','PAGTO FOLHA 40',18000,'Mão de obra - Mestre'));
 dspJ.push(dsp('ANDRE LUIS BARBOSA','20/02/2025','PAGTO FOLHA 41',18000,'Mão de obra - Mestre'));
@@ -285,6 +291,14 @@ async function testEmp(emp, checks){
       ok(joel && /materiais/i.test(joel.para),'Precedência: compra no depósito Joel sugere Aquisição de materiais');
       const dep = todosItens.find(x=>/DEPOSITO SAO JORGE/i.test(x.quem));
       ok(dep && /materiais/i.test(dep.para),'Precedência: depósito sugere materiais mesmo com "mestre" no descritivo');
+      const servAssent = todosItens.find(x=>/SERVICOS ASSENTAMENTO PORCELANATO/i.test(x.desc));
+      ok(servAssent && /Mão de obra/i.test(servAssent.para),'Serviço: "serviços assentamento porcelanato" sugere Mão de obra');
+      const reboco = todosItens.find(x=>/REBOCO DE GESSO/i.test(x.desc));
+      ok(reboco && /Mão de obra/i.test(reboco.para),'Serviço: "reboco de gesso" sugere Mão de obra');
+      const esponja = todosItens.find(x=>/ESPONJA DE REBOCO/i.test(x.desc));
+      ok(!esponja || /materiais/i.test(esponja.para),'Serviço: "esponja de reboco" NÃO vira mão de obra (é produto)');
+      const art = todosItens.find(x=>/ART DE EXECUCAO/i.test(x.desc));
+      ok(!art,'Serviço: ART do CREA não é confundida com execução de obra');
       const cel=p2.querySelector('.rel-valor');
       const estilo=cel? (cel.getAttribute('class')||'') : '';
       ok(!!cel,'Relatório: coluna de valor presente');

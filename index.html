@@ -1093,7 +1093,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-q · precedência MO × material</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-r · serviços de obra</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -3765,6 +3765,14 @@ async function runAuditoria(progressCb) {
     // ordem da lista fazia vencer material. Agora o serviço manda sempre.
     const RE_MO_DESC = /M[ÃA]O\s*-?\s*DE\s*-?\s*OBRA|\bMDO\b|EMPREITAD|EMPREITEIR|\bM\.?O\.?\s/;
     const RE_MO_MESTRE = /\bMESTRE\b|\bFOLHA\b/;
+    // Precedência 1b: descritivo que descreve um SERVIÇO de obra, mesmo sem dizer
+    // "mão de obra" — "SERVIÇOS ASSENTAMENTO PORCELANATO", "REBOCO DE GESSO".
+    // A estrutura da frase separa serviço de produto: "REBOCO DE GESSO" é serviço,
+    // "ESPONJA DE REBOCO" é material (o substantivo vem antes).
+    const RE_MO_SERV = /\bSERVI[ÇC]OS?\s+(DE\s+)?(ASSENTAMENT|INSTALA|EXECU|MONTAGEM|COLOCA|PINTUR|ALVENARIA|IMPERMEABILIZA|ACABAMENT|PEDREIR|GESSO|EL[ÉE]TRIC|HIDR[ÁA]UL)|(ASSENTAMENT\w*|REBOCO|CHAPISCO|EMBO[ÇC]O|CONTRAPISO|LEVANTE|ALVENARIA)\s+(DE|DO|DA|DOS|DAS)\s/;
+    // guardas: nota fiscal de produto, ferramenta de aplicar, e termos fiscais que
+    // contêm "execução"/"aplicação" sem serem serviço de obra (ART do CREA, IRRF)
+    const RE_NAO_SERV = /\bART\b|IRRF|\bIOF\b|\bDARF\b|S\/\s*APLICA|\bNF\b|ESPONJA|DESEMPENADEIRA|COLHER/;
     // ── Precedência 2: compra em depósito/loja de material é AQUISIÇÃO, mesmo que
     // o descritivo cite mestre ou obra. Lista extensível de fornecedores-depósito.
     const FORN_DEPOSITO = /\bJOEL\b|DEP[OÓ]SITO|DEPOSITO|MATERIAIS DE CONSTRU|MAT\.? CONSTRU|CONSTRU[ÇC][ÃA]O LTDA|HOME CENTER|LOJA DE MATERIA|COMERCIAL DE MATERIA|CASA DO CONSTRUTOR/;
@@ -3779,7 +3787,9 @@ async function runAuditoria(progressCb) {
       const FR=FORN_REGRA.find(x=>fU.includes(x.f));
       if (FR){ if(!cU.includes(FR.marca)) hits.push({r, sug:FR.sug}); return; }
       // Precedência 1 — serviço de mão de obra vence qualquer palavra de material
-      if (RE_MO_DESC.test(dU)) {
+      const ehServicoObra = RE_MO_SERV.test(dU) && !RE_NAO_SERV.test(dU)
+        && !/IMPOST|TRIBUT|TAXA|LICEN|ALVAR/.test(cU);
+      if (RE_MO_DESC.test(dU) || ehServicoObra) {
         if (cU.includes("MAO DE OBRA")) return;                     // já está certo
         const sugMO = RE_MO_MESTRE.test(dU) ? "Mão de obra - Mestre" : "Mão de obra - Terceiros";
         hits.push({r, sug: sugMO}); return;
