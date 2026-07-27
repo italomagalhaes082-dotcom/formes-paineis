@@ -1093,7 +1093,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-p · resumo com valores</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-q · precedência MO × material</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -3760,6 +3760,15 @@ async function runAuditoria(progressCb) {
     ];
     const RE_IMP=/\b(DARF|INSS|PIS|COFINS|IRPJ|CSLL|ISS)\b/;
     const WHITELIST=["JOSE MILTON","ROBERIO MESQUITA","ACPA","DENVER"];
+    // ── Precedência 1: descritivo com "mão de obra" é SERVIÇO, não material.
+    // "MÃO DE OBRA PORCELANATO" casava com material (porcelanato) e com MO, e a
+    // ordem da lista fazia vencer material. Agora o serviço manda sempre.
+    const RE_MO_DESC = /M[ÃA]O\s*-?\s*DE\s*-?\s*OBRA|\bMDO\b|EMPREITAD|EMPREITEIR|\bM\.?O\.?\s/;
+    const RE_MO_MESTRE = /\bMESTRE\b|\bFOLHA\b/;
+    // ── Precedência 2: compra em depósito/loja de material é AQUISIÇÃO, mesmo que
+    // o descritivo cite mestre ou obra. Lista extensível de fornecedores-depósito.
+    const FORN_DEPOSITO = /\bJOEL\b|DEP[OÓ]SITO|DEPOSITO|MATERIAIS DE CONSTRU|MAT\.? CONSTRU|CONSTRU[ÇC][ÃA]O LTDA|HOME CENTER|LOJA DE MATERIA|COMERCIAL DE MATERIA|CASA DO CONSTRUTOR/;
+    const RE_MATERIAL_DESC = /CIMENTO|ACO CA|VERGALH|PORCELANATO|BLOCO|ARGAMASSA|TELHA|TINTA|GRANITO|AREIA|BRITA|ATERRO|CARRADA|MATERIAL|MATERIAIS|FERRAGEM|MADEIRA|CANO|TUBO|FIO |CABO |REJUNTE|CERAMIC/;
     const hits=[];
     D.forEach(r=>{
       const dU=_audNorm(r.descOriginal), cU=_audNorm(r.categoria), fU=_audNorm(r.fornecedor);
@@ -3769,6 +3778,17 @@ async function runAuditoria(progressCb) {
       const FORN_REGRA=[{f:"RAFAEL SANTOS", marca:"MAO DE OBRA", sug:"Mão de obra - Terceiros"}];
       const FR=FORN_REGRA.find(x=>fU.includes(x.f));
       if (FR){ if(!cU.includes(FR.marca)) hits.push({r, sug:FR.sug}); return; }
+      // Precedência 1 — serviço de mão de obra vence qualquer palavra de material
+      if (RE_MO_DESC.test(dU)) {
+        if (cU.includes("MAO DE OBRA")) return;                     // já está certo
+        const sugMO = RE_MO_MESTRE.test(dU) ? "Mão de obra - Mestre" : "Mão de obra - Terceiros";
+        hits.push({r, sug: sugMO}); return;
+      }
+      // Precedência 2 — compra em depósito/loja de material é aquisição, não mão de obra
+      if (FORN_DEPOSITO.test(fU) || (FORN_DEPOSITO.test(dU) && RE_MATERIAL_DESC.test(dU))) {
+        if (cU.includes("MATERIA")) return;                          // já está certo
+        hits.push({r, sug:"Fornecedor - Aquisição de materiais"}); return;
+      }
       const casadas = FAMILIAS.filter(F=>F.kw.some(k=>dU.includes(k)));
       if (RE_IMP.test(dU)) casadas.push({marca:"IMPOST", sug:"Impostos"});
       if (!casadas.length) return;
@@ -3779,7 +3799,7 @@ async function runAuditoria(progressCb) {
     if (hits.length>3) alerts.push({ sev:"media", icon:"🔀",
       titulo:"Descritivo sugere uma categoria, lançamento está em outra",
       resumo: hits.length+" lançamento(s) com possível classificação trocada",
-      pergunta:"O descritivo cita claramente um tipo de gasto que não corresponde à categoria lançada. Cada troca dessas distorce o custo por categoria e as análises entre obras. Revisar e reclassificar.",
+      pergunta:"O descritivo cita claramente um tipo de gasto que não corresponde à categoria lançada. Cada troca dessas distorce o custo por categoria e as análises entre obras. Duas regras de precedência valem aqui: (1) descritivo com \u201Cmão de obra\u201D é SERVIÇO — vai para Mão de obra mesmo citando porcelanato, pedra ou qualquer material; (2) compra em depósito ou loja de material é AQUISIÇÃO DE MATERIAIS, mesmo que o descritivo cite mestre ou obra.",
       total: hits.length, itens: hits.sort((a,b)=>b.r.valor-a.r.valor).slice(0, 500).map(h=>_audItem(
         h.r.fornecedor, h.r.data+" · \u201C"+h.r.descOriginal+"\u201D · lançado em: "+h.r.categoria+" → sugerida: "+h.sug, fmt(h.r.valor), "#C4A55C")) });
   }

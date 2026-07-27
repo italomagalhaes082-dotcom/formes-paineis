@@ -77,6 +77,12 @@ dspJ.push(dsp('DEPOSITO CENTRAL','04/03/2025','AREIA LAVADA 3 CARRADAS',4200,'M�
 dspJ.push(dsp('FERRO SUL','05/03/2025','ACO CA50 12MM',15000,'Mão de obra - Terceiros'));
 dspJ.push(dsp('CERAMICA NORTE','06/03/2025','PORCELANATO 120X120',22000,'Mão de obra - Mestre'));
 dspJ.push(dsp('TINTAS BOM','07/03/2025','TINTA ACRILICA 18L',3800,'Mão de obra - Mestre'));
+// precedência 1: descritivo com mão de obra + material -> deve sugerir MÃO DE OBRA
+dspJ.push(dsp('EQUIPE ASSENTAMENTO','08/03/2025','MAO DE OBRA PORCELANATO CS 12',7500,'Fornecedor - Aquisição de materiais'));
+dspJ.push(dsp('MARMORARIA SUL','09/03/2025','MAO DE OBRA DE PEDRA SOLEIRAS',5200,'Fornecedor - Aquisição de materiais'));
+// precedência 2: compra em depósito -> deve sugerir AQUISIÇÃO DE MATERIAIS
+dspJ.push(dsp('JOEL MATERIAIS','10/03/2025','COMPRA MESTRE OBRA',6400,'Mão de obra - Mestre'));
+dspJ.push(dsp('DEPOSITO SAO JORGE','11/03/2025','MATERIAL DIVERSO MESTRE',5100,'Mão de obra - Mestre'));
 dspJ.push(dsp('CIMENTO FORTE','10/01/2025','CIMENTO CP2',60000,'Fornecedor - Aquisição de materiais'));
 dspJ.push(dsp('ANDRE LUIS BARBOSA','20/01/2025','PAGTO FOLHA 40',18000,'Mão de obra - Mestre'));
 dspJ.push(dsp('ANDRE LUIS BARBOSA','20/02/2025','PAGTO FOLHA 41',18000,'Mão de obra - Mestre'));
@@ -269,6 +275,16 @@ async function testEmp(emp, checks){
       ok(p2.textContent.includes('Resumo das reclassificações'),'Relatório: resumo agrupado para correção em lote');
       const parsed = w._audParseItem(alertaCom.itens[0]); const movUnico = new Set(alertaCom.itens.map(it=>String(it.s||"").split("lançado em:")[1])).size<2;
       ok(parsed.para && parsed.de && parsed.data,'Relatório: parser separa data, origem e destino');
+      // regras de precedência do usuário
+      const todosItens = alertaCom.itens.map(w._audParseItem);
+      const moPorcelanato = todosItens.find(x=>/MAO DE OBRA PORCELANATO/i.test(x.desc));
+      ok(moPorcelanato && /Mão de obra/i.test(moPorcelanato.para),'Precedência: "mão de obra de porcelanato" sugere Mão de obra, não material');
+      const moPedra = todosItens.find(x=>/MAO DE OBRA DE PEDRA/i.test(x.desc));
+      ok(moPedra && /Mão de obra/i.test(moPedra.para),'Precedência: "mão de obra de pedra" sugere Mão de obra');
+      const joel = todosItens.find(x=>/JOEL/i.test(x.quem));
+      ok(joel && /materiais/i.test(joel.para),'Precedência: compra no depósito Joel sugere Aquisição de materiais');
+      const dep = todosItens.find(x=>/DEPOSITO SAO JORGE/i.test(x.quem));
+      ok(dep && /materiais/i.test(dep.para),'Precedência: depósito sugere materiais mesmo com "mestre" no descritivo');
       const cel=p2.querySelector('.rel-valor');
       const estilo=cel? (cel.getAttribute('class')||'') : '';
       ok(!!cel,'Relatório: coluna de valor presente');
