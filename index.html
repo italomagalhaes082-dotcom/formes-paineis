@@ -1059,7 +1059,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-k · reembolsos classificados</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-l · auditoria com contagem real</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -3465,7 +3465,7 @@ async function runAuditoria(progressCb) {
       titulo:"Compras com valor desproporcional à própria categoria",
       resumo:outliers.length+" lançamento(s) estatisticamente fora da curva (z-score > 2,5)",
       pergunta:"Estes pagamentos são muito maiores que o padrão histórico da própria categoria. Há orçamento aprovado, nota fiscal e medição que os justifiquem? O quantitativo comprado é compatível com a fase da obra?",
-      itens:outliers.slice(0,40).map(o=>_audItem(
+      total: outliers.length, itens:outliers.slice(0, 500).map(o=>_audItem(
         o.r.fornecedor, o.r.data+" · "+o.cat+" · "+o.r.descricao+" · média da categoria: "+fmt(o.media)+" ("+o.z.toFixed(1)+"σ acima)",
         fmt(o.r.valor), "#BF6B60")) });
   }
@@ -3487,7 +3487,7 @@ async function runAuditoria(progressCb) {
       titulo:"Possíveis pagamentos em duplicidade",
       resumo:dups.length+" par(es): mesmo fornecedor, mesmo valor, até 7 dias de intervalo",
       pergunta:"Mesmo fornecedor recebendo o mesmo valor em datas muito próximas. São parcelas legítimas de um contrato, ou o mesmo título pago duas vezes? Confira os comprovantes bancários e as notas fiscais de cada par.",
-      itens:dups.slice(0,40).map(([a,b,d])=>_audItem(
+      total: dups.length, itens:dups.slice(0, 500).map(([a,b,d])=>_audItem(
         a.fornecedor, a.data+" e "+b.data+" ("+Math.round(d)+"d de intervalo) · "+a.descricao,
         "2× "+fmt(a.valor), "#BF6B60")) });
   }
@@ -3503,7 +3503,7 @@ async function runAuditoria(progressCb) {
       titulo:"Pagamentos envolvendo sócios / partes relacionadas",
       resumo:rel.length+" lançamento(s) · "+fmt(totRel)+" ("+(totRel/totalD*100).toFixed(1)+"% das despesas)",
       pergunta:"Despesas cujo fornecedor ou descritivo menciona sócios ou empresas ligadas. Não é necessariamente irregular, mas exige lastro: há contrato, deliberação em ata ou reembolso documentado para cada uma? Estão a valor de mercado?",
-      itens:rel.sort((a,b)=>b.valor-a.valor).slice(0,40).map(r=>_audItem(
+      total: rel.length, itens:rel.sort((a,b)=>b.valor-a.valor).slice(0, 500).map(r=>_audItem(
         r.fornecedor, r.data+" · "+r.categoria+" · "+r.descricao, fmt(r.valor), "#C4A55C")) });
   }
 
@@ -3533,7 +3533,7 @@ async function runAuditoria(progressCb) {
         titulo:"Alta concentração em um único fornecedor",
         resumo:topF+" concentra "+share.toFixed(1)+"% de todas as despesas ("+fmt(topV)+")",
         pergunta:"Concentração elevada aumenta risco de dependência e de sobrepreço. Houve cotação com concorrentes? Os preços unitários deste fornecedor foram comparados com o mercado recentemente? Veja o detalhamento na aba 🏪 Fornecedores.",
-        itens:rank.slice(0,5).map(([f,v],i)=>_audItem((i+1)+"º · "+f,(v/totalD*100).toFixed(1)+"% das despesas",fmt(v),i===0?"#BF6B60":"#e6edf3")) }); }
+        total: rank.length, itens:rank.slice(0, 500).map(([f,v],i)=>_audItem((i+1)+"º · "+f,(v/totalD*100).toFixed(1)+"% das despesas",fmt(v),i===0?"#BF6B60":"#e6edf3")) }); }
   }
 
   // ── 6. APORTES × RETIRADAS DESIGUAIS ENTRE SÓCIOS ──
@@ -3603,14 +3603,14 @@ async function runAuditoria(progressCb) {
       titulo:"Lançamentos ilegíveis pelo painel (data ou valor inválidos)",
       resumo: dd.length+" linha(s) de despesa com dados incompletos — estão FORA de todos os números",
       pergunta:"Cada linha aqui é um pagamento que o painel não consegue processar: sem data válida na coluna D ou sem valor na coluna S. Corrigir na planilha e atualizar — enquanto isso, os totais estão subestimados.",
-      itens: dd.slice(0,40).map(r=>_audItem(r.quem, "data: "+r.data+" · "+r.desc, String(r.val), "#BF6B60")) });
+      total: dd.length, itens: dd.slice(0, 500).map(r=>_audItem(r.quem, "data: "+r.data+" · "+r.desc, String(r.val), "#BF6B60")) });
     // Q2. Retirada/AFAC com favorecido não reconhecido como sócio
     const sn = q.socioNulo || [];
     if (sn.length) alerts.push({ sev:"alta", icon:"👤",
       titulo:"Retirada/Devolução de AFAC com favorecido não reconhecido",
       resumo: sn.length+" lançamento(s) de fluxo de sócio cujo nome não bate com nenhum sócio configurado",
       pergunta:"Fluxos de sócio precisam ter o favorecido escrito de forma reconhecível. Ou o nome foi digitado diferente (corrigir na planilha), ou é um favorecido que NÃO deveria receber retirada (investigar).",
-      itens: sn.slice(0,30).map(r=>_audItem(r.quem, r.data, fmt(r.val), "#BF6B60")) });
+      total: sn.length, itens: sn.slice(0, 500).map(r=>_audItem(r.quem, r.data, fmt(r.val), "#BF6B60")) });
   }
   // Q3. Sem categoria ou categoria "Outros"
   { const sc = D.filter(r=>!r.categoria || r.categoria==="Outros" || r.categoria==="—");
@@ -3619,7 +3619,7 @@ async function runAuditoria(progressCb) {
       titulo:"Despesas sem categoria definida",
       resumo: sc.length+" lançamento(s) · "+fmt(tot),
       pergunta:"Lançamento sem categoria não entra em nenhuma análise de custo. Definir a categoria correta na coluna AC de cada um.",
-      itens: sc.sort((a,b)=>b.valor-a.valor).slice(0,30).map(r=>_audItem(r.fornecedor, r.data+" · "+r.descricao, fmt(r.valor), "#C4A55C")) });
+      total: sc.length, itens: sc.sort((a,b)=>b.valor-a.valor).slice(0, 500).map(r=>_audItem(r.fornecedor, r.data+" · "+r.descricao, fmt(r.valor), "#C4A55C")) });
   }
   // Q4. Fornecedor ausente
   { const sf = D.filter(r=>r.fornecedor==="—" && r.valor>=1000);
@@ -3627,7 +3627,7 @@ async function runAuditoria(progressCb) {
       titulo:"Pagamentos sem fornecedor identificado",
       resumo: sf.length+" lançamento(s) ≥ R$1.000 sem o nome do favorecido",
       pergunta:"Sem o favorecido, o pagamento não entra no ranking de fornecedores nem na análise de concentração. Quem recebeu cada um?",
-      itens: sf.sort((a,b)=>b.valor-a.valor).slice(0,25).map(r=>_audItem("(sem fornecedor)", r.data+" · "+r.descricao, fmt(r.valor), "#C4A55C")) });
+      total: sf.length, itens: sf.sort((a,b)=>b.valor-a.valor).slice(0, 500).map(r=>_audItem("(sem fornecedor)", r.data+" · "+r.descricao, fmt(r.valor), "#C4A55C")) });
   }
   // Q5. Classificação divergente do descritivo (regras palavra-chave → categoria esperada)
   { const FAMILIAS = [
@@ -3659,7 +3659,7 @@ async function runAuditoria(progressCb) {
       titulo:"Descritivo sugere uma categoria, lançamento está em outra",
       resumo: hits.length+" lançamento(s) com possível classificação trocada",
       pergunta:"O descritivo cita claramente um tipo de gasto que não corresponde à categoria lançada. Cada troca dessas distorce o custo por categoria e as análises entre obras. Revisar e reclassificar.",
-      itens: hits.sort((a,b)=>b.r.valor-a.r.valor).slice(0,30).map(h=>_audItem(
+      total: hits.length, itens: hits.sort((a,b)=>b.r.valor-a.r.valor).slice(0, 500).map(h=>_audItem(
         h.r.fornecedor, h.r.data+" · \u201C"+h.r.descOriginal+"\u201D · lançado em: "+h.r.categoria+" → sugerida: "+h.sug, fmt(h.r.valor), "#C4A55C")) });
   }
   // Q6. Duplicata exata (mesmo dia, favorecido, valor e descrição)
@@ -3671,7 +3671,7 @@ async function runAuditoria(progressCb) {
       titulo:"Lançamentos idênticos no mesmo dia (possível digitação dupla)",
       resumo: dups.length+" lançamento(s) exatamente iguais a outro do mesmo dia",
       pergunta:"Mesmo dia, mesmo favorecido, mesmo valor e mesma descrição: ou são dois pagamentos legítimos (raro), ou o mesmo foi digitado duas vezes. Conferir no extrato bancário quantos débitos existem de fato.",
-      itens: dups.slice(0,30).map(r=>_audItem(r.fornecedor, r.data+" · "+r.descricao, fmt(r.valor), "#BF6B60")) });
+      total: dups.length, itens: dups.slice(0, 500).map(r=>_audItem(r.fornecedor, r.data+" · "+r.descricao, fmt(r.valor), "#BF6B60")) });
   }
   // Q7. Sequência de parcelas com buracos (desc "n/m - CASA X")
   { const seq={};
@@ -3690,7 +3690,7 @@ async function runAuditoria(progressCb) {
       titulo:"Parcelas de venda com numeração pulada",
       resumo: falhas.length+" contrato(s) com parcelas intermediárias ausentes da planilha",
       pergunta:"Se a parcela 5/13 existe e a 4/13 não, ou o recebimento não foi lançado (receita subestimada e inadimplência invisível) ou foi lançado sem o padrão n/m. Localizar as parcelas faltantes de cada contrato.",
-      itens: falhas.slice(0,25).map(f=>_audItem("CS "+String(f.casa).padStart(2,"0")+" · "+(f.cliente||"—"), "faltam: "+f.faltam.slice(0,8).join(", ")+" de "+f.total, f.tem.size+" lançadas", "#C4A55C")) });
+      total: falhas.length, itens: falhas.slice(0, 500).map(f=>_audItem("CS "+String(f.casa).padStart(2,"0")+" · "+(f.cliente||"—"), "faltam: "+f.faltam.slice(0, 500).join(", ")+" de "+f.total, f.tem.size+" lançadas", "#C4A55C")) });
   }
   // Q0. DIAGNÓSTICO DE CARGA — linhas descartadas na leitura da planilha
   { const n = window._cargaDropN||0;
@@ -3755,11 +3755,12 @@ async function runAuditoria(progressCb) {
       titulo:"Candidatos a ALIMENTAÇÃO DE OBRA — regras do negócio, aguardando sua validação",
       resumo:`fornecedor com NOME de alimentação fora da categoria: ${cands.nomeForn.length} (${fmt(tot(cands.nomeForn))}) · caixinha/adiantamento: ${cands.caixinha.length} (${fmt(tot(cands.caixinha))}) · diária André: ${cands.andreDiaria.length} (${fmt(tot(cands.andreDiaria))}) · mercado: ${cands.mercado.length} (${fmt(tot(cands.mercado))})`,
       pergunta:"Nenhum número do painel foi alterado. Revise as amostras: as que refletirem alimentação de verdade, confirme comigo no chat (por regra ou por item) — aí a regra vira reclassificação automática com rastro, como a do Rafael Santos. Nas diárias do André, o painel mostra a conta: valor ÷ diária = operários×dias.",
+      total: nTot,
       itens:[
-        ...cands.nomeForn.slice(0,10).map(r=>_audItem(r.fornecedor, r.data+' · '+String(r.descOriginal||'').slice(0,34)+' · cat: '+(r.categoria||'—').slice(0,22), fmt(r.valor), "#BF6B60")),
-        ...cands.caixinha.slice(0,10).map(r=>_audItem(r.fornecedor, r.data+' · '+String(r.descOriginal||'').slice(0,42), fmt(r.valor), "#C4A55C")),
-        ...cands.andreDiaria.slice(0,12).map(r=>_audItem(r.fornecedor, r.data+' · '+String(r.descOriginal||'').slice(0,30)+' · ÷R$'+r._diaria+' = '+r._opDias+' operário·dias', fmt(r.valor), "#6D9E7F")),
-        ...cands.mercado.slice(0,10).map(r=>_audItem(r.fornecedor, r.data+' · '+String(r.descOriginal||'').slice(0,42)+' · cat: '+(r.categoria||'—').slice(0,22), fmt(r.valor), "#6C8FB5")),
+        ...cands.nomeForn.slice(0, 200).map(r=>_audItem(r.fornecedor, r.data+' · '+String(r.descOriginal||'').slice(0,34)+' · cat: '+(r.categoria||'—').slice(0,22), fmt(r.valor), "#BF6B60")),
+        ...cands.caixinha.slice(0, 200).map(r=>_audItem(r.fornecedor, r.data+' · '+String(r.descOriginal||'').slice(0,42), fmt(r.valor), "#C4A55C")),
+        ...cands.andreDiaria.slice(0, 200).map(r=>_audItem(r.fornecedor, r.data+' · '+String(r.descOriginal||'').slice(0,30)+' · ÷R$'+r._diaria+' = '+r._opDias+' operário·dias', fmt(r.valor), "#6D9E7F")),
+        ...cands.mercado.slice(0, 200).map(r=>_audItem(r.fornecedor, r.data+' · '+String(r.descOriginal||'').slice(0,42)+' · cat: '+(r.categoria||'—').slice(0,22), fmt(r.valor), "#6C8FB5")),
       ] });
   }
   // Q7b. RECLASSIFICAÇÕES APLICADAS (regras confirmadas pelo financeiro)
@@ -3768,7 +3769,7 @@ async function runAuditoria(progressCb) {
       titulo:"Reclassificações automáticas aplicadas nos números do painel",
       resumo: rc.length+" lançamento(s) · "+fmt(rc.reduce((s,r)=>s+r.valor,0))+" — regra por fornecedor validada pelo financeiro",
       pergunta:"Estes lançamentos aparecem nos custos do painel já na categoria correta (ex.: Rafael Santos → Mão de obra - Terceiros), mas continuam com a categoria antiga NA PLANILHA. Corrigir lá também, para planilha e painel falarem igual.",
-      itens: rc.slice(0,30).map(r=>_audItem(r.fornecedor, r.data+" · era: "+r.reclassDe+" → "+r.categoria, fmt(r.valor), "#6C8FB5")) });
+      total: rc.length, itens: rc.slice(0, 500).map(r=>_audItem(r.fornecedor, r.data+" · era: "+r.reclassDe+" → "+r.categoria, fmt(r.valor), "#6C8FB5")) });
   }
   // Q9. PARCELA RECEBIDA ACIMA DO VALOR ORIGINAL (>5%)
   { const over=(_RECEITAS||[]).filter(r=>r.valOrig>0 && r.valReceb>r.valOrig*1.05);
@@ -3777,7 +3778,7 @@ async function runAuditoria(progressCb) {
       titulo:"Parcelas recebidas acima do valor original (>5%)",
       resumo: over.length+" parcela(s) · "+fmt(tot)+" além do contratado",
       pergunta:"Recebimento acima do original pode ser INCC/juros legítimos (documentar) ou valor digitado errado. Conferir cada uma.",
-      itens: over.sort((a,b)=>(b.valReceb-b.valOrig)-(a.valReceb-a.valOrig)).slice(0,25).map(r=>_audItem(r.cliente||"—", (r.dataComp||"—")+" · original "+fmt(r.valOrig)+" → recebido "+fmt(r.valReceb), "+"+fmt(r.valReceb-r.valOrig), "#C4A55C")) });
+      total: over.length, itens: over.sort((a,b)=>(b.valReceb-b.valOrig)-(a.valReceb-a.valOrig)).slice(0, 500).map(r=>_audItem(r.cliente||"—", (r.dataComp||"—")+" · original "+fmt(r.valOrig)+" → recebido "+fmt(r.valReceb), "+"+fmt(r.valReceb-r.valOrig), "#C4A55C")) });
   }
 
   // Q8. Receitas com categoria de compra (estornos lançados como receita)
@@ -3787,7 +3788,7 @@ async function runAuditoria(progressCb) {
       titulo:"Receitas com categoria de compra de material",
       resumo: est.length+" lançamento(s) · "+fmt(tot)+" — provavelmente estornos/devoluções de fornecedor",
       pergunta:"Devolução de fornecedor lançada como receita infla receita E despesa ao mesmo tempo. O tratamento correto é abater da despesa original (lançamento negativo na despesa ou categoria própria de estorno).",
-      itens: est.slice(0,25).map(r=>_audItem(r.cliente||"—", (r.dataComp||"—")+" · "+r.desc, fmt(r.valReceb), "#6C8FB5")) });
+      total: est.length, itens: est.slice(0, 500).map(r=>_audItem(r.cliente||"—", (r.dataComp||"—")+" · "+r.desc, fmt(r.valReceb), "#6C8FB5")) });
   }
 
   // ── 7. DESCRITIVOS VAGOS ──
@@ -3803,7 +3804,7 @@ async function runAuditoria(progressCb) {
       titulo:"Descritivos vagos ou genéricos",
       resumo:vagos.length+" lançamento(s) sem descrição útil · "+fmt(totV),
       pergunta:"Lançamentos como \u201Cpagamento\u201D ou \u201Cmaterial\u201D impedem qualquer verificação posterior. O que foi comprado, de quem, para qual etapa? Exija descritivo mínimo (item + local de aplicação) em todo lançamento novo.",
-      itens:vagos.sort((a,b)=>b.valor-a.valor).slice(0,40).map(r=>_audItem(
+      total: vagos.length, itens:vagos.sort((a,b)=>b.valor-a.valor).slice(0, 500).map(r=>_audItem(
         r.fornecedor, r.data+" · \u201C"+r.descOriginal+"\u201D · "+r.categoria, fmt(r.valor), "#A1A1A6")) });
   }
 
@@ -3816,7 +3817,7 @@ async function runAuditoria(progressCb) {
       titulo:"Descritivos com termos sensíveis (estorno, ajuste, empréstimo...)",
       resumo:hits.length+" lançamento(s) mencionam termos que merecem leitura do contexto completo",
       pergunta:"Estornos, ajustes, acertos e empréstimos são os lugares clássicos onde inconsistências se escondem. Para cada um: o evento original existe? O valor bate? Há comprovante dos dois lados do movimento?",
-      itens:hits.sort((a,b)=>b.r.valor-a.r.valor).slice(0,40).map(h=>_audItem(
+      total: hits.length, itens:hits.sort((a,b)=>b.r.valor-a.r.valor).slice(0, 500).map(h=>_audItem(
         h.r.fornecedor+" · ["+h.kw+"]", h.r.data+" · "+h.r.descOriginal, fmt(h.r.valor), "#6C8FB5")) });
   }
 
@@ -3827,7 +3828,7 @@ async function runAuditoria(progressCb) {
       titulo:"Pagamentos datados em fim de semana",
       resumo:fds.length+" lançamento(s) · "+fmt(totF),
       pergunta:"Sábado é comum em obra (folha, diária), mas transferências bancárias de domingo merecem um olhar: quem aprovou, por qual canal, e por que fora do expediente?",
-      itens:fds.sort((a,b)=>b.valor-a.valor).slice(0,25).map(r=>{
+      total: fds.length, itens:fds.sort((a,b)=>b.valor-a.valor).slice(0, 500).map(r=>{
         const dia=parseDate(r.data).getDay()===0?"domingo":"sábado";
         return _audItem(r.fornecedor, r.data+" ("+dia+") · "+r.descricao, fmt(r.valor), "#6C8FB5");}) });
   }
@@ -3864,7 +3865,7 @@ async function runAuditoria(progressCb) {
         titulo:"Receitas com valor recebido acima do contratado",
         resumo:over.length+" parcela(s) recebidas com mais de 5% acima do valor original",
         pergunta:"Recebimento maior que o contratado pode ser INCC/juros legítimos — ou lançamento errado que mascara outra entrada. A diferença está documentada como correção monetária no contrato?",
-        itens:over.sort((a,b)=>(b.valReceb-b.valOrig)-(a.valReceb-a.valOrig)).slice(0,30).map(r=>_audItem(
+        total: over.length, itens:over.sort((a,b)=>(b.valReceb-b.valOrig)-(a.valReceb-a.valOrig)).slice(0, 500).map(r=>_audItem(
           r.cliente||"—", (r.dataComp||"—")+" · "+r.desc+" · contratado "+fmt(r.valOrig), fmt(r.valReceb), "#C4A55C")) });
       const seenR={}; const dupR=[];
       RC.forEach(r=>{ if(!r.valReceb) return;
@@ -3874,7 +3875,7 @@ async function runAuditoria(progressCb) {
         titulo:"Receitas possivelmente lançadas em duplicidade",
         resumo:dupR.length+" linha(s) com mesmo cliente, valor e data",
         pergunta:"Mesma parcela registrada duas vezes infla a receita e esconde inadimplência real. Confira no extrato bancário se o crédito entrou uma ou duas vezes.",
-        itens:dupR.slice(0,30).map(r=>_audItem(r.cliente||"—",(r.dataComp||"—")+" · "+r.desc,fmt(r.valReceb),"#6C8FB5")) });
+        total: dupR.length, itens:dupR.slice(0, 500).map(r=>_audItem(r.cliente||"—",(r.dataComp||"—")+" · "+r.desc,fmt(r.valReceb),"#6C8FB5")) });
     }
   } catch(e) { console.warn("Auditoria receitas:", e.message); }
 
@@ -4010,7 +4011,7 @@ function paintAuditoria(data) {
             <div class="aud-title">${a.icon} ${a.titulo}</div>
             <div style="font-size:10px;color:#A1A1A6;font-family:'DM Mono',monospace;margin-top:2px">${a.resumo}</div>
           </div>
-          <span class="aud-count">${a.itens.length?a.itens.length:""} <span id="aud-arrow-${i}">▼</span></span>
+          <span class="aud-count">${(a.total||a.itens.length)?(a.total||a.itens.length):""}${(a.total&&a.total>a.itens.length)?'<span style="color:var(--text-3);font-weight:400"> (exibindo '+a.itens.length+')</span>':''} <span id="aud-arrow-${i}">▼</span></span>
         </div>
         <div class="aud-body" id="aud-body-${i}">
           <div class="aud-q"><strong>Questionamento:</strong> ${a.pergunta}</div>

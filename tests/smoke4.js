@@ -236,6 +236,12 @@ async function testEmp(emp, checks){
     ok(t('tab11').includes('Permutante Jazz'),'Jazz: permutante casas 01-10 configurado');
     w.switchTab(9); await new Promise(r=>setTimeout(r,700));
     ok(t('tab9').includes('Reclassificações automáticas aplicadas'),'Item 1: rastro da reclassificação Rafael Santos');
+    // auditoria: o contador do card precisa refletir o total real, não a lista truncada
+    const dadosAud = w._auditData || {};
+    const comTotal = (dadosAud.alerts||[]).filter(a=>typeof a.total==='number');
+    ok(comTotal.length>0,'Auditoria: cards declaram o total real ('+comTotal.length+')');
+    const mentirosos = (dadosAud.alerts||[]).filter(a=>typeof a.total==='number' && a.total>a.itens.length && a.itens.length<200);
+    ok(mentirosos.length===0,'Auditoria: nenhum card trunca abaixo do teto de exibição');
     ok(t('tab9').includes('Candidatos a ALIMENTAÇÃO'),'Alimentação: card de candidatos');
     ok(t('tab9').includes('JCX'),'JCX: candidato na Auditoria pela regra do nome');
     ok(t('tab9').includes('÷R$14') || t('tab9').includes('operário·dias'),'Alimentação: divisibilidade da diária André (1260=14×90)');
