@@ -269,6 +269,11 @@ async function testEmp(emp, checks){
       ok(p2.textContent.includes('Resumo das reclassificações'),'Relatório: resumo agrupado para correção em lote');
       const parsed = w._audParseItem(alertaCom.itens[0]);
       ok(parsed.para && parsed.de && parsed.data,'Relatório: parser separa data, origem e destino');
+      const cel=p2.querySelector('.rel-valor');
+      const estilo=cel? (cel.getAttribute('class')||'') : '';
+      ok(!!cel,'Relatório: coluna de valor presente');
+      const cssTxt=[...w.document.querySelectorAll('style')].map(x=>x.textContent).join(' ');
+      ok(/rel-valor[^}]*color:#000/.test(cssTxt),'Relatório: valor em preto sólido');
     } else { ok(true,'Relatório: sem alerta de reclassificação neste cenário'); }
     ok(papel && papel.textContent.includes('Responsável pela correção'),'Auditoria: relatório tem campos de conferência');
     ok(papel && papel.querySelectorAll('tbody tr').length === (dadosAud.alerts[idxCom>=0?idxCom:0].itens.length),'Auditoria: relatório lista TODOS os itens do card');
