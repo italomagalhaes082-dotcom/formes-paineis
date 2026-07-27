@@ -267,13 +267,18 @@ async function testEmp(emp, checks){
       ok(!!p2.querySelector('.rel-para'),'Relatório: categoria sugerida em destaque próprio');
       ok(!!p2.querySelector('.rel-de'),'Relatório: categoria atual marcada como substituída');
       ok(p2.textContent.includes('Resumo das reclassificações'),'Relatório: resumo agrupado para correção em lote');
-      const parsed = w._audParseItem(alertaCom.itens[0]);
+      const parsed = w._audParseItem(alertaCom.itens[0]); const movUnico = new Set(alertaCom.itens.map(it=>String(it.s||"").split("lançado em:")[1])).size<2;
       ok(parsed.para && parsed.de && parsed.data,'Relatório: parser separa data, origem e destino');
       const cel=p2.querySelector('.rel-valor');
       const estilo=cel? (cel.getAttribute('class')||'') : '';
       ok(!!cel,'Relatório: coluna de valor presente');
       const cssTxt=[...w.document.querySelectorAll('style')].map(x=>x.textContent).join(' ');
       ok(/rel-valor[^}]*color:#000/.test(cssTxt),'Relatório: valor em preto sólido');
+      const resumo=p2.querySelector('.rel-movs');
+      ok(resumo && /R\$/.test(resumo.textContent),'Resumo: valor total ao lado da contagem');
+      const somaMov=w._audParseItem(alertaCom.itens[0]).num;
+      ok(somaMov>0,'Resumo: valor numérico extraído do item ('+somaMov+')');
+      ok(resumo && /Total a reclassificar/.test(resumo.textContent) || movUnico,'Resumo: linha de total quando há mais de um movimento');
     } else { ok(true,'Relatório: sem alerta de reclassificação neste cenário'); }
     ok(papel && papel.textContent.includes('Responsável pela correção'),'Auditoria: relatório tem campos de conferência');
     ok(papel && papel.querySelectorAll('tbody tr').length === (dadosAud.alerts[idxCom>=0?idxCom:0].itens.length),'Auditoria: relatório lista TODOS os itens do card');

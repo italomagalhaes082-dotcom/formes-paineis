@@ -288,6 +288,8 @@
 #audRelOv .papel .rel-seta { font-size:13px; color:#6C8FB5; font-weight:700; }
 #audRelOv .papel .rel-para { font-size:12.5px; font-weight:700; color:#1a5c3a; background:#e8f3ec; padding:2px 8px; border-radius:5px; }
 #audRelOv .papel .rel-qtd { margin-left:auto; font-size:10.5px; color:#666; font-variant-numeric:tabular-nums; white-space:nowrap; }
+#audRelOv .papel .rel-qtd-v { font-family:'DM Mono',monospace; font-size:12px; color:#000; font-weight:700; }
+#audRelOv .papel .rel-mov-total { background:#eef2f5; border-color:#cfd8de; }
 #audRelOv .papel .rel-dica { font-size:10.5px; color:#777; margin-top:7px; font-style:italic; }
 #audRelOv .papel table { width:100%; border-collapse:collapse; table-layout:fixed; margin-top:4px; }
 #audRelOv .papel th { text-align:left; font-size:9px; letter-spacing:.8px; text-transform:uppercase; color:#888; padding:6px 6px; border-bottom:1.5px solid #111; }
@@ -1091,7 +1093,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-o · valor em preto</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-p · resumo com valores</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -3487,7 +3489,9 @@ function _audParseItem(it){
     if (mSug) { para = mSug[1].trim(); desc = desc.slice(0, mSug.index).replace(/\s*·\s*$/,''); }
   }
   desc = desc.replace(/^[·\s]+/,'').replace(/[·\s]+$/,'');
-  return { data, desc, de, para, quem: String(it.t||'—'), valor: String(it.v||'') };
+  const bruto = String(it.v||'');
+  const num = parseVal(bruto.replace(/^[^\d-]*/,'').replace(/[^\d.,-]/g,'')) || 0;
+  return { data, desc, de, para, quem: String(it.t||'—'), valor: bruto, num };
 }
 
 // ═══ Relatório de correção — documento de trabalho para o financeiro ═══
@@ -3505,8 +3509,8 @@ window.gerarRelatorioAud = function(i){
   // resumo por movimento de categoria: permite corrigir em lote, não item a item
   const movs = {};
   itens.forEach(x=>{ if(!x.para) return; const k=(x.de||'(sem categoria)')+' ⟶ '+x.para;
-    (movs[k]=movs[k]||{n:0}).n++; });
-  const movList = Object.entries(movs).sort((a2,b2)=>b2[1].n-a2[1].n);
+    const g=(movs[k]=movs[k]||{n:0,v:0}); g.n++; g.v += (x.num||0); });
+  const movList = Object.entries(movs).sort((a2,b2)=>b2[1].v-a2[1].v);
 
   let ov = document.getElementById('audRelOv');
   if (!ov) { ov = document.createElement('div'); ov.id='audRelOv'; document.body.appendChild(ov); }
@@ -3526,8 +3530,9 @@ window.gerarRelatorioAud = function(i){
       ${movList.length?`<h2>Resumo das reclassificações</h2>
       <div class="rel-movs">${movList.map(([k,v])=>{
         const p=k.split(' ⟶ ');
-        return `<div class="rel-mov"><span class="rel-de">${p[0]}</span><span class="rel-seta">⟶</span><span class="rel-para">${p[1]}</span><span class="rel-qtd">${v.n} lançto${v.n>1?'s':''}</span></div>`;
-      }).join('')}</div>
+        return `<div class="rel-mov"><span class="rel-de">${p[0]}</span><span class="rel-seta">⟶</span><span class="rel-para">${p[1]}</span><span class="rel-qtd"><strong class="rel-qtd-v">${fmt(v.v)}</strong> · ${v.n} lançto${v.n>1?'s':''}</span></div>`;
+      }).join('')}
+      ${movList.length>1?`<div class="rel-mov rel-mov-total"><span style="flex:1;font-weight:700;color:#111">Total a reclassificar</span><span class="rel-qtd"><strong class="rel-qtd-v">${fmt(movList.reduce((s,m)=>s+m[1].v,0))}</strong> · ${movList.reduce((s,m)=>s+m[1].n,0)} lançtos</span></div>`:''}</div>
       <div class="rel-dica">Agrupe por linha acima: cada bloco pode ser corrigido de uma vez na planilha, filtrando pela categoria de origem.</div>`:''}
 
       <h2>Lançamentos${temMove?' — reclassificar':''}</h2>
