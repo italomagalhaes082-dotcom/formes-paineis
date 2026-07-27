@@ -278,7 +278,7 @@ async function testEmp(emp, checks){
       const p2=w.document.getElementById('audRelPapel');
       ok(!!p2.querySelector('.rel-para'),'Relatório: categoria sugerida em destaque próprio');
       ok(!!p2.querySelector('.rel-de'),'Relatório: categoria atual marcada como substituída');
-      ok(p2.textContent.includes('Resumo das reclassificações'),'Relatório: resumo agrupado para correção em lote');
+      ok(/Resumo — corrija em lote/.test(p2.textContent),'Relatório: resumo agrupado para correção em lote');
       const parsed = w._audParseItem(alertaCom.itens[0]); const movUnico = new Set(alertaCom.itens.map(it=>String(it.s||"").split("lançado em:")[1])).size<2;
       ok(parsed.para && parsed.de && parsed.data,'Relatório: parser separa data, origem e destino');
       // regras de precedência do usuário
@@ -304,11 +304,24 @@ async function testEmp(emp, checks){
       ok(!!cel,'Relatório: coluna de valor presente');
       const cssTxt=[...w.document.querySelectorAll('style')].map(x=>x.textContent).join(' ');
       ok(/rel-valor[^}]*color:#000/.test(cssTxt),'Relatório: valor em preto sólido');
-      const resumo=p2.querySelector('.rel-movs');
-      ok(resumo && /R\$/.test(resumo.textContent),'Resumo: valor total ao lado da contagem');
+      const resumo=p2.querySelector('.rel-sum');
+      ok(resumo && /R\$/.test(resumo.textContent),'Resumo: valor por movimento na tabela');
       const somaMov=w._audParseItem(alertaCom.itens[0]).num;
       ok(somaMov>0,'Resumo: valor numérico extraído do item ('+somaMov+')');
-      ok(resumo && /Total a reclassificar/.test(resumo.textContent) || movUnico,'Resumo: linha de total quando há mais de um movimento');
+      ok(resumo && /Total a reclassificar/.test(resumo.textContent),'Resumo: linha de total');
+      // paginação: cabeçalho de grupo e colunas repetem por página (thead)
+      const theads=p2.querySelectorAll('table thead');
+      ok(theads.length>=2,'Paginação: cada grupo tem cabeçalho próprio que repete na página ('+theads.length+')');
+      ok(!!p2.querySelector('tr.grp'),'Layout: faixa de grupo com a reclassificação');
+      const numeradas=p2.querySelectorAll('td.rel-n').length;
+      ok(numeradas===alertaCom.itens.length,'Layout: todos os itens numerados ('+numeradas+')');
+      // impressão: modo que tira o overlay do fixed
+      ok(typeof w.imprimirRelatorioAud==='function','Impressão: modo dedicado disponível');
+      w.imprimirRelatorioAud(); await new Promise(r=>setTimeout(r,120));
+      ok(w.document.body.classList.contains('print-aud'),'Impressão: classe print-aud aplicada');
+      const cssAll=[...w.document.querySelectorAll('style')].map(x=>x.textContent).join(' ');
+      ok(/print-aud[^}]*position:static/.test(cssAll.replace(/\s+/g,' ')),'Impressão: overlay deixa de ser fixed (evita página repetida)');
+      w.document.body.classList.remove('print-aud');
     } else { ok(true,'Relatório: sem alerta de reclassificação neste cenário'); }
     ok(papel && papel.textContent.includes('Responsável pela correção'),'Auditoria: relatório tem campos de conferência');
     ok(papel && papel.querySelectorAll('tbody tr').length === (dadosAud.alerts[idxCom>=0?idxCom:0].itens.length),'Auditoria: relatório lista TODOS os itens do card');
