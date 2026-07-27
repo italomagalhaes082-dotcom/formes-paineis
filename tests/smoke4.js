@@ -1,6 +1,7 @@
 const { JSDOM, VirtualConsole } = require('jsdom');
 const fs = require('fs');
-const H = fs.readFileSync('/home/claude/formes-paineis/index.html','utf8').replace(/<script src="[^"]*"><\/script>/g,'');
+const path = require('path');
+const H = fs.readFileSync(path.resolve(__dirname,'..','index.html'),'utf8').replace(/<script src="[^"]*"><\/script>/g,'');
 const csvify = rows => rows.map(r=>r.map(v=>{
   const t = v==null? '' : String(v);
   return (/[",\n]/.test(t)) ? '"'+t.replace(/"/g,'""')+'"' : t;
@@ -323,7 +324,40 @@ async function testEmp(emp, checks){
       ok(/print-aud[^}]*position:static/.test(cssAll.replace(/\s+/g,' ')),'Impressão: overlay deixa de ser fixed (evita página repetida)');
       w.document.body.classList.remove('print-aud');
       // conteúdo didático: impacto no negócio e providência em passos
-      ok(!!p2.querySelector('.rel-impacto'),'Didático: bloco "por que isso importa"');
+      // ═══ VARREDURA: todas as abas renderizam sem exceção e com conteúdo ═══
+    const NOMES=['Geral','CDI','Aportes','Retiradas','Fluxo','Despesas','Resultado Final','Gestão de Vendas','Consolidado','Auditoria','Fornecedores','Sociedade','Análise','Relatório','Alimentação','Indicadores','Receitas'];
+    const vazias=[], quebradas=[];
+    for (let i=0;i<NOMES.length;i++){
+      try { w.switchTab(i); await new Promise(r=>setTimeout(r, i>=12?700:250));
+        const txt=(t('tab'+i)||'').trim();
+        if (txt.length<25) vazias.push(i+' '+NOMES[i]+' ('+txt.length+')');
+        if (/\[object Object\]|undefined *·|NaN\b/.test(txt.slice(0,900))) quebradas.push(i+' '+NOMES[i]);
+      } catch(e){ quebradas.push(i+' '+NOMES[i]+': '+String(e.message).slice(0,50)); }
+    }
+    ok(vazias.length===0,'Varredura: nenhuma aba vazia'+(vazias.length?' — '+vazias.join(', '):''));
+    ok(quebradas.length===0,'Varredura: nenhuma aba com erro de renderização'+(quebradas.length?' — '+quebradas.join(', '):''));
+
+    // ═══ VARREDURA: todos os relatórios da auditoria geram sem falha ═══
+    w.switchTab(9); await new Promise(r=>setTimeout(r,400));
+    const alertas=(w._auditData&&w._auditData.alerts)||[];
+    const falhosRel=[], semImpacto=[], semItens=[];
+    for (let k=0;k<alertas.length;k++){
+      try {
+        const ovX=w.document.getElementById('audRelOv'); if(ovX) ovX.remove();
+        w.gerarRelatorioAud(k); await new Promise(r=>setTimeout(r,60));
+        const pp=w.document.getElementById('audRelPapel');
+        if(!pp){ falhosRel.push(alertas[k].titulo.slice(0,32)); continue; }
+        if(!pp.querySelector('.rel-impacto')) semImpacto.push(alertas[k].titulo.slice(0,32));
+        const linhas=pp.querySelectorAll('td.rel-n').length;
+        if (alertas[k].itens.length>0 && linhas!==alertas[k].itens.length) semItens.push(alertas[k].titulo.slice(0,32)+' ('+linhas+'/'+alertas[k].itens.length+')');
+      } catch(e){ falhosRel.push(alertas[k].titulo.slice(0,32)+': '+String(e.message).slice(0,40)); }
+    }
+    const ovF=w.document.getElementById('audRelOv'); if(ovF) ovF.remove();
+    ok(falhosRel.length===0,'Varredura: todos os '+alertas.length+' relatórios geram'+(falhosRel.length?' — falhou: '+falhosRel.join(' | '):''));
+    ok(semImpacto.length===0,'Varredura: todos os relatórios trazem impacto de negócio'+(semImpacto.length?' — sem: '+semImpacto.join(' | '):''));
+    ok(semItens.length===0,'Varredura: nenhum relatório perde itens na listagem'+(semItens.length?' — '+semItens.join(' | '):''));
+
+    ok(!!p2.querySelector('.rel-impacto'),'Didático: bloco "por que isso importa"');
       ok(!!p2.querySelector('.rel-passos li'),'Didático: providência em passos numerados');
       ok(/Critério do apontamento/.test(p2.textContent),'Didático: critério técnico preservado');
       // cobertura: todo achado da auditoria precisa de contexto de negócio
