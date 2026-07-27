@@ -142,17 +142,29 @@ async function testEmp(emp, checks){
     // aba Receitas
     w.switchTab(16); await new Promise(r=>setTimeout(r,400));
     const REC=t('tab16');
-    ok(REC.includes('Projeção de VGV pela base real'),'Receitas: projeção de VGV com as três fontes');
-    ok(REC.includes('Conferência de classificação'),'Receitas: bloco de conferência');
-    ok(REC.includes('Sem casa identificada') && REC.includes('Sem tipo definido'),'Receitas: checks de classificação');
-    ok(REC.includes('Lançamentos') && REC.includes('recBusca'),'Receitas: tabela com busca');
+    ok(REC.includes('VGV pela base real'),'Receitas: VGV com as fontes cruzadas');
+    ok(REC.includes('Categorias da planilha'),'Receitas: ranking de categorias como em Despesas');
+    ok(REC.includes('Natureza (classificação do painel)'),'Receitas: ranking por natureza');
+    ok(REC.includes('Inconsistências encontradas'),'Receitas: bloco de inconsistências dos descritivos');
+    ok(REC.includes('ver todas'),'Receitas: KPI abre todos os lançamentos');
     ok(!!w.document.querySelector('#tab16 svg.chart') || REC.includes('Sem dados'),'Receitas: gráfico mensal');
-    // busca preserva o texto (mesmo padrão corrigido em despesas)
-    const ib = w.document.getElementById('recBusca');
-    if (ib) { ib.value='ma'; w.recSetBusca('ma'); await new Promise(r=>setTimeout(r,600)); }
-    const ib2 = w.document.getElementById('recBusca');
-    ok(ib2 && ib2.value==='ma','Receitas: busca preserva o texto após re-render');
-    w.recSetBusca(''); await new Promise(r=>setTimeout(r,500));
+    // drill: todos os lançamentos, com busca e ordenação (mesma mecânica de Despesas)
+    w.openDrill('receitas'); await new Promise(r=>setTimeout(r,200));
+    const modal = w.document.getElementById('drillModal');
+    ok(modal && modal.style.display==='block','Receitas: drill abre com todos os lançamentos');
+    const linhas1 = w.document.getElementById('drill-rows').children.length;
+    ok(linhas1>0,'Receitas: drill lista lançamentos ('+linhas1+')');
+    w.document.getElementById('drill-sort').value='valor_desc'; w.renderDrillRows();
+    await new Promise(r=>setTimeout(r,150));
+    ok(w.document.getElementById('drill-rows').children.length===linhas1,'Receitas: ordenação por valor mantém o conjunto');
+    w.document.getElementById('drill-search').value='zzzznaoexiste'; w.renderDrillRows();
+    ok(w.document.getElementById('drill-rows').textContent.includes('Nenhum resultado'),'Receitas: busca do drill filtra');
+    w.document.getElementById('drill-search').value=''; w.renderDrillRows();
+    w.closeDrill();
+    // posição na barra: Receitas logo após Despesas
+    const abas=[...w.document.querySelectorAll('.tabs .tab')];
+    const oDesp=abas.find(b=>/Despesas/.test(b.textContent)), oRec=abas.find(b=>/Receitas/.test(b.textContent));
+    ok(oDesp && oRec && Number(oRec.style.order)>Number(oDesp.style.order) && Number(oRec.style.order)<Number(oDesp.style.order)+10,'Receitas: posicionada ao lado de Despesas na barra');
     // regressão dataComp: com receitas presentes, a série de receita da aba 15 não pode vir vazia
     w.switchTab(15); await new Promise(r=>setTimeout(r,450));
     const boxRD = w.document.querySelector('#tab15 #g_ind_rd');
