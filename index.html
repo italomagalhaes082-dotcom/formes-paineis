@@ -1115,7 +1115,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-t · relatórios didáticos</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-u · outliers por quartil</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -3556,8 +3556,8 @@ const AUD_CONTEXTO = [
    impacto:'Este achado é informativo, não é erro: são lançamentos que o painel reclassificou sozinho, seguindo regras confirmadas por você, para que as análises fiquem corretas. O ponto de atenção é que a PLANILHA continua com a categoria antiga — quem consultar a planilha direto vai ver um número diferente do painel. Corrigir na origem elimina essa divergência de uma vez.',
    acao:['Confira se cada reclassificação abaixo faz sentido.','Aplique a mesma correção na planilha, na categoria de origem.','Depois de corrigido na planilha, a regra automática deixa de ser necessária — avise o gestor para removê-la.'] },
  { re:/valor desproporcional/i, agrupar:'nenhum',
-   impacto:'Compra muito acima da média da própria categoria pode ser erro de digitação (uma casa decimal a mais), item lançado na categoria errada, ou preço fora de mercado. Qualquer das três distorce o custo da obra e a projeção de custo final, que é o número que orienta suas decisões de caixa.',
-   acao:['Confira a nota fiscal: valor, quantidade e unidade.','Se o valor estiver certo, verifique se a categoria é a adequada.','Se estiver fora de mercado, registre para renegociação com o fornecedor.'] },
+   impacto:'Compra muito acima do padrão da própria categoria pode ser erro de digitação (uma casa decimal a mais), item lançado na categoria errada, ou preço fora de mercado. Qualquer das três distorce o custo da obra e a projeção de custo final, que é o número que orienta suas decisões de caixa. A comparação é feita contra o teto das compras ROTINEIRAS da categoria (terceiro quartil), não contra a média nem a mediana — que numa categoria com muitos itens pequenos ficam baixas demais e fariam toda compra grande legítima parecer anomalia. Só entram valores materiais, de pelo menos R$ 10 mil ou 1% do gasto da categoria.',
+   acao:['Confira a nota fiscal: valor, quantidade e unidade — erro de casa decimal aparece aqui.','Se o valor estiver certo, verifique se a categoria é a adequada para o item.','Compare o preço unitário com a última compra do mesmo material.','Se estiver fora de mercado, registre para renegociação com o fornecedor.'] },
 ];
 function audContexto(titulo){
   for (const c of AUD_CONTEXTO) if (c.re.test(titulo||'')) return c;
@@ -3687,24 +3687,43 @@ async function runAuditoria(progressCb) {
 
   // ── 1. COMPRAS DESPROPORCIONAIS (outliers estatísticos por categoria) ──
   say("Analisando valores fora da curva...");
-  { const byCat={};
+  { // Estatística ROBUSTA. Média e desvio-padrão não servem aqui: a despesa de obra é
+    // muito assimétrica (centenas de compras pequenas e poucas grandes), então a média
+    // fica baixa, o desvio fica inflado pelos próprios grandes valores, e compra normal
+    // de concreto vira "fora da curva". Usamos mediana, MAD e quartis — que os valores
+    // extremos não deslocam — mais um piso de materialidade.
+    const quant=(arr,p)=>{ const s=[...arr].sort((a,b)=>a-b); const i=(s.length-1)*p;
+      const lo=Math.floor(i), hi=Math.ceil(i); return lo===hi? s[lo] : s[lo]+(s[hi]-s[lo])*(i-lo); };
+    const byCat={};
     D.forEach(r=>{(byCat[r.categoria]=byCat[r.categoria]||[]).push(r);});
     const outliers=[];
     Object.entries(byCat).forEach(([cat,arr])=>{
-      if(arr.length<6) return;
+      if(arr.length<12) return;                       // amostra pequena não gera estatística confiável
       const vals=arr.map(r=>r.valor);
-      const media=vals.reduce((a,b)=>a+b,0)/vals.length;
-      const dp=Math.sqrt(vals.reduce((s,v)=>s+(v-media)**2,0)/vals.length)||1;
-      arr.forEach(r=>{ const z=(r.valor-media)/dp;
-        if(z>2.5 && r.valor>=5000) outliers.push({r,z,media,cat}); });
+      const total=vals.reduce((a,b)=>a+b,0);
+      const med=quant(vals,.5), q1=quant(vals,.25), q3=quant(vals,.75), iqr=q3-q1;
+      const mad=quant(vals.map(v=>Math.abs(v-med)),.5);
+      // piso de materialidade: só interessa o que move o custo da obra
+      const piso=Math.max(10000, total*0.01);
+      // A âncora é o TERCEIRO QUARTIL, não a mediana: numa categoria que mistura
+      // parafuso e concreto, a mediana também fica baixa e compra grande legítima
+      // seria apontada. Q3 representa o teto das compras rotineiras.
+      const limiar = Math.max(q3 + 3*iqr, 5*q3);       // Tukey extremo OU 5× o teto rotineiro
+      arr.forEach(r=>{
+        if (r.valor < piso || r.valor < limiar) return;
+        outliers.push({ r, cat, med, q3, limiar,
+          mult: med>0 ? r.valor/med : 0,
+          multQ3: q3>0 ? r.valor/q3 : 0,
+          pctCat: total>0 ? r.valor/total*100 : 0 });
+      });
     });
-    outliers.sort((a,b)=>b.z-a.z);
+    outliers.sort((a,b)=>b.r.valor-a.r.valor);         // dinheiro primeiro, não o desvio
     if(outliers.length) alerts.push({ sev:"alta", icon:"📦",
       titulo:"Compras com valor desproporcional à própria categoria",
-      resumo:outliers.length+" lançamento(s) estatisticamente fora da curva (z-score > 2,5)",
-      pergunta:"Estes pagamentos são muito maiores que o padrão histórico da própria categoria. Há orçamento aprovado, nota fiscal e medição que os justifiquem? O quantitativo comprado é compatível com a fase da obra?",
+      resumo:outliers.length+" lançamento(s) acima do teto das compras rotineiras da própria categoria",
+      pergunta:"O critério não usa média nem mediana como referência: numa categoria que mistura parafuso e concreto, as duas ficam baixas e toda compra grande legítima seria apontada. A âncora é o TERCEIRO QUARTIL — o teto das compras rotineiras da própria categoria — e só entra o que supera cinco vezes esse teto (ou o limite extremo de Tukey), com valor material de pelo menos R$ 10 mil ou 1% do gasto da categoria. Para cada item: há orçamento, nota fiscal e medição que justifiquem? O quantitativo é compatível com a fase da obra?",
       total: outliers.length, itens:outliers.slice(0, 500).map(o=>_audItem(
-        o.r.fornecedor, o.r.data+" · "+o.cat+" · "+o.r.descricao+" · média da categoria: "+fmt(o.media)+" ("+o.z.toFixed(1)+"σ acima)",
+        o.r.fornecedor, o.r.data+" · "+o.cat+" · "+o.r.descricao+" · compras rotineiras da categoria vão até "+fmt(o.q3)+" (mediana "+fmt(o.med)+") — este é "+o.multQ3.toFixed(1)+"× esse teto e representa "+o.pctCat.toFixed(1)+"% do gasto da categoria",
         fmt(o.r.valor), "#BF6B60")) });
   }
 
