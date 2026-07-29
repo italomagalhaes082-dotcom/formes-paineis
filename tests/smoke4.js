@@ -63,6 +63,10 @@ dspB.push(dsp('RESTAURANTE BOM PRATO','12/01/2025','ALMOCO EQUIPE',4000,'Aliment
 dspB.push(dsp('RESTAURANTE BOM PRATO','12/02/2025','ALMOCO EQUIPE',4000,'Alimentação da Obra'));
 dspB.push(dsp('M C OLIVEIRA','10/05/2024','100 CARRADAS DE ATERROS - BOSSA NOVA',20000,'Limpeza/Terraplanagem'));
 dspB.push(dsp('SAXUM DEMOLICOES','12/05/2024','04 DIARIAS RETRO - BOSSA NOVA',9000,'Limpeza/Terraplanagem'));
+dspB.push(dsp('SAXUM DEMOLICOES','20/05/2024','08 DIARIAS RETRO - BOSSA NOVA',18000,'Limpeza/Terraplanagem'));
+dspB.push(dsp('MEGALOC','21/05/2024','LOCACAO COMPACTADOR - BOSSA NOVA',1200,'Aluguel de Equipamentos'));
+dspB.push(dsp('JS LOCACOES E SERVICOS','06/06/2023','TERRAPLANAGEM E PAVIMENTACAO - BOSSA NOVA',120000,'Limpeza/Terraplanagem'));
+dspB.push(dsp('PEDREIRA NATASHA','15/09/2022','PEDRA DE MAO - NF288996 - BOSSA NOVA',1422,'Aquisição de Materiais'));
 dspB.push(dsp('EGEN GESTAO','11/09/2024','ALUGUEL DE MAQUINAS TERRAPLANAGEM',62913,'Limpeza/Terraplanagem'));
 dspB.push(dsp('POSTO LUA','15/05/2024','ABASTECIMENTO EQUIPAMENTO DE OBRA',3200,'Diversos'));
 // NÃO pode entrar: areia é material, moto é administrativo, água é Cagece
@@ -334,6 +338,8 @@ async function testEmp(emp, checks){
       const pTP=w.document.getElementById('audRelPapel');
       ok(!!pTP && /Terraplanagem, muro de arrimo/.test(pTP.textContent),'Relatório terraplanagem: papel renderiza');
       ok(/Por que o custo do arrimo não fecha/.test(pTP.textContent),'Relatório terraplanagem: análise do arrimo');
+      ok(/Estimativa de execução/.test(pTP.textContent),'Relatório terraplanagem: estimativa do arrimo');
+      ok(/cenário mais barato/.test(pTP.textContent),'Relatório terraplanagem: estimativa declarada como piso');
       ok(/Providência/.test(pTP.textContent),'Relatório terraplanagem: providências');
       w.fecharRelatorioAud();
       const btnTerra = w.document.getElementById('tabBtnTerra');
@@ -342,7 +348,13 @@ async function testEmp(emp, checks){
       const rowsTerra=(w._DESPESAS||[]);
       ok(typeof w.tpEhTerra==='function','Terraplanagem: função de escopo disponível');
       ok(w.tpEhTerra({descricao:'100 CARRADAS DE ATERROS - BOSSA NOVA'}),'Escopo: aterro entra');
-      ok(w.tpEhTerra({descricao:'04 DIARIAS RETRO - BOSSA NOVA'}),'Escopo: diária de retro entra');
+      ok(w.tpEhTerra({descricao:'08 DIARIAS RETRO - BOSSA NOVA'}),'Escopo: 8 diárias de retro entram');
+      ok(!w.tpEhTerra({descricao:'04 DIARIAS RETRO - BOSSA NOVA'}),'Escopo: menos de 5 diárias NÃO entra (serviço pontual)');
+      ok(!w.tpEhTerra({descricao:'LOCACAO COMPACTADOR', fornecedor:'MEGALOC'}),'Escopo: Megaloc NÃO entra em nada');
+      ok(!w.tpEhTerra({descricao:'TERRAPLANAGEM E PAVIMENTACAO', fornecedor:'JS LOCACOES E SERVICOS'}),'Escopo: JS Locações é desmembramento, não terraplanagem');
+      ok(typeof w.tpEstimativa==='function','Arrimo: estimativa paramétrica disponível');
+      const est=w.tpEstimativa();
+      ok(est.total>0 && est.unit>0,'Arrimo: estimativa calcula (R$ '+Math.round(est.unit)+'/m³)');
       ok(!w.tpEhTerra({descricao:'11 AREIAS - BOSSA NOVA'}),'Escopo: areia NÃO entra (é material)');
       ok(!w.tpEhTerra({descricao:'ABASTECIMENTO DE AGUA - BOSSA NOVA'}),'Escopo: água da Cagece NÃO entra');
       ok(!w.tpEhTerra({descricao:'ABASTECIMENTO MOTO CARDOSO'}),'Escopo: moto da equipe NÃO entra');
