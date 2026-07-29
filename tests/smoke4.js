@@ -61,6 +61,14 @@ dspB.push(dsp('CZ SECURITIZADORA S/A','10/03/2025','DEVOLUCAO AFAC CZ',750000,'D
 dspB.push(dsp('Loja','05/02/2025','ACO',60000,'Fornecedor - Aquisição de materiais'));
 dspB.push(dsp('RESTAURANTE BOM PRATO','12/01/2025','ALMOCO EQUIPE',4000,'Alimentação da Obra'));
 dspB.push(dsp('RESTAURANTE BOM PRATO','12/02/2025','ALMOCO EQUIPE',4000,'Alimentação da Obra'));
+dspB.push(dsp('M C OLIVEIRA','10/05/2024','100 CARRADAS DE ATERROS - BOSSA NOVA',20000,'Limpeza/Terraplanagem'));
+dspB.push(dsp('SAXUM DEMOLICOES','12/05/2024','04 DIARIAS RETRO - BOSSA NOVA',9000,'Limpeza/Terraplanagem'));
+dspB.push(dsp('EGEN GESTAO','11/09/2024','ALUGUEL DE MAQUINAS TERRAPLANAGEM',62913,'Limpeza/Terraplanagem'));
+dspB.push(dsp('POSTO LUA','15/05/2024','ABASTECIMENTO EQUIPAMENTO DE OBRA',3200,'Diversos'));
+// NÃO pode entrar: areia é material, moto é administrativo, água é Cagece
+dspB.push(dsp('MARINA TRANSPORTES','16/05/2024','11 AREIAS - BOSSA NOVA',10650,'Aquisição de Materiais'));
+dspB.push(dsp('010 COMERCIO','17/05/2024','ABASTECIMENTO MOTO CARDOSO - BOSSA NOVA',140,'Diversos'));
+dspB.push(dsp('CAGECE','18/05/2024','ABASTECIMENTO DE AGUA - BOSSA NOVA',380,'Abastecimento de Água'));
 dspB.push(dsp('Mestre','05/02/2025','PAGTO MAO DE OBRA FOLHA 22',30000,'Mão de obra - Mestre'));
 
 // ── JAZZ: mock mínimo 2 abas
@@ -311,6 +319,23 @@ async function testEmp(emp, checks){
     ok(t('tab7').includes('Casa a Casa') && t('tab7').includes('CS 01'),'Gestão de Vendas derivada (CS 01)');
   }));
   E=E.concat(await testEmp('bossa', async(w,t,ok)=>{
+    // painel de terraplanagem (só no Bossa)
+      w.switchTab(17); await new Promise(r=>setTimeout(r,500));
+      const TP=t('tab17');
+      ok(TP.includes('Terraplanagem, muro de arrimo'),'Terraplanagem: painel renderiza');
+      ok(TP.includes('Carradas de aterro') && TP.includes('Diárias de máquina'),'Terraplanagem: quantidades e preços unitários');
+      ok(TP.includes('Combustível de máquinas'),'Terraplanagem: bloco de combustível');
+      ok(TP.includes('Muro de arrimo'),'Terraplanagem: seção de atribuição do arrimo');
+      const btnTerra = w.document.getElementById('tabBtnTerra');
+      ok(!!btnTerra,'Terraplanagem: aba existe');
+      // escopo: areia, moto e água ficam de fora
+      const rowsTerra=(w._DESPESAS||[]);
+      ok(typeof w.tpEhTerra==='function','Terraplanagem: função de escopo disponível');
+      ok(w.tpEhTerra({descricao:'100 CARRADAS DE ATERROS - BOSSA NOVA'}),'Escopo: aterro entra');
+      ok(w.tpEhTerra({descricao:'04 DIARIAS RETRO - BOSSA NOVA'}),'Escopo: diária de retro entra');
+      ok(!w.tpEhTerra({descricao:'11 AREIAS - BOSSA NOVA'}),'Escopo: areia NÃO entra (é material)');
+      ok(!w.tpEhTerra({descricao:'ABASTECIMENTO DE AGUA - BOSSA NOVA'}),'Escopo: água da Cagece NÃO entra');
+      ok(!w.tpEhTerra({descricao:'ABASTECIMENTO MOTO CARDOSO'}),'Escopo: moto da equipe NÃO entra');
     ok(t('tab0').includes('Estrutura de capital incompleta'),'Aviso de capital incompleto no Bossa');
     w.switchTab(11); await new Promise(r=>setTimeout(r,150));
     const S=t('tab11');
@@ -339,6 +364,7 @@ async function testEmp(emp, checks){
     ok(t('tab11').includes('Permutante Jazz'),'Jazz: permutante casas 01-10 configurado');
     w.switchTab(9); await new Promise(r=>setTimeout(r,700));
     ok(t('tab9').includes('Reclassificações automáticas aplicadas'),'Item 1: rastro da reclassificação Rafael Santos');
+
     // auditoria: o contador do card precisa refletir o total real, não a lista truncada
     const dadosAud = w._auditData || {};
     const comTotal = (dadosAud.alerts||[]).filter(a=>typeof a.total==='number');
