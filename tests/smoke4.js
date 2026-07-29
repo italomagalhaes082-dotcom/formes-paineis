@@ -96,6 +96,14 @@ dspJ.push(dsp('ANTONIO GESSO','13/03/2025','REBOCO DE GESSO CS 44',3100,'Aquisi�
 // produto que CITA reboco/chapisco -> deve continuar como material (falso positivo a evitar)
 dspJ.push(dsp('COMERCIAL MAIA','14/03/2025','CUNHA E ESPONJA DE REBOCO NF 1380587',890,'Aquisição de Materiais'));
 dspJ.push(dsp('CREA CE','15/03/2025','ART DE EXECUCAO',250,'Taxas/Licenças/Alvará'));
+// contencioso de verdade
+dspJ.push(dsp('ESCRITORIO JURIDICO ALEXANDRE','04/04/2026','HONORARIOS ADVOCATICIOS - JAZZ',1800,'Honorários Advocatícios/Consultoria e Outros'));
+dspJ.push(dsp('ANDRE LUIS BARBOSA','05/04/2026','ACORDO TRABALHISTA RUBENS FARIAS',2000,'Diversos'));
+// NÃO é contencioso: palavras terminadas em -ação e processos administrativos
+dspJ.push(dsp('RH FOLHA','06/04/2026','GRATIFICACAO EQUIPE - JAZZ',3500,'Escritório/Administrativo'));
+dspJ.push(dsp('POCO ARTESIANO','07/04/2026','MATERIAIS PARA INSTALACAO POCO',9000,'Aquisição de Materiais'));
+dspJ.push(dsp('CAGECE','08/04/2026','TAXA INICIO PROCESSO EXTENSAO RAMAL',4200,'Abastecimento de Água'));
+dspJ.push(dsp('CONTADOR SILVA','09/04/2026','HONORARIOS CONTABEIS - JAZZ',2500,'Honorários Advocatícios/Consultoria e Outros'));
 dspJ.push(dsp('FORN 0','01/04/2025','COMPRA ROTINEIRA 0',200,'Material Teste'));
 dspJ.push(dsp('FORN 1','02/04/2025','COMPRA ROTINEIRA 1',228,'Material Teste'));
 dspJ.push(dsp('FORN 2','03/04/2025','COMPRA ROTINEIRA 2',261,'Material Teste'));
@@ -542,6 +550,16 @@ async function testEmp(emp, checks){
     ok(AN.includes('Mão de obra — visão profunda'),'Análise: MO profunda');
     ok(AN.includes('índice controlável')||AN.includes('Custas judiciais'),'Análise: índice judicial (só contencioso)');
     ok(AN.includes('Cartorário'),'Análise: cartorário separado, sem régua');
+    // contencioso: só o que é jurídico de verdade
+    w.drillAnalise('judicial','jazz'); await new Promise(r=>setTimeout(r,200));
+    const linhasJ = w.document.getElementById('drill-rows').textContent;
+    ok(/ADVOCATICIOS/.test(linhasJ),'Contencioso: honorários advocatícios entram');
+    ok(/ACORDO TRABALHISTA/.test(linhasJ),'Contencioso: acordo trabalhista entra');
+    ok(!/GRATIFICACAO/.test(linhasJ),'Contencioso: "gratificação" NÃO entra (era o token ACAO)');
+    ok(!/INSTALACAO POCO/.test(linhasJ),'Contencioso: "instalação" NÃO entra');
+    ok(!/EXTENSAO RAMAL/.test(linhasJ),'Contencioso: processo administrativo de água NÃO entra');
+    ok(!/CONTABEIS/.test(linhasJ),'Contencioso: honorários contábeis NÃO entram');
+    w.closeDrill();
     ok(AN.includes('desperdício')||AN.includes('Indícios'),'Análise: indícios de desperdício');
     w.switchTab(13); await new Promise(r=>setTimeout(r,400));
     const REL=t('tab13');

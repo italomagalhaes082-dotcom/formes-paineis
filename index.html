@@ -1115,7 +1115,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v28.07.26-a · receitas em dois grupos</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v28.07.26-b · contencioso corrigido</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -2183,7 +2183,23 @@ const TIPOS_MATERIAL = [
   ['Impermeabilização', /IMPERMEAB|MANTA|VEDACIT/],
 ];
 function tipoMaterialDe(descU) { for (const [nome, re] of TIPOS_MATERIAL) if (re.test(descU)) return nome; return null; }
-const RE_JUDICIAL = /JUDICIAL|CUSTAS PROC|ADVOCA|HONORAR|PROCESSO|FORUM|ALVARA JUD|PENHORA|ACAO |LIMINAR/;
+// ═══ Contencioso: advogados, acordos trabalhistas, depósitos recursais, atos judiciais ═══
+// A versão anterior usava os tokens "ACAO " e "PROCESSO", que casavam com QUALQUER palavra
+// terminada em -ação (gratificação, instalação, doação) e com prenotação de cartório:
+// 1.267 lançamentos e R$ 2,0 milhões só no Jazz, contra R$ 18,6 mil reais.
+const RE_JUDICIAL = /\bJUDICIAL|JURIDIC|ADVOCA|ADVOGAD|SUCUMBENC|TRABALHIST|RECLAMAT|JUSTICA DO TRABALHO|VARA DO TRABALHO|\bTRT\b|DEPOSITO RECURSAL|\bRECURSAL\b|CUSTAS PROCESS|CUSTAS JUDICI|OFICIAL DE JUSTICA|PERICIA JUDICIAL|PENHORA|\bLIMINAR\b|ALVARA JUDICIAL/;
+// A categoria da planilha ("Honorários Advocatícios/Consultoria e Outros") mistura advogado,
+// contador e assessoria de engenharia — só vale como critério o nome inequívoco.
+const RE_CAT_JUDICIAL = /\bJUDICIAL|CONTENCIOSO/;
+function ehCartorio(r){
+  const cU=_audNorm(r.categoria||''), dU=_audNorm(r.descOriginal||r.descricao||'');
+  return RE_CARTORIO.test(cU) || RE_CARTORIO.test(dU);
+}
+function ehJudicial(r){
+  if (ehCartorio(r)) return false;
+  const cU=_audNorm(r.categoria||''), dU=_audNorm(r.descOriginal||r.descricao||''), fU=_audNorm(r.fornecedor||'');
+  return RE_CAT_JUDICIAL.test(cU) || RE_JUDICIAL.test(dU) || RE_JUDICIAL.test(fU);
+}
 const RE_FORN_COMIDA = /ALIMENTA|RESTAURANT|REFEIC|MARMIT|QUENTINH|LANCH|COZINHA|SELF SERVICE|CHURRASC|SABOR|TEMPERO/;
 const RE_CARTORIO = /CARTOR|TABELIONATO|EMOLUMENTO|ESCRITURA|REGISTRO DE IMO|RECONHEC.*FIRMA|AUTENTICA|ITBI|RGI\b|AVERBAC/;
 
@@ -3050,8 +3066,8 @@ async function ensureAnaliseData(force) {
           const fk=(r.fornecedor||'—').trim();
           if (fk!=='—') moForn[fk]=(moForn[fk]||0)+r.valor;
         }
-        if (RE_CARTORIO.test(cU) || RE_CARTORIO.test(dU)) { cartTotal+=r.valor; }
-        else if (RE_JUDICIAL.test(cU) || RE_JUDICIAL.test(dU)) { judTotal+=r.valor; judMes[ym]=(judMes[ym]||0)+r.valor; }
+        if (ehCartorio(r)) { cartTotal+=r.valor; }
+        else if (ehJudicial(r)) { judTotal+=r.valor; judMes[ym]=(judMes[ym]||0)+r.valor; }
       });
       desp.forEach(r=>{ r._obra = c.nome; r._obraKey = k; });
       window._analiseRows = (window._analiseRows||[]).filter(r=>r._obraKey!==k).concat(desp);
@@ -3291,7 +3307,7 @@ function paintAnalise(R) {
         </tbody></table></div>`;
     })()}
 
-    <div class="section-title">⚖️ Custas judiciais — índice controlável${hintIcon('SÓ o contencioso: processos, honorários advocatícios, custas processuais, penhoras. Cartorário fica FORA (é obrigatório e inescapável — medido à parte, sem juízo de valor). Régua: <0,5% saudável · até 1% atenção · acima, vermelho.')}</div>
+    <div class="section-title">⚖️ Custas judiciais — índice controlável${hintIcon('SÓ o contencioso: honorários advocatícios, acordos trabalhistas, depósitos recursais, custas processuais, penhoras e atos judiciais. O julgamento é pelo DESCRITIVO e pelo FORNECEDOR — a categoria da planilha mistura advogado, contador e assessoria de engenharia, então não serve de critério. Cartorário fica FORA (é obrigatório). Régua: <0,5% saudável · até 1% atenção.')}</div>
     <div class="kpi-grid" style="grid-template-columns:repeat(${R.length+1},1fr)">
       ${R.map(r=>{
         const pct=r.despTotal>0? r.judTotal/r.despTotal*100 : 0;
@@ -6144,7 +6160,7 @@ window.drillAnalise = function(filtroTipo, arg1, arg2) {
     rows = R.filter(r=> _audNorm(r.categoria||'').includes('ALIMENTA') && (!arg1 || r._obraKey===arg1));
     titulo = '🍛 Alimentação' + (arg1? ' · '+arg1 : ' · grupo'); cor = '#5F9E93';
   } else if (filtroTipo==='judicial') {
-    rows = R.filter(r=> (!arg1 || r._obraKey===arg1) && (RE_JUDICIAL.test(_audNorm(r.categoria||'')) || RE_JUDICIAL.test(_audNorm(r.descOriginal||r.descricao||''))) && !(RE_CARTORIO.test(_audNorm(r.categoria||''))||RE_CARTORIO.test(_audNorm(r.descOriginal||r.descricao||''))));
+        rows = R.filter(r=> (!arg1 || r._obraKey===arg1) && ehJudicial(r));
     titulo = '⚖️ Custas judiciais' + (arg1? ' · '+arg1 : ' · grupo'); cor = '#BF6B60';
   }
   if (!rows.length) { alert('Os lançamentos das três obras ainda estão carregando. Abra a aba Análise uma vez e tente de novo.'); return; }
