@@ -325,7 +325,17 @@ async function testEmp(emp, checks){
       ok(TP.includes('Terraplanagem, muro de arrimo'),'Terraplanagem: painel renderiza');
       ok(TP.includes('Carradas de aterro') && TP.includes('Diárias de máquina'),'Terraplanagem: quantidades e preços unitários');
       ok(TP.includes('Combustível de máquinas'),'Terraplanagem: bloco de combustível');
-      ok(TP.includes('Muro de arrimo'),'Terraplanagem: seção de atribuição do arrimo');
+      ok(TP.includes('rastreado pelo consumo de pedra de mão'),'Arrimo: rastreamento por pedra de mão');
+      ok(typeof w.tpEhPedra==='function' && w.tpEhPedra({descricao:'PEDRA DE MAO - NF 320137'}),'Arrimo: pedra de mão reconhecida');
+      ok(!w.tpEhPedra({descricao:'PO DE PEDRA - NF303622'}),'Arrimo: pó de pedra NÃO conta como pedra de mão');
+      ok(TP.includes('Relatório / PDF'),'Terraplanagem: botão de relatório');
+      ok(typeof w.gerarRelatorioTerra==='function','Terraplanagem: gerador de relatório disponível');
+      w.gerarRelatorioTerra(); await new Promise(r=>setTimeout(r,250));
+      const pTP=w.document.getElementById('audRelPapel');
+      ok(!!pTP && /Terraplanagem, muro de arrimo/.test(pTP.textContent),'Relatório terraplanagem: papel renderiza');
+      ok(/Por que o custo do arrimo não fecha/.test(pTP.textContent),'Relatório terraplanagem: análise do arrimo');
+      ok(/Providência/.test(pTP.textContent),'Relatório terraplanagem: providências');
+      w.fecharRelatorioAud();
       const btnTerra = w.document.getElementById('tabBtnTerra');
       ok(!!btnTerra,'Terraplanagem: aba existe');
       // escopo: areia, moto e água ficam de fora

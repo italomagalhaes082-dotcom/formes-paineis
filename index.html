@@ -1117,7 +1117,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v28.07.26-c · terraplanagem bossa</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v28.07.26-d · terraplanagem completa</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -2698,24 +2698,43 @@ function renderReceitas() {
 // ═══════════ 🚜 TERRAPLANAGEM, ARRIMO E MÁQUINAS — exclusivo Bossa Nova ═══════════
 // Escopo declarado: movimento de terra e operação de máquinas. Areia e brita NÃO entram
 // (são material de construção, não terraplanagem) — foi o erro que a primeira leitura cometeu.
-const TP_RE = /ATERRO|PICARRA|ESCAVA|DESMATAMENT|LIMPEZA (DE )?TERRENO|DIARIAS?\s*(DE\s*)?(RETRO|MINI RETRO|PA CARREGADEIRA|TRATOR|PATROL|MOTONIVELADORA|ROLO|CACAMBA)|ALUGUEL DE MAQUINAS|MAQUINAS TERRAPLA|TERRAPLA|COMPACTADOR|BOTA[- ]?FORA|PAVIMENTA/;
-const TP_NAO = /^\d*\s*AREIAS?\b|CARRADAS? DE AREIA|AREIA GROSSA|AREIA FINA|\bBRITA\b/;
-const TP_COMB = /ABASTECIMENTO (EQUIPAMENTO|MAQUIN|COMPACTADOR|RETRO|TRATOR)|COMBUSTIVEL.*(MAQUIN|EQUIPAMENT)/;
+// Escopo conforme as regras do negócio (Ítalo, 28/07):
+// MATERIAIS de terraplanagem: aterro, areia do morro, piçarra. Areia grossa NÃO entra.
+// EQUIPAMENTO/SERVIÇO: pá mecânica, rolo compactador, carro/caminhão pipa, aluguel de
+// caçamba, encarregado de terraplanagem, abastecimento de máquinas.
+// FORNECEDORES de referência: EGEN, SAXUM, VANDERLEI.
+const TP_MAT  = /\bATERROS?\b|AREIA DO MORRO|PICARRA/;
+const TP_EQUIP= /PA MECANICA|PA CARREGADEIRA|ROLO COMPACTADOR|COMPACTADOR|CARRO PIPA|CAMINHAO PIPA|\bPIPA\b|ALUGUEL DE CACAMBA|\bCACAMBA\b|ENCARREGADO DE TERRAPLA|MOTONIVELADORA|PATROL|\bRETRO\b|MINI RETRO|ESCAVADEIRA|ESCAVA|\bTRATOR\b|TERRAPLA|BOTA[- ]?FORA|DESMATAMENT|LIMPEZA (DE )?TERRENO|ALUGUEL DE MAQUINAS/;
+const TP_FORN = /\bEGEN\b|SAXUM|VANDERLEI/;
+// areia grossa/fina e brita são material de obra, não de terraplanagem
+const TP_NAO  = /AREIA GROSSA|AREIA FINA|\bBRITA\b|PO DE PEDRA|AREIA LAVADA/;
+const TP_COMB = /ABASTECIMENTO (EQUIPAMENTO|MAQUIN|COMPACTADOR|RETRO|TRATOR|PA )|COMBUSTIVEL.*(MAQUIN|EQUIPAMENT)/;
 function tpEhTerra(r){
   const d = _audNorm(r.descOriginal||r.descricao||'');
-  if (!TP_RE.test(d)) return false;
-  if (TP_NAO.test(d) && !/ATERRO|PICARRA|DIARIA|ESCAVA|COMPACTADOR/.test(d)) return false;
-  return true;
+  const f = _audNorm(r.fornecedor||'');
+  if (TP_NAO.test(d) && !TP_MAT.test(d)) return false;
+  return TP_MAT.test(d) || TP_EQUIP.test(d) || TP_FORN.test(f);
 }
 function tpNatureza(r){
   const d = _audNorm(r.descOriginal||r.descricao||'');
   if (/PAVIMENTA/.test(d)) return 'Pavimentação';
+  if (/ENCARREGADO DE TERRAPLA/.test(d)) return 'Encarregado de terraplanagem';
+  if (/CARRO PIPA|CAMINHAO PIPA|\bPIPA\b/.test(d)) return 'Carro e caminhão pipa';
+  if (/ALUGUEL DE CACAMBA|\bCACAMBA\b/.test(d)) return 'Aluguel de caçamba';
+  if (/ROLO COMPACTADOR|COMPACTADOR/.test(d)) return 'Rolo compactador';
   if (/ALUGUEL DE MAQUINAS|MAQUINAS TERRAPLA/.test(d)) return 'Aluguel de máquinas';
-  if (/DIARIAS?\s*(DE\s*)?(RETRO|MINI RETRO|PA CARREGADEIRA|TRATOR|PATROL|MOTONIVELADORA|ROLO|CACAMBA)/.test(d)) return 'Diárias de máquina';
-  if (/COMPACTADOR/.test(d)) return 'Compactação';
+  if (/PA MECANICA|PA CARREGADEIRA|\bRETRO\b|MINI RETRO|ESCAVADEIRA|MOTONIVELADORA|PATROL|\bTRATOR\b/.test(d)) return 'Pá mecânica, retro e escavação';
   if (/DESMATAMENT|LIMPEZA/.test(d)) return 'Limpeza e desmatamento';
-  return 'Aterro, piçarra e escavação';
+  if (TP_MAT.test(d)) return 'Aterro, areia do morro e piçarra';
+  return 'Outros serviços de terraplanagem';
 }
+// ═══ Muro de arrimo: rastreado pelo consumo de PEDRA DE MÃO ═══
+// Regra do negócio: a execução do arrimo aparece como elevação muito grande do consumo
+// de pedra de mão (também chamada pedra ou pedra de alicerce). Escopo da obra:
+// 2.000 m³ de arrimo de pedra argamassada escalonado, em Eusébio/CE.
+const TP_PEDRA = /PEDRA DE MAO|PEDRA DE ALICERCE|\bPEDRAS? DE MAO\b/;
+const TP_ARRIMO_M3 = 2000;
+function tpEhPedra(r){ return TP_PEDRA.test(_audNorm(r.descOriginal||r.descricao||'')); }
 // Atribuição do muro de arrimo: não há lançamento nominal, então o gestor marca os
 // fornecedores que compõem a obra do muro e o painel soma. Fica salvo no aparelho.
 function tpArrimoSet(){ try { return new Set(JSON.parse(localStorage.getItem('tp_arrimo_'+CFG.sheetId)||'[]')); } catch(e){ return new Set(); } }
@@ -2724,6 +2743,104 @@ window.tpToggleArrimo = function(forn){
   if (s.has(forn)) s.delete(forn); else s.add(forn);
   localStorage.setItem('tp_arrimo_'+CFG.sheetId, JSON.stringify([...s]));
   renderTerraplanagem();
+};
+
+// Relatório em papel A4 da terraplanagem — reaproveita o overlay e o modo de impressão
+// já usados nos relatórios da Auditoria.
+window.gerarRelatorioTerra = function(){
+  const D=_DESPESAS||[];
+  const terra=D.filter(tpEhTerra), comb=D.filter(r=>TP_COMB.test(_audNorm(r.descOriginal||r.descricao||''))), ped=D.filter(tpEhPedra);
+  const tT=terra.reduce((s,r)=>s+r.valor,0), tC=comb.reduce((s,r)=>s+r.valor,0), tP=ped.reduce((s,r)=>s+r.valor,0);
+  const custoObra=D.filter(r=>isCustoObra(r.categoria||'')).reduce((s,r)=>s+r.valor,0);
+  const hoje=new Date().toLocaleDateString('pt-BR');
+  let ult=null; D.forEach(r=>{const d=parseDate(r.data); if(d&&(!ult||d>ult)) ult=d;});
+  const nat={}; terra.forEach(r=>{const kk=tpNatureza(r); (nat[kk]=nat[kk]||{v:0,n:0}); nat[kk].v+=r.valor; nat[kk].n++;});
+  const forn={}; terra.forEach(r=>{const f=(r.fornecedor||'—').trim(); (forn[f]=forn[f]||{v:0,n:0}); forn[f].v+=r.valor; forn[f].n++;});
+  const anos={}; terra.forEach(r=>{const d=parseDate(r.data); if(d) anos[d.getFullYear()]=(anos[d.getFullYear()]||0)+r.valor;});
+  let carradas=0,vCarr=0,diarias=0,vDiar=0;
+  terra.forEach(r=>{const d=_audNorm(r.descOriginal||r.descricao||'');
+    const mc=d.match(/(\d{1,3})\s*CARRADAS?/); if(mc&&/ATERRO|PICARRA|MORRO/.test(d)){carradas+=+mc[1];vCarr+=r.valor;}
+    const md=d.match(/(\d{1,3})[.,]?\d*\s*DIARIAS?/); if(md){diarias+=+md[1];vDiar+=r.valor;}});
+  const mes={}; ped.forEach(r=>{const d=parseDate(r.data); if(!d)return; const kk=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); mes[kk]=(mes[kk]||0)+r.valor;});
+  const ms=Object.entries(mes).sort();
+  const vv=ms.map(([,v])=>v).sort((a,b)=>a-b); const mediana=vv[Math.floor(vv.length/2)]||0;
+  const picos=ms.filter(([,v])=>v>mediana*2.5);
+  const fmtMes=kk=>{const [y,m]=kk.split('-'); return MESES[+m-1]+'/'+y.slice(2);};
+  const unit=tP/TP_ARRIMO_M3;
+
+  let ov=document.getElementById('audRelOv');
+  if(!ov){ ov=document.createElement('div'); ov.id='audRelOv'; document.body.appendChild(ov); }
+  ov.style.cssText='position:fixed;inset:0;background:#000c;z-index:1000;overflow:auto;padding:16px';
+  ov.innerHTML=`
+    <div class="no-print" style="max-width:920px;margin:0 auto 12px;display:flex;justify-content:space-between;gap:8px">
+      <button onclick="fecharRelatorioAud()" style="background:var(--surface-3);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 16px;cursor:pointer;font-family:var(--font)">← fechar</button>
+      <button onclick="imprimirRelatorioAud()" style="background:#6C8FB5;color:#fff;border:0;border-radius:8px;padding:9px 18px;cursor:pointer;font-family:var(--font);font-weight:600">🖨️ Imprimir / Salvar PDF</button>
+    </div>
+    <div class="papel" id="audRelPapel">
+      <div class="rel-eyebrow">Formes Engenharia · ${CFG.nome} · análise técnica e financeira</div>
+      <h1>Terraplanagem, muro de arrimo e operação de máquinas</h1>
+      <div class="rel-meta">emitido em ${hoje}${ult?' · dados até '+ult.toLocaleDateString('pt-BR'):''} · ${terra.length} lançamentos · <strong>${fmt(tT+tC)}</strong> · <em>ordenado do maior para o menor valor</em></div>
+
+      <div class="rel-inst"><strong>Escopo desta análise.</strong> Materiais de terraplanagem: aterro, areia do morro e piçarra. Equipamentos e serviços: pá mecânica, pá carregadeira, retro e mini retro, escavadeira, motoniveladora, patrol, trator, rolo compactador, carro e caminhão pipa, aluguel de caçamba, encarregado de terraplanagem, desmatamento, limpeza de terreno, bota-fora e pavimentação, além dos fornecedores EGEN, Saxum e Vanderlei. <strong>Ficam de fora</strong> areia grossa, areia fina, brita e pó de pedra, que são material de obra, e o abastecimento de moto e carro da equipe, que é despesa administrativa.</div>
+
+      <h2>Números gerais</h2>
+      <table><thead><tr><th style="width:52%">Indicador</th><th class="num" style="width:24%">Valor</th><th style="width:24%">Referência</th></tr></thead><tbody>
+        <tr><td>Terraplanagem</td><td class="num rel-valor">${fmt(tT)}</td><td class="rel-desc">${(tT/custoObra*100).toFixed(1)}% do custo de obra</td></tr>
+        <tr><td>Combustível de máquinas</td><td class="num rel-valor">${fmt(tC)}</td><td class="rel-desc">${(tC/tT*100).toFixed(1)}% da terraplanagem</td></tr>
+        <tr><td><strong>Total do bloco</strong></td><td class="num rel-valor">${fmt(tT+tC)}</td><td class="rel-desc">${fmt((tT+tC)/(CFG.nCasas||1))} por casa</td></tr>
+        <tr><td>Pedra de mão (insumo do arrimo)</td><td class="num rel-valor">${fmt(tP)}</td><td class="rel-desc">${ped.length} compras</td></tr>
+      </tbody></table>
+
+      <h2>Composição por natureza</h2>
+      <table><thead><tr><th style="width:52%">Natureza</th><th class="num" style="width:24%">Valor</th><th class="num" style="width:12%">%</th><th class="num" style="width:12%">Lançtos</th></tr></thead><tbody>
+        ${Object.entries(nat).sort((a,b)=>b[1].v-a[1].v).map(([n2,g])=>`<tr><td>${n2}</td><td class="num rel-valor">${fmt(g.v)}</td><td class="num">${(g.v/tT*100).toFixed(1)}%</td><td class="num">${g.n}</td></tr>`).join('')}
+      </tbody></table>
+
+      <h2>Quantidades e preços unitários</h2>
+      <table><thead><tr><th style="width:40%">Item</th><th class="num" style="width:20%">Quantidade</th><th class="num" style="width:20%">Valor</th><th class="num" style="width:20%">Unitário médio</th></tr></thead><tbody>
+        <tr><td>Carradas de aterro, areia do morro e piçarra</td><td class="num">${carradas.toLocaleString('pt-BR')}</td><td class="num rel-valor">${fmt(vCarr)}</td><td class="num rel-valor">${carradas?fmt(vCarr/carradas):'—'}</td></tr>
+        <tr><td>Diárias de máquina</td><td class="num">${diarias.toLocaleString('pt-BR')}</td><td class="num rel-valor">${fmt(vDiar)}</td><td class="num rel-valor">${diarias?fmt(vDiar/diarias):'—'}</td></tr>
+      </tbody></table>
+
+      <h2>Distribuição no tempo</h2>
+      <table><thead><tr><th style="width:30%">Ano</th><th class="num" style="width:35%">Valor</th><th class="num" style="width:35%">% do total</th></tr></thead><tbody>
+        ${Object.entries(anos).sort().map(([a,v])=>`<tr><td>${a}</td><td class="num rel-valor">${fmt(v)}</td><td class="num">${(v/tT*100).toFixed(1)}%</td></tr>`).join('')}
+      </tbody></table>
+
+      <h2>Fornecedores</h2>
+      <table><thead><tr><th style="width:52%">Fornecedor</th><th class="num" style="width:24%">Valor</th><th class="num" style="width:12%">%</th><th class="num" style="width:12%">Lançtos</th></tr></thead><tbody>
+        ${Object.entries(forn).sort((a,b)=>b[1].v-a[1].v).slice(0,15).map(([f,g])=>`<tr><td>${f.slice(0,44)}</td><td class="num rel-valor">${fmt(g.v)}</td><td class="num">${(g.v/tT*100).toFixed(1)}%</td><td class="num">${g.n}</td></tr>`).join('')}
+      </tbody></table>
+
+      <h2>Muro de arrimo — rastreamento pelo consumo de pedra de mão</h2>
+      <div class="rel-achado" style="background:#fdf7ec;border-left:3px solid #C4A55C;padding:11px 14px;font-size:11.5px;line-height:1.6;color:#5a3d16">
+        <strong>Janela de execução detectada: ${picos.length?fmtMes(picos[0][0])+' a '+fmtMes(picos[picos.length-1][0]):'—'}.</strong>
+        ${picos.map(([kk,v])=>fmtMes(kk)+' — '+fmt(v)).join(' · ')}. Nesses meses o consumo de pedra de mão superou 2,5 vezes a mediana histórica da obra, que é de ${fmt(mediana)} por mês.
+      </div>
+      <table style="margin-top:8px"><thead><tr><th style="width:28%">Mês</th><th class="num" style="width:24%">Pedra de mão</th><th class="num" style="width:18%">× mediana</th><th style="width:30%">Leitura</th></tr></thead><tbody>
+        ${ms.slice().reverse().map(([kk,v])=>{const x=mediana>0?v/mediana:0; const pico=x>2.5;
+          return `<tr><td>${fmtMes(kk)}</td><td class="num rel-valor">${fmt(v)}</td><td class="num">${x.toFixed(1)}×</td><td class="rel-desc">${pico?'pico — execução do arrimo':'consumo de rotina'}</td></tr>`;}).join('')}
+      </tbody></table>
+
+      <h2>Por que o custo do arrimo não fecha pelos lançamentos</h2>
+      <div class="rel-impacto" style="background:#fdf1ef;border-left:3px solid #BF6B60;padding:11px 14px;font-size:11.5px;line-height:1.6;color:#7a2f24">
+        Todo o gasto com pedra de mão da obra soma <strong>${fmt(tP)}</strong>. Dividido pelos <strong>${TP_ARRIMO_M3.toLocaleString('pt-BR')} m³</strong> de arrimo de pedra argamassada escalonado previstos, resulta em <strong>${fmt(unit)} por m³</strong> — e isso incluindo a pedra usada em alicerce de casa, que não é muro.<br><br>
+        Muro de pedra argamassada escalonado é serviço de alto consumo de material e de mão de obra. Um custo total nessa ordem de grandeza não paga a execução de ${TP_ARRIMO_M3.toLocaleString('pt-BR')} m³ em Eusébio: a soma rastreável <strong>subestima a obra</strong>.<br><br>
+        <strong>A razão é de registro, não de gasto.</strong> A pedra é o único insumo do arrimo com nome próprio nos lançamentos. A argamassa — cimento e areia — entra misturada ao consumo geral da obra, sem separação por serviço. E a mão de obra de assentamento está dentro da folha e das medições do empreiteiro, também sem separação. O que os dados permitem afirmar com segurança é <strong>quando</strong> o muro foi executado e <strong>quanto de pedra</strong> ele consumiu — não o custo total.
+      </div>
+
+      <h2>Providência</h2>
+      <ol class="rel-passos">
+        <li>Levante o <strong>preço unitário contratado por m³ de pedra argamassada</strong> na época da execução, ou a medição do serviço com o empreiteiro. Com qualquer um dos dois o custo do muro fecha.</li>
+        <li>Confirme se o volume executado foi mesmo de ${TP_ARRIMO_M3.toLocaleString('pt-BR')} m³ e se houve escalonamento em mais de um trecho.</li>
+        <li>Para as próximas obras, <strong>exija o serviço no descritivo</strong> — "pedra de mão para muro de arrimo" separado de "pedra de mão para alicerce" — e a medição do assentamento em item próprio. Isso torna o custo rastreável sem estimativa.</li>
+        <li>Compare o custo por m³ apurado com o orçamento original do empreendimento para medir o desvio do serviço.</li>
+      </ol>
+
+      <div class="rel-rodape">Elaborado a partir dos lançamentos da aba DESPESAS TOTAIS de ${CFG.nome}${ult?', com dados até '+ult.toLocaleDateString('pt-BR'):''}. Escopo de terraplanagem e regra de rastreamento do arrimo conforme definido pela direção. Quantidades extraídas dos descritivos de compra.<br>
+      Responsável: ______________________________  Data: ____/____/______  ·  Conferido por: ______________________________  Data: ____/____/______</div>
+    </div>`;
+  document.body.style.overflow='hidden';
 };
 
 function renderTerraplanagem(){
@@ -2771,8 +2888,9 @@ function renderTerraplanagem(){
   const k=(l,v,s,c,h)=>`<div class="kpi" style="border-top:2px solid ${c}"><div class="kpi-label">${l}${h?hintIcon(h):''}</div><div class="kpi-value" style="color:${c}">${v}</div>${s?`<div class="kpi-sub">${s}</div>`:''}</div>`;
 
   el.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button onclick="gerarRelatorioTerra()" style="background:#C09257;color:#1a1206;border:0;border-radius:8px;padding:9px 18px;cursor:pointer;font-family:var(--font);font-weight:700">📄 Relatório / PDF</button></div>
     <div class="info-box" style="border:1px solid #C0925740;margin-bottom:12px"><span>🚜</span><div><strong>Terraplanagem, muro de arrimo e operação de máquinas — ${CFG.nome}.</strong>
-    Escopo: movimento de terra e máquinas. <strong>Areia e brita ficam de fora</strong> — são material de construção, não terraplanagem; incluí-las inflaria o custo em mais de R$ 700 mil, já que os mesmos fornecedores entregam os dois.</div></div>
+    Escopo conforme as regras da obra: materiais são <strong>aterro, areia do morro e piçarra</strong>; equipamentos e serviços são <strong>pá mecânica, rolo compactador, carro e caminhão pipa, aluguel de caçamba, encarregado de terraplanagem</strong> e o abastecimento das máquinas; fornecedores de referência <strong>EGEN, Saxum e Vanderlei</strong>. <strong>Areia grossa, areia fina e brita ficam de fora</strong> — são material de obra.</div></div>
 
     <div class="kpi-grid">
       ${k('Terraplanagem — total', fmt(totalT), terra.length+' lançamentos · '+(totalT/custoObra*100).toFixed(1)+'% do custo de obra', '#C09257')}
@@ -2801,8 +2919,58 @@ function renderTerraplanagem(){
 
     ${fxCard('Terraplanagem por ano','g_tp_ano','','Concentração do gasto ao longo da obra.')}
 
-    <div class="section-title" style="margin-top:16px">🧱 Muro de arrimo — atribuição${hintIcon('Não existe nenhum lançamento com a palavra "arrimo" ou "muro" nas despesas desta obra: o custo está diluído entre os fornecedores de terraplanagem. Marque abaixo quem executou o muro e o painel soma. A marcação fica salva neste aparelho.')}</div>
-    <div class="info-box" style="border:1px solid #C4A55C66;background:rgba(196,165,92,.05);margin-bottom:10px"><span style="color:#C4A55C">⚠</span><div><strong>Nenhum lançamento nomeia o muro de arrimo.</strong> Procurei por "arrimo", "muro", "contenção" e "gabião" em todas as despesas do ${CFG.nome}: zero ocorrências. O custo existe, mas está dentro dos serviços de terraplanagem, sem separação. Marque na coluna 🧱 os fornecedores que executaram o muro para o painel apurar o valor.${totalArrimo>0?`<br><br><strong style="color:#C4A55C">Atribuído até agora: ${fmt(totalArrimo)}</strong> — ${(totalArrimo/totalT*100).toFixed(1)}% da terraplanagem.`:''}</div></div>
+    <div class="section-title" style="margin-top:16px">🧱 Muro de arrimo — rastreado pelo consumo de pedra de mão${hintIcon('A execução do arrimo aparece nos dados como elevação forte do consumo de pedra de mão (também chamada pedra ou pedra de alicerce). O painel detecta os meses em que o consumo supera 2,5× a mediana histórica e trata essa janela como período de execução.')}</div>
+    ${(function(){
+      const ped = D.filter(tpEhPedra);
+      if (!ped.length) return '<div class="info-box">Nenhum lançamento de pedra de mão encontrado.</div>';
+      const mes={}; ped.forEach(r=>{const d=parseDate(r.data); if(!d)return;
+        const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); mes[k]=(mes[k]||0)+r.valor;});
+      const ms=Object.entries(mes).sort();
+      const vals=ms.map(([,v])=>v).sort((a,b)=>a-b);
+      const mediana = vals[Math.floor(vals.length/2)]||0;
+      const picos = ms.filter(([,v])=>v>mediana*2.5);
+      const totalPedra = ped.reduce((s,r)=>s+r.valor,0);
+      const totalPicos = picos.reduce((s,[,v])=>s+v,0);
+      const unit = totalPedra / TP_ARRIMO_M3;
+      const janela = picos.length ? picos[0][0]+' → '+picos[picos.length-1][0] : '—';
+      const fmtMes = k => { const [y,m]=k.split('-'); return MESES[+m-1]+'/'+y.slice(2); };
+      return `
+      <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+        ${k('Pedra de mão — total', fmt(totalPedra), ped.length+' compras', '#C4A55C')}
+        ${k('Concentrado nos picos', fmt(totalPicos), (totalPicos/totalPedra*100).toFixed(0)+'% em '+picos.length+' meses', '#BF6B60','Meses com consumo acima de 2,5× a mediana histórica — a assinatura da execução do muro.')}
+        ${k('Mediana mensal', fmt(mediana), 'consumo de rotina da obra', '#A1A1A6')}
+        ${k('Rastreado por m³ de muro', fmt(unit)+'/m³', 'sobre os '+TP_ARRIMO_M3.toLocaleString('pt-BR')+' m³ de projeto', unit<200?'#BF6B60':'#6D9E7F','Todo o gasto com pedra de mão dividido pelo volume de arrimo previsto. Serve para confrontar com o custo de mercado da pedra argamassada.')}
+      </div>
+      <div class="info-box" style="border:1px solid #C4A55C66;background:rgba(196,165,92,.05);margin:10px 0"><span style="color:#C4A55C">🔎</span><div>
+        <strong>Janela de execução detectada: ${janela}.</strong> ${picos.map(([kk,v])=>fmtMes(kk)+' — '+fmt(v)).join(' · ')}.<br>
+        Nesses meses o consumo de pedra saltou muito acima da rotina da obra (mediana de ${fmt(mediana)}/mês), que é o padrão descrito para a execução do arrimo.
+      </div></div>
+      <div class="section-title">Consumo mensal de pedra de mão</div>
+      <div class="table-wrap" style="max-height:280px;overflow:auto;margin-bottom:12px"><table>
+        <thead style="position:sticky;top:0;background:var(--card)"><tr><th>Mês</th><th style="text-align:right">Valor</th><th style="text-align:right">× a mediana</th><th>Leitura</th></tr></thead>
+        <tbody>${ms.slice().reverse().map(([kk,v])=>{
+          const x = mediana>0 ? v/mediana : 0;
+          const pico = x>2.5;
+          return `<tr style="${pico?'background:#BF6B6014':''}"><td style="font-family:'DM Mono',monospace;font-size:10.5px">${fmtMes(kk)}</td>
+            <td style="text-align:right;font-weight:${pico?'700':'400'};color:${pico?'#BF6B60':'inherit'}">${fmt(v)}</td>
+            <td style="text-align:right;color:var(--muted);font-size:10.5px">${x.toFixed(1)}×</td>
+            <td style="font-size:10.5px;color:${pico?'#BF6B60':'var(--muted)'}">${pico?'pico — execução do arrimo':'consumo de rotina'}</td></tr>`;}).join('')}
+        </tbody></table></div>
+
+      <div class="section-title">Confronto com o custo de execução</div>
+      <div class="table-wrap" style="margin-bottom:10px"><table>
+        <thead><tr><th>Referência</th><th style="text-align:right">R$/m³</th><th style="text-align:right">2.000 m³</th><th>Leitura</th></tr></thead>
+        <tbody>
+          <tr><td>Pedra de mão rastreada nas despesas</td><td style="text-align:right;font-weight:700">${fmt(unit)}</td><td style="text-align:right">${fmt(totalPedra)}</td><td style="font-size:10.5px;color:var(--muted)">só o material pedra, sem argamassa nem mão de obra</td></tr>
+          <tr><td>+ argamassa estimada <span style="color:var(--text-3);font-size:10px">(0,3 m³ por m³ de muro)</span></td><td style="text-align:right">—</td><td style="text-align:right">não isolável</td><td style="font-size:10.5px;color:var(--muted)">cimento e areia se confundem com o resto da obra</td></tr>
+          <tr><td>+ mão de obra de assentamento</td><td style="text-align:right">—</td><td style="text-align:right">não isolável</td><td style="font-size:10.5px;color:var(--muted)">está dentro da folha e das medições do empreiteiro</td></tr>
+        </tbody></table></div>
+      <div class="info-box" style="border:1px solid #BF6B6066;background:rgba(191,107,96,.06)"><span style="color:#BF6B60">⚠</span><div>
+        <strong>A soma rastreável subestima a obra, e o próprio número mostra isso.</strong> Todo o gasto com pedra de mão da obra — ${fmt(totalPedra)}, incluindo o que foi usado em alicerce de casa e não no muro — resulta em <strong>${fmt(unit)} por m³</strong> de arrimo. Muro de pedra argamassada escalonado é serviço de alto consumo de material e de mão de obra; um custo total nessa ordem de grandeza não paga a execução de ${TP_ARRIMO_M3.toLocaleString('pt-BR')} m³ em Eusébio.<br><br>
+        <strong>Por que a conta não fecha:</strong> a pedra é o único insumo com nome próprio nos lançamentos. A argamassa (cimento e areia) entra misturada ao consumo geral da obra, e a mão de obra de assentamento está embutida na folha e nas medições do empreiteiro, sem separação por serviço. O que dá para afirmar com os dados é <em>quando</em> o muro foi executado e <em>quanto de pedra</em> ele consumiu — não o custo total.<br><br>
+        <strong>Para fechar o valor</strong> seria preciso: o preço unitário contratado de m³ de pedra argamassada na época, ou a medição do serviço com o empreiteiro. Com qualquer um dos dois eu fecho a conta e comparo com o rastreado.
+      </div></div>`;
+    })()}
 
     <div class="section-title">Fornecedores</div>
     <div class="table-wrap"><table>
@@ -2828,7 +2996,8 @@ function renderTerraplanagem(){
 
     <div class="section-title" style="margin-top:16px">O que este painel considera</div>
     <div class="info-box"><span>📋</span><div><strong>Entra:</strong> aterro, piçarra, escavação, bota-fora, desmatamento e limpeza de terreno, diárias de retro, mini retro, pá carregadeira, trator, patrol, motoniveladora, rolo e caçamba, aluguel de máquinas de terraplanagem, compactação e pavimentação.<br>
-    <strong>Não entra:</strong> areia e brita (material de construção), abastecimento de moto e carro da equipe (administrativo), e abastecimento de água da Cagece — que casa com a palavra "abastecimento" mas não é combustível.</div></div>`;
+    <strong>Não entra:</strong> areia grossa, areia fina, brita e pó de pedra (material de obra), abastecimento de moto e carro da equipe (administrativo) e abastecimento de água da Cagece — que casa com a palavra "abastecimento" sem ser combustível.<br>
+    <strong>Muro de arrimo:</strong> rastreado pelo consumo de pedra de mão, que é o único insumo do serviço com nome próprio nos lançamentos.</div></div>`;
 
   if (anosL.length) fxBarras(document.getElementById('g_tp_ano'), {
     grupos: anosL.map(([a])=>a), series:[{values: anosL.map(([,v])=>v), color:'#C09257'}], alt:'terraplanagem por ano' });
