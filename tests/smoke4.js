@@ -19,6 +19,12 @@ recL.push(rec('ALVES MENDES CONSTRUÇÕES','10/01/2022','AFAC - ALVES MENDES',0,
 recL.push(rec('Cliente A','10/03/2024','1/2 - CASA 01 - LIBERTY',200000,200000,'Vendas'));
 recL.push(rec('Cliente A','10/06/2024','2/2 - CASA 01 - LIBERTY',200000,200000,'Vendas'));
 recL.push(rec('Cliente A','10/06/2024','INCC CASA 01',0,20000,'INCC / IGPM'));
+// antes descartados pela regra do 'Lançamento Financeiro' sem casa — agora entram como OUTRAS
+recL.push(rec('CERAMICA NORTE','12/07/2024','BONIFICACAO TIJOLOS - LIBERTY',0,5210,'Bonificações','Lançamento financeiro'));
+recL.push(rec('FORNECEDOR X','15/08/2024','REEMBOLSO CHAVE MAGNETICA',0,3290,'Reembolso','Lançamento financeiro'));
+recL.push(rec('JAZZ RESIDENCE','20/09/2024','RATEIO CHUVEIRAO DECK',0,2039,'Rateio','Lançamento financeiro'));
+// e uma personalização, que é grupo VENDA
+recL.push(rec('Cliente A','05/10/2024','1/6 - PERSONALIZACAO CS 01 - LIBERTY',0,8333,'Personalização','Lançamento financeiro'));
 // casa 2 parcial
 recL.push(rec('Cliente B','10/05/2025','1/4 - CASA 02 - LIBERTY',100000,100000,'Vendas'));
 recL.push(rec('','31/05/2025','RENDIMENTO APLICACAO 05-2025',0,5000,'Rendimentos de Aplicações'));
@@ -210,7 +216,32 @@ async function testEmp(emp, checks){
     ok(REC.includes('Categorias da planilha'),'Receitas: ranking de categorias como em Despesas');
     ok(REC.includes('Natureza (classificação do painel)'),'Receitas: ranking por natureza');
     ok(REC.includes('Inconsistências encontradas'),'Receitas: bloco de inconsistências dos descritivos');
-    ok(typeof w._recDescartadas !== 'undefined','Receitas: descartes da carga são registrados');
+    // nenhum crédito é descartado; tudo entra classificado em dois grupos
+    ok((w._recDescartadas||[]).length===0,'Receitas: nada mais é descartado na carga');
+    const kpisComp=[...w.document.querySelectorAll('#tab16 .kpi')].map(k=>k.textContent);
+    const kVenda=kpisComp.find(t2=>/base do VGV/.test(t2))||'';
+    const kOutras=kpisComp.find(t2=>/fora do VGV/.test(t2))||'';
+    const nV=Number((kVenda.match(/(\d+) lançamentos/)||[0,0])[1]);
+    const nO=Number((kOutras.match(/(\d+) lançamentos/)||[0,0])[1]);
+    ok(nV>0 && nO>0,'Receitas: lançamentos distribuídos nos dois grupos (venda '+nV+' · outras '+nO+')');
+    ok(/Bonificacao/.test(REC) && /Reembolso/.test(REC) && /Rateio/.test(REC),'Receitas: bonificação, reembolso e rateio entram como outras receitas');
+    ok(/Personalizacao/.test(REC),'Receitas: personalização entra no grupo de venda');
+    // o resultado final precisa somar as outras receitas
+    w.switchTab(6); await new Promise(r=>setTimeout(r,300));
+    ok(t('tab6').includes('Outras receitas'),'Resultado Final: linha de outras receitas na composição');
+    w.switchTab(16); await new Promise(r=>setTimeout(r,400));
+    ok(REC.includes('Composição das receitas'),'Receitas: seção dos dois grupos');
+    ok(REC.includes('compõe o VGV') && REC.includes('somam ao resultado'),'Receitas: grupos explicados');
+    const tabComp=[...w.document.querySelectorAll('#tab16 table')].find(t2=>/compõe o VGV/.test(t2.textContent));
+    let blocoVenda='', dentro=false;
+    if(tabComp) [...tabComp.querySelectorAll('tr')].forEach(tr=>{
+      const t2=tr.textContent;
+      if(/compõe o VGV/.test(t2)){dentro=true;return;}
+      if(/somam ao resultado/.test(t2)){dentro=false;return;}
+      if(dentro) blocoVenda+=t2+' ';
+    });
+    ok(!/Reembolso|Bonificacao|Rateio|OutraReceita/.test(blocoVenda),'Receitas: bloco VENDAS não contém natureza de outras receitas');
+    ok(/Venda|INCC|Personalizacao/.test(blocoVenda),'Receitas: bloco VENDAS lista as naturezas comerciais');
     ok(typeof w.classificarReembolso==='function','Reembolsos: classificador disponível');
     const cl1=w.classificarReembolso('DESBLOQUEIO DE SALDO - JAZZ','CEF');
     const cl2=w.classificarReembolso('REEMBOLSO PAGAMENTO CONTA ERRADA','FORNECEDOR X');

@@ -1115,7 +1115,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v25.07.26-v · ordem por valor</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v28.07.26-a · receitas em dois grupos</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -2444,7 +2444,7 @@ function renderReceitas() {
   const maiorCat = catList[0] || ['—',0];
 
   // ── natureza (classificação do painel) ──
-  const TIPOS = ['Venda','INCC','VendaDistratada','Comissao','Outro'];
+  const TIPOS = ['Venda','INCC','VendaDistratada','Personalizacao','Comissao','Reembolso','Bonificacao','Rateio','OutraReceita'];
   const tipoTotals = TIPOS.map(t=>({ t, v: somaReceb(R.filter(r=>r.tipo===t)), n: R.filter(r=>r.tipo===t).length })).filter(x=>x.n>0);
 
   // ── série mensal, variação e projeção (espelha a aba de despesas) ──
@@ -2561,7 +2561,7 @@ function renderReceitas() {
     <div class="table-wrap" style="margin-bottom:14px"><table>
       <thead><tr><th>Natureza</th><th style="text-align:right">Recebido</th><th style="text-align:right">%</th><th style="text-align:right">Lançtos</th></tr></thead>
       <tbody>${tipoTotals.sort((a,b)=>b.v-a.v).map(x=>`<tr style="cursor:pointer" onclick="openDrill('receita_tipo','${x.t}')">
-        <td style="font-size:11.5px;color:${x.t==='Outro'?'#C4A55C':'inherit'}">${x.t==='Outro'?'⚠ Outro (não classificado)':x.t}</td>
+        <td style="font-size:11.5px;color:${x.t==='OutraReceita'?'#C4A55C':'inherit'}">${x.t}<span style="color:var(--text-3);font-size:9.5px"> · ${['Venda','INCC','VendaDistratada','Personalizacao'].includes(x.t)?'venda':'outras'}</span></td>
         <td style="text-align:right;font-weight:600">${fmt(x.v)}</td>
         <td style="text-align:right;color:var(--muted);font-size:10.5px">${totalReceb>0?(x.v/totalReceb*100).toFixed(1):0}%</td>
         <td style="text-align:right;color:var(--muted);font-size:10.5px">${x.n}</td></tr>`).join('')}
@@ -2610,22 +2610,34 @@ function renderReceitas() {
     })()}
 
     ${(function(){
-      const D = window._recDescartadas || [];
-      if (!D.length) return '';
-      const porCat = {};
-      D.forEach(r=>{ const c=r.cat||'(sem categoria)'; (porCat[c]=porCat[c]||{v:0,n:0,ex:r}).v+=r.valor; porCat[c].n++; });
-      const lista = Object.entries(porCat).sort((a,b)=>b[1].v-a[1].v);
-      const total = D.reduce((s,r)=>s+r.valor,0);
-      return `<div class="section-title" style="margin-top:16px">⚠️ Lançamentos descartados na carga${hintIcon('Regra herdada do parser: lançamento com origem "Lançamento Financeiro" e sem número de casa no descritivo é ignorado. Boa parte do que ela derruba é receita legítima — INCC, personalização, reembolso de fornecedor — que some de TODOS os cálculos: recebido, VGV, resultado.')}</div>
-      <div class="info-box" style="border:1px solid #BF6B6066;background:rgba(191,107,96,.06);margin-bottom:10px"><span style="color:#BF6B60">⚠</span><div><strong>${D.length} lançamento(s), somando ${fmt(total)}, não entram em nenhum cálculo do painel.</strong><br>A regra atual ignora todo lançamento de origem "Lançamento Financeiro" sem número de casa no descritivo. Aportes e rendimentos são capturados antes e não estão nesta lista — o que resta aqui é receita de verdade.</div></div>
-      <div class="table-wrap" style="margin-bottom:14px"><table>
-        <thead><tr><th>Categoria descartada</th><th style="text-align:right">Valor</th><th style="text-align:right">Lançtos</th><th>Exemplo de descritivo</th></tr></thead>
-        <tbody>${lista.map(([c,g])=>`<tr style="cursor:pointer" onclick="openDrillLista('⚠️ Descartados · ${c.replace(/'/g,"\\'")}', (window._recDescartadas||[]).filter(function(x){return (x.cat||'(sem categoria)')==='${c.replace(/'/g,"\\'")}';}).map(function(x){return {data:x.data, valor:x.valor, categoria:x.cat, descricao:x.desc, fornecedor:x.cliente||'—', obs:'Descartado pela regra de carga'};}), '#BF6B60')" title="ver os lançamentos descartados">
-          <td style="font-size:11.5px">${c}</td>
-          <td style="text-align:right;font-weight:600;color:#BF6B60">${fmt(g.v)}</td>
-          <td style="text-align:right;color:var(--muted);font-size:10.5px">${g.n}</td>
-          <td style="font-size:10.5px;color:var(--muted)">${String(g.ex.desc).slice(0,42)}</td></tr>`).join('')}
-        </tbody></table></div>`;
+      const R2=_RECEITAS||[];
+      if(!R2.length) return '';
+      const gV=R2.filter(r=>r.grupo==='venda'), gO=R2.filter(r=>r.grupo!=='venda');
+      const sV=gV.reduce((s,r)=>s+(r.valReceb||0),0), sO=gO.reduce((s,r)=>s+(r.valReceb||0),0);
+      const rec=gO.filter(r=>r.recupera).reduce((s,r)=>s+(r.valReceb||0),0);
+      const tot=(sV+sO)||1;
+      const porTipoG=alvo=>{const m={};R2.filter(r=>(alvo==='venda'? r.grupo==='venda' : r.grupo!=='venda')).forEach(r=>{m[r.tipo]=(m[r.tipo]||0)+(r.valReceb||0);});
+        return Object.entries(m).sort((a,b)=>b[1]-a[1]);};
+      return `<div class="section-title" style="margin-top:16px">🧭 Composição das receitas — dois grupos${hintIcon('Todo crédito entra no painel e é classificado. O grupo VENDAS compõe o VGV e é a base das análises comerciais. OUTRAS RECEITAS ficam fora do VGV — não geram comissão nem imposto — mas somam ao resultado do empreendimento.')}</div>
+      <div class="kpi-grid" style="grid-template-columns:1fr 1fr">
+        <div class="kpi" style="border-top:2px solid #6C8FB5;cursor:pointer" onclick="openDrillLista('🏠 Receitas de venda', (_RECEITAS||[]).filter(function(r){return r.grupo==='venda';}), '#6C8FB5')">
+          <div class="kpi-label">Receitas de venda <span style="color:#6C8FB5;font-size:10px">↗</span></div>
+          <div class="kpi-value" style="color:#6C8FB5">${fmt(sV)}</div>
+          <div class="kpi-sub">${gV.length} lançamentos · base do VGV e das análises comerciais</div></div>
+        <div class="kpi" style="border-top:2px solid #6D9E7F;cursor:pointer" onclick="openDrillLista('💠 Outras receitas', (_RECEITAS||[]).filter(function(r){return r.grupo!=='venda';}), '#6D9E7F')">
+          <div class="kpi-label">Outras receitas <span style="color:#6D9E7F;font-size:10px">↗</span></div>
+          <div class="kpi-value" style="color:#6D9E7F">${fmt(sO)}</div>
+          <div class="kpi-sub">${gO.length} lançamentos · fora do VGV, dentro do resultado</div></div>
+      </div>
+      <div class="table-wrap" style="margin:10px 0 6px"><table>
+        <thead><tr><th>Grupo e natureza</th><th style="text-align:right">Recebido</th><th style="text-align:right">% do total</th></tr></thead>
+        <tbody>
+          <tr style="background:var(--surface-3)"><td colspan="3" style="font-weight:600;color:#6C8FB5;font-size:11px">VENDAS — compõe o VGV, gera comissão e imposto</td></tr>
+          ${porTipoG('venda').map(([t2,v])=>`<tr style="cursor:pointer" onclick="openDrill('receita_tipo','${t2}')"><td style="padding-left:18px;font-size:11.5px">${t2}</td><td style="text-align:right;font-weight:600">${fmt(v)}</td><td style="text-align:right;color:var(--muted);font-size:10.5px">${(v/tot*100).toFixed(1)}%</td></tr>`).join('')}
+          <tr style="background:var(--surface-3)"><td colspan="3" style="font-weight:600;color:#6D9E7F;font-size:11px">OUTRAS RECEITAS — fora do VGV, somam ao resultado</td></tr>
+          ${porTipoG('outras').map(([t2,v])=>`<tr style="cursor:pointer" onclick="openDrill('receita_tipo','${t2}')"><td style="padding-left:18px;font-size:11.5px">${t2}</td><td style="text-align:right;font-weight:600">${fmt(v)}</td><td style="text-align:right;color:var(--muted);font-size:10.5px">${(v/tot*100).toFixed(1)}%</td></tr>`).join('')}
+        </tbody></table></div>
+      ${rec>0?`<div class="info-box" style="border:1px solid #C4A55C55;background:rgba(196,165,92,.05);margin-bottom:12px"><span style="color:#C4A55C">ℹ</span><div><strong>${fmt(rec)} das outras receitas é recuperação de custo</strong> (reembolso de material e de fornecedor). Somando como receita, o <em>resultado</em> fica correto — mas o custo de obra continua pelo valor bruto, então o <strong>custo por m² não desconta essa devolução</strong>. Se preferir que ela abata o custo em vez de somar à receita, é troca de uma linha.</div></div>`:''}`;
     })()}
 
     <div class="section-title">🔎 Inconsistências encontradas na leitura dos descritivos${totalInc?` <span style="color:#C4A55C">(${totalInc})</span>`:''}</div>
@@ -5046,7 +5058,15 @@ function renderRFCalc() {
   const comissaoAPagar = Math.max(0, comissaoTotal - comissaoPaga);
   const impostoAPagar  = Math.max(0, impostoTotal  - impostoPago);
 
-  const receitaLiq = vgvTotal - comissaoAPagar - impostoAPagar - permutaAPagar + incc;
+  // Outras receitas: bonificação, rateio, reembolso, tarifas — não entram no VGV
+  // (não são venda, logo não geram comissão nem imposto), mas são dinheiro que
+  // entrou no empreendimento e impactam o resultado final.
+  const outrasReceitas = (_RECEITAS||[]).filter(r=>r.grupo==='outras')
+                          .reduce((s,r)=>s+(r.valReceb||0),0);
+  const recuperacaoCusto = (_RECEITAS||[]).filter(r=>r.grupo==='outras' && r.recupera)
+                          .reduce((s,r)=>s+(r.valReceb||0),0);
+
+  const receitaLiq = vgvTotal - comissaoAPagar - impostoAPagar - permutaAPagar + incc + outrasReceitas;
 
   // ── CUSTOS JÁ PAGOS ───────────────────────────────────────────
   // TUDO que saiu do caixa — obra, comissões, impostos, permuta
@@ -5109,6 +5129,9 @@ function renderRFCalc() {
     +'</div>'
 
     +(incc>0 ? rfResultRow('(+) INCC — correção monetária', '+ '+fmt(incc), '#6D9E7F', false, 'Sem incidência de comissão, imposto ou permuta') : '')
+    +(outrasReceitas>0 ? rfResultRow('(+) Outras receitas', fmt(outrasReceitas), '#6D9E7F', false,
+        'Créditos que não são venda — bonificação de fornecedor, rateio entre obras, reembolso, tarifas recuperadas. Não entram no VGV (não geram comissão nem imposto), mas entraram no caixa e somam ao resultado.'
+        + (recuperacaoCusto>0 ? ' Deste total, ' + fmt(recuperacaoCusto) + ' é recuperação de custo (reembolso de material e de fornecedor): o resultado fica correto, mas o custo de obra continua registrado pelo valor bruto, então o custo por m² não desconta essa devolução.' : '')) : '')
     +rfResultRow('= Receita Líquida', fmt(receitaLiq), '#6C8FB5', true)
 
     // ── 2. CUSTOS JÁ PAGOS ───────────────────────────────────
@@ -5278,7 +5301,7 @@ let _RENDIMENTOS = [];
 function parseReceitasRows(allRows) {
   // Retorna {receitas, aportes, rendimentos} — colunas detectadas pelo cabeçalho
   window._censoReceitas = { brutas: allRows.length, porAnoAportes: {}, primeirasLinhas: allRows.slice(1,4).map(r=>String(r&&r[3]||'').slice(0,12)) };
-  window._recDescartadas = [];
+  window._recDescartadas = [];   // regra de descarte removida: nada mais é ignorado
   const M = detectCols(allRows, "rec");
   const rows = allRows.slice(M.hdr + 1);
   const receitas=[], aportes=[], rendimentos=[];
@@ -5317,25 +5340,28 @@ function parseReceitasRows(allRows) {
       if (valReceb > 0) rendimentos.push({ data: dataComp, valor: valReceb, desc });
       return;
     }
-    if (oriU.includes('LANÇAMENTO FINANCEIRO') && !extrairCasa(desc)) {
-      // Regra herdada: lançamento financeiro sem casa no descritivo é ignorado.
-      // Registra tudo que ela derruba — parte é receita legítima (INCC, personalização,
-      // reembolso de fornecedor) e some de todos os cálculos sem deixar rastro.
-      const _v = valReceb || valOrig;
-      if (_v > 0) {
-        window._recDescartadas = window._recDescartadas || [];
-        window._recDescartadas.push({ data: dataComp, cliente, desc, cat: catRaw || '(sem categoria)', valor: _v });
-      }
-      return;
-    }
+    // Nenhum crédito é descartado: todo lançamento entra e é classificado.
+    // A regra antiga ignorava "Lançamento Financeiro" sem casa no descritivo e
+    // derrubava INCC, personalização, bonificação e reembolso — receita de verdade,
+    // que impacta o resultado do empreendimento.
     const casa = extrairCasa(desc);
     const tipo = isIncc(desc) || catU.includes('INCC') || catU.includes('IGPM') ? 'INCC'
                : descU.includes('DISTR') ? 'VendaDistratada'
                : descU.includes('COMISSÃO') || descU.includes('COMISSAO') ? 'Comissao'
+               : catU.includes('PERSONALIZ') || descU.includes('PERSONALIZ') ? 'Personalizacao'
+               : catU.includes('REEMBOLS') || descU.includes('REEMBOLS') || descU.includes('RESSARC') ? 'Reembolso'
+               : catU.includes('BONIFICA') || descU.includes('BONIFICA') ? 'Bonificacao'
+               : catU.includes('RATEIO') || descU.includes('RATEIO') ? 'Rateio'
                : oriU.includes('VENDA') || catU === 'VENDAS' || (casa && !isIncc(desc)) ? 'Venda'
-               : 'Outro';
+               : 'OutraReceita';
+    // Dois grupos, conforme a regra do negócio: o que é ligado à VENDA compõe o VGV e
+    // as análises comerciais; o resto não entra no VGV mas entra no resultado da obra.
+    const GRUPO_VENDA = ['Venda','INCC','VendaDistratada','Personalizacao'];
+    const grupo = GRUPO_VENDA.includes(tipo) ? 'venda' : 'outras';
+    // Recuperação de custo: subconjunto de "outras" que devolve dinheiro de despesa já paga
+    const recupera = (tipo === 'Reembolso') || catU.includes('AQUISICAO DE MATERIA') || catU.includes('AQUISIÇÃO DE MATERIA');
     if (valOrig > 0 || valReceb > 0)
-      receitas.push({ cliente, dataComp, dataVenc, desc, origem, situacao, valOrig, valReceb, casa, tipo, cat: catRaw });
+      receitas.push({ cliente, dataComp, dataVenc, desc, origem, situacao, valOrig, valReceb, casa, tipo, grupo, recupera, cat: catRaw });
   });
   return { receitas, aportes, rendimentos };
 }
