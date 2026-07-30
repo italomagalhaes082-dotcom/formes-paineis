@@ -1117,7 +1117,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v29.07.26-a · terraplanagem + arrimo</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v29.07.26-b · arrimo 1.500 m³</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -2747,9 +2747,9 @@ function tpNatureza(r){
 // ═══ Muro de arrimo: rastreado pelo consumo de PEDRA DE MÃO ═══
 // Regra do negócio: a execução do arrimo aparece como elevação muito grande do consumo
 // de pedra de mão (também chamada pedra ou pedra de alicerce). Escopo da obra:
-// 2.000 m³ de arrimo de pedra argamassada escalonado, em Eusébio/CE.
+// ${TP_ARRIMO_M3.toLocaleString('pt-BR')} m³ de arrimo de pedra argamassada escalonado, em Eusébio/CE.
 const TP_PEDRA = /PEDRA DE MAO|PEDRA DE ALICERCE|\bPEDRAS? DE MAO\b/;
-const TP_ARRIMO_M3 = 2000;
+const TP_ARRIMO_M3 = 1500;   // volume revisado pela direção em 29/07 (era 2.000)
 function tpEhPedra(r){ return TP_PEDRA.test(_audNorm(r.descOriginal||r.descricao||'')); }
 // Atribuição do muro de arrimo: não há lançamento nominal, então o gestor marca os
 // fornecedores que compõem a obra do muro e o painel soma. Fica salvo no aparelho.
@@ -2765,7 +2765,7 @@ window.tpToggleArrimo = function(forn){
 // piso de comparação: se nem o cenário mais barato fecha com o rastreado, o desvio é real.
 // Preços calibrados com a própria obra onde possível (pedra, areia, cimento da época).
 const TP_EST = {
-  m3: 2000,
+  m3: TP_ARRIMO_M3,
   pedraPorM3: 1.0,          // m³ de pedra por m³ de muro (convenção usual 1,0–1,2 — adotado o piso)
   argamassaPorM3: 0.30,     // m³ de argamassa por m³ de muro
   cimentoPorM3Arg: 6,       // sacos por m³ de argamassa, traço 1:4 (magro)
@@ -2868,7 +2868,7 @@ window.gerarRelatorioTerra = function(){
           return `<tr><td>${fmtMes(kk)}</td><td class="num rel-valor">${fmt(v)}</td><td class="num">${x.toFixed(1)}×</td><td class="rel-desc">${pico?'pico — execução do arrimo':'consumo de rotina'}</td></tr>`;}).join('')}
       </tbody></table>
 
-      <h2>Estimativa de execução — 2.000 m³ de pedra argamassada escalonada</h2>
+      <h2>Estimativa de execução — ${TP_ARRIMO_M3.toLocaleString('pt-BR')} m³ de pedra argamassada escalonada</h2>
       <div class="rel-inst">Composição montada de propósito no <strong>cenário mais barato possível</strong>: volume de pedra no piso da convenção, argamassa magra, produtividade otimista e preços no piso da época, calibrados com o que a própria obra pagou. Serve como chão de comparação.</div>
       ${(function(){ const E2=tpEstimativa();
         return `<table style="margin-top:6px"><thead><tr><th style="width:32%">Insumo</th><th class="num" style="width:17%">Consumo</th><th class="num" style="width:17%">Preço</th><th class="num" style="width:17%">Custo</th><th class="num" style="width:17%">R$/m³</th></tr></thead><tbody>
@@ -2879,8 +2879,8 @@ window.gerarRelatorioTerra = function(){
           <tr style="border-top:1.5px solid #111;font-weight:700"><td>Total no cenário mais barato</td><td class="num"></td><td class="num"></td><td class="num rel-valor">${fmt(E2.total)}</td><td class="num rel-valor">${fmt(E2.unit)}</td></tr>
         </tbody></table>
         <div class="rel-impacto" style="background:#fdf1ef;border-left:3px solid #BF6B60;padding:11px 14px;font-size:11.5px;line-height:1.6;color:#7a2f24;margin-top:8px">
-          Os 2.000 m³ exigem <strong>${E2.pedraM3.toLocaleString('pt-BR')} m³ de pedra de mão</strong> (${fmt(E2.cPedra)} ao preço adotado). A obra inteira comprou <strong>${fmt(tP)}</strong> de pedra — cerca de <strong>${Math.round(tP/E2.E.precoPedra).toLocaleString('pt-BR')} m³</strong>, incluindo a de alicerce de casa. A pedra comprada cobre <strong>pouco mais da metade</strong> do volume previsto.<br><br>
-          Três explicações possíveis, que os dados não separam: o volume executado foi menor que 2.000 m³; parte da pedra veio do próprio terreno, extraída na escavação — comum em Eusébio, e apareceria como hora de máquina e não como compra; ou parte foi comprada sob outro descritivo.<br><br>
+          Os ${TP_ARRIMO_M3.toLocaleString('pt-BR')} m³ exigem <strong>${E2.pedraM3.toLocaleString('pt-BR')} m³ de pedra de mão</strong> (${fmt(E2.cPedra)} ao preço adotado). A obra inteira comprou <strong>${fmt(tP)}</strong> de pedra — cerca de <strong>${Math.round(tP/E2.E.precoPedra).toLocaleString('pt-BR')} m³</strong>, incluindo a de alicerce de casa. A pedra comprada cobre <strong>pouco mais da metade</strong> do volume previsto.<br><br>
+          Três explicações possíveis, que os dados não separam: o volume executado foi menor que ${TP_ARRIMO_M3.toLocaleString('pt-BR')} m³; parte da pedra veio do próprio terreno, extraída na escavação — comum em Eusébio, e apareceria como hora de máquina e não como compra; ou parte foi comprada sob outro descritivo.<br><br>
           <strong>Estimativa final no cenário mais barato: ${fmt(E2.total)}</strong> (${fmt(E2.unit)}/m³). O rastreável nas despesas é ${fmt(tP)}, <strong>${(tP/E2.total*100).toFixed(0)}% do estimado</strong> — e a diferença não é economia: é argamassa e mão de obra diluídas na folha, nas medições e no consumo geral da obra.
         </div>`;
       })()}
@@ -3020,7 +3020,7 @@ function renderTerraplanagem(){
             <td style="font-size:10.5px;color:${pico?'#BF6B60':'var(--muted)'}">${pico?'pico — execução do arrimo':'consumo de rotina'}</td></tr>`;}).join('')}
         </tbody></table></div>
 
-      <div class="section-title">Estimativa de execução — 2.000 m³ de pedra argamassada escalonada</div>
+      <div class="section-title">Estimativa de execução — ${TP_ARRIMO_M3.toLocaleString('pt-BR')} m³ de pedra argamassada escalonada</div>
       ${(function(){
         const E2=tpEstimativa();
         const pedraNecess = E2.pedraM3, pedraComprada = totalPedra / E2.E.precoPedra;
@@ -3038,12 +3038,12 @@ function renderTerraplanagem(){
 
         <div class="info-box" style="border:1px solid #BF6B6066;background:rgba(191,107,96,.06)"><span style="color:#BF6B60">⚠</span><div>
           <strong>O confronto que interessa é o da pedra, porque é o único insumo rastreável.</strong><br><br>
-          Os 2.000 m³ de muro exigem <strong>${pedraNecess.toLocaleString('pt-BR')} m³ de pedra de mão</strong>, que ao preço adotado custariam <strong>${fmt(E2.cPedra)}</strong>. A obra inteira comprou <strong>${fmt(totalPedra)}</strong> de pedra — equivalente a cerca de <strong>${Math.round(pedraComprada).toLocaleString('pt-BR')} m³</strong>, e isso incluindo a pedra usada em alicerce de casa, que não é muro.<br><br>
+          Os ${TP_ARRIMO_M3.toLocaleString('pt-BR')} m³ de muro exigem <strong>${pedraNecess.toLocaleString('pt-BR')} m³ de pedra de mão</strong>, que ao preço adotado custariam <strong>${fmt(E2.cPedra)}</strong>. A obra inteira comprou <strong>${fmt(totalPedra)}</strong> de pedra — equivalente a cerca de <strong>${Math.round(pedraComprada).toLocaleString('pt-BR')} m³</strong>, e isso incluindo a pedra usada em alicerce de casa, que não é muro.<br><br>
           Ou seja: <strong>a pedra comprada cobre pouco mais da metade do volume previsto</strong>. Três explicações possíveis, e os dados não decidem entre elas:<br>
-          · o volume executado foi menor que 2.000 m³;<br>
+          · o volume executado foi menor que ${TP_ARRIMO_M3.toLocaleString('pt-BR')} m³;<br>
           · parte da pedra veio <strong>do próprio terreno</strong>, extraída na escavação — o que é comum em Eusébio e apareceria como hora de máquina, não como compra;<br>
           · parte foi comprada sob outro descritivo e não é rastreável pelo nome.<br><br>
-          <strong>Estimativa final no cenário mais barato: ${fmt(E2.total)}</strong> para os 2.000 m³ — ${fmt(E2.unit)} por m³. Contra isso, a soma de tudo que é rastreável nas despesas (só a pedra) é ${fmt(totalPedra)}, <strong>${(totalPedra/E2.total*100).toFixed(0)}% do estimado</strong>. A diferença não é economia: é argamassa e mão de obra que existem na obra mas estão diluídas na folha, nas medições do empreiteiro e no consumo geral de cimento e areia.
+          <strong>Estimativa final no cenário mais barato: ${fmt(E2.total)}</strong> para os ${TP_ARRIMO_M3.toLocaleString('pt-BR')} m³ — ${fmt(E2.unit)} por m³. Contra isso, a soma de tudo que é rastreável nas despesas (só a pedra) é ${fmt(totalPedra)}, <strong>${(totalPedra/E2.total*100).toFixed(0)}% do estimado</strong>. A diferença não é economia: é argamassa e mão de obra que existem na obra mas estão diluídas na folha, nas medições do empreiteiro e no consumo geral de cimento e areia.
         </div></div>`;
       })()}`;
     })()}

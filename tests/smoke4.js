@@ -355,6 +355,9 @@ async function testEmp(emp, checks){
       ok(typeof w.tpEstimativa==='function','Arrimo: estimativa paramétrica disponível');
       const est=w.tpEstimativa();
       ok(est.total>0 && est.unit>0,'Arrimo: estimativa calcula (R$ '+Math.round(est.unit)+'/m³)');
+      ok(est.E.m3===1500,'Arrimo: volume revisado para 1.500 m³');
+      ok(Math.round(est.unit)===276,'Arrimo: custo unitário mantido em R$ 276/m³');
+      ok(Math.round(est.total)===413840,'Arrimo: total coerente com 1.500 × 276 (R$ '+Math.round(est.total)+')');
       ok(!w.tpEhTerra({descricao:'11 AREIAS - BOSSA NOVA'}),'Escopo: areia NÃO entra (é material)');
       ok(!w.tpEhTerra({descricao:'ABASTECIMENTO DE AGUA - BOSSA NOVA'}),'Escopo: água da Cagece NÃO entra');
       ok(!w.tpEhTerra({descricao:'ABASTECIMENTO MOTO CARDOSO'}),'Escopo: moto da equipe NÃO entra');
