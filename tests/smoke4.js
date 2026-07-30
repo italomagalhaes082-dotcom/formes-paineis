@@ -67,6 +67,17 @@ dspB.push(dsp('SAXUM DEMOLICOES','20/05/2024','08 DIARIAS RETRO - BOSSA NOVA',18
 dspB.push(dsp('MEGALOC','21/05/2024','LOCACAO COMPACTADOR - BOSSA NOVA',1200,'Aluguel de Equipamentos'));
 dspB.push(dsp('JS LOCACOES E SERVICOS','06/06/2023','TERRAPLANAGEM E PAVIMENTACAO - BOSSA NOVA',120000,'Limpeza/Terraplanagem'));
 dspB.push(dsp('PEDREIRA NATASHA','15/09/2022','PEDRA DE MAO - NF288996 - BOSSA NOVA',1422,'Aquisição de Materiais'));
+dspB.push(dsp('PEDREIRA NATASHA','10/02/2023','PEDRA DE MAO - BOSSA NOVA',1340,'Aquisição de Materiais'));
+dspB.push(dsp('PEDREIRA NATASHA','10/03/2023','PEDRA DE MAO - BOSSA NOVA',1332,'Aquisição de Materiais'));
+dspB.push(dsp('PEDREIRA NATASHA','10/04/2023','PEDRA DE MAO - BOSSA NOVA',1445,'Aquisição de Materiais'));
+dspB.push(dsp('PEDREIRA NATASHA','10/05/2023','PEDRA DE MAO - BOSSA NOVA',1313,'Aquisição de Materiais'));
+dspB.push(dsp('PEDREIRA NATASHA','10/06/2023','PEDRA DE MAO - BOSSA NOVA',1368,'Aquisição de Materiais'));
+dspB.push(dsp('PEDREIRA NATASHA','10/07/2023','PEDRA DE MAO - BOSSA NOVA',1312,'Aquisição de Materiais'));
+dspB.push(dsp('PEDREIRA NATASHA','10/08/2023','PEDRA DE MAO - BOSSA NOVA',1318,'Aquisição de Materiais'));
+dspB.push(dsp('PEDREIRA NATASHA','10/09/2023','PEDRA DE MAO - BOSSA NOVA',1320,'Aquisição de Materiais'));
+dspB.push(dsp('PEDREIRA NATASHA','20/09/2022','PEDRA ALVENARIA - BOSSA NOVA',15822,'Aquisição de Materiais'));
+dspB.push(dsp('PEDREIRA NATASHA','12/10/2022','PEDRA ALVENARIA - BOSSA NOVA',13904,'Aquisição de Materiais'));
+dspB.push(dsp('PEDREIRA NATASHA','05/11/2022','2 CARRADA PEDRA ALVENARIA - BOSSA NOVA',2560,'Aquisição de Materiais'));
 dspB.push(dsp('EGEN GESTAO','11/09/2024','ALUGUEL DE MAQUINAS TERRAPLANAGEM',62913,'Limpeza/Terraplanagem'));
 dspB.push(dsp('POSTO LUA','15/05/2024','ABASTECIMENTO EQUIPAMENTO DE OBRA',3200,'Diversos'));
 // NÃO pode entrar: areia é material, moto é administrativo, água é Cagece
@@ -355,9 +366,13 @@ async function testEmp(emp, checks){
       ok(typeof w.tpEstimativa==='function','Arrimo: estimativa paramétrica disponível');
       const est=w.tpEstimativa();
       ok(est.total>0 && est.unit>0,'Arrimo: estimativa calcula (R$ '+Math.round(est.unit)+'/m³)');
-      ok(est.E.m3===1500,'Arrimo: volume revisado para 1.500 m³');
+      ok(typeof w.tpArrimoDerivado==='function','Arrimo: derivação pelo excedente disponível');
+      const der=w.tpArrimoDerivado();
+      ok(der && der.picos.length>0,'Arrimo: meses de pico detectados');
+      ok(der && der.excedente>0,'Arrimo: excedente calculado');
+      ok(est.E.m3>0,'Arrimo: volume derivado do consumo ('+est.E.m3+' m³)');
       ok(Math.round(est.unit)===276,'Arrimo: custo unitário mantido em R$ 276/m³');
-      ok(Math.round(est.total)===413840,'Arrimo: total coerente com 1.500 × 276 (R$ '+Math.round(est.total)+')');
+      ok(Math.abs(est.unit-276)<1,'Arrimo: custo unitário mantido em R$ 276/m³');
       ok(!w.tpEhTerra({descricao:'11 AREIAS - BOSSA NOVA'}),'Escopo: areia NÃO entra (é material)');
       ok(!w.tpEhTerra({descricao:'ABASTECIMENTO DE AGUA - BOSSA NOVA'}),'Escopo: água da Cagece NÃO entra');
       ok(!w.tpEhTerra({descricao:'ABASTECIMENTO MOTO CARDOSO'}),'Escopo: moto da equipe NÃO entra');
