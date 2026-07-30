@@ -1117,7 +1117,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v29.07.26-c · arrimo derivado da pedra</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v29.07.26-d · arrimo 550 m³ somado</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -2753,7 +2753,14 @@ function tpNatureza(r){
 // materiais e ficam de fora.
 const TP_PEDRA = /PEDRA DE MAO|PEDRA DE ALICERCE|RACHAO|PEDRA (DE )?ALVENARIA/;
 const TP_PEDRA_NAO = /\bBRITA\b|PO DE PEDRA|PEDRISCO|\bBGS\b|POLIDA|PORTUGUESA|SAO TOME/;
-const TP_ARRIMO_M3_INFORMADO = 1500;   // volume informado pela direção
+// Valores ADOTADOS pela direção em 29/07, após a investigação do consumo de pedra:
+// volume de 550 m³ (derivado da pedra que excede o consumo de rotina, confirmado pelo
+// resíduo entre a pedra total e a consumida nos alicerces das 69 casas) e custo de
+// R$ 400/m³ para o serviço executado de arrimo de pedra argamassada escalonado.
+const TP_ARRIMO_M3_ADOTADO = 550;
+const TP_ARRIMO_RS_M3 = 400;
+function tpArrimoCusto(){ return TP_ARRIMO_M3_ADOTADO * TP_ARRIMO_RS_M3; }
+const TP_ARRIMO_M3_INFORMADO = TP_ARRIMO_M3_ADOTADO;
 const TP_M3_POR_CARRADA = 12;          // caçamba padrão — premissa que governa a conversão
 function tpEhPedra(r){
   const d=_audNorm(r.descOriginal||r.descricao||'');
@@ -2818,7 +2825,7 @@ const TP_EST = {
 };
 function tpEstimativa(){
   const der = tpArrimoDerivado();
-  const E = Object.assign({}, TP_EST, { m3: der && der.volume>0 ? Math.round(der.volume) : TP_ARRIMO_M3_INFORMADO });
+  const E = Object.assign({}, TP_EST, { m3: TP_ARRIMO_M3_ADOTADO });
   const pedraM3 = E.m3 * E.pedraPorM3;
   const argM3   = E.m3 * E.argamassaPorM3;
   const cimSc   = argM3 * E.cimentoPorM3Arg;
@@ -2866,7 +2873,7 @@ window.gerarRelatorioTerra = function(){
     <div class="papel" id="audRelPapel">
       <div class="rel-eyebrow">Formes Engenharia · ${CFG.nome} · análise técnica e financeira</div>
       <h1>Terraplanagem, muro de arrimo e operação de máquinas</h1>
-      <div class="rel-meta">emitido em ${hoje}${ult?' · dados até '+ult.toLocaleDateString('pt-BR'):''} · ${terra.length} lançamentos · <strong>${fmt(tT+tC)}</strong> · <em>ordenado do maior para o menor valor</em></div>
+      <div class="rel-meta">emitido em ${hoje}${ult?' · dados até '+ult.toLocaleDateString('pt-BR'):''} · ${terra.length} lançamentos · <strong>total estimado do bloco ${fmt(tT+tC+tpArrimoCusto())}</strong> · <em>ordenado do maior para o menor valor</em></div>
 
       <div class="rel-inst"><strong>Escopo desta análise.</strong> Materiais de terraplanagem: aterro, areia do morro e piçarra. Equipamentos e serviços: pá mecânica, pá carregadeira, retro e mini retro, escavadeira, motoniveladora, patrol, trator, rolo compactador, carro e caminhão pipa, aluguel de caçamba, encarregado de terraplanagem, desmatamento, limpeza de terreno, bota-fora e pavimentação, além dos fornecedores EGEN, Saxum e Vanderlei. <strong>Ficam de fora</strong>: areia grossa, areia fina, brita e pó de pedra (material de obra); <strong>Megaloc</strong>, cuja locação é escora e compactador de pequeno porte para serviço pontual; <strong>JS Locações</strong>, que é custo de desmembramento do terreno; qualquer serviço com <strong>menos de 5 diárias</strong> de máquina, por ser serviço pontual de obra; e o abastecimento de moto e carro da equipe, que é despesa administrativa.</div>
 
@@ -2874,8 +2881,9 @@ window.gerarRelatorioTerra = function(){
       <table><thead><tr><th style="width:52%">Indicador</th><th class="num" style="width:24%">Valor</th><th style="width:24%">Referência</th></tr></thead><tbody>
         <tr><td>Terraplanagem</td><td class="num rel-valor">${fmt(tT)}</td><td class="rel-desc">${(tT/custoObra*100).toFixed(1)}% do custo de obra</td></tr>
         <tr><td>Combustível de máquinas</td><td class="num rel-valor">${fmt(tC)}</td><td class="rel-desc">${(tC/tT*100).toFixed(1)}% da terraplanagem</td></tr>
-        <tr><td><strong>Total do bloco</strong></td><td class="num rel-valor">${fmt(tT+tC)}</td><td class="rel-desc">${fmt((tT+tC)/(CFG.nCasas||1))} por casa</td></tr>
-        <tr><td>Pedra de mão (insumo do arrimo)</td><td class="num rel-valor">${fmt(tP)}</td><td class="rel-desc">${ped.length} compras</td></tr>
+        <tr><td>Muro de arrimo — estimado</td><td class="num rel-valor">${fmt(tpArrimoCusto())}</td><td class="rel-desc">${TP_ARRIMO_M3_ADOTADO} m³ × ${fmt(TP_ARRIMO_RS_M3)}/m³</td></tr>
+        <tr style="border-top:1.5px solid #111;font-weight:700"><td><strong>Total estimado do bloco</strong></td><td class="num rel-valor">${fmt(tT+tC+tpArrimoCusto())}</td><td class="rel-desc">${fmt((tT+tC+tpArrimoCusto())/(CFG.nCasas||1))} por casa</td></tr>
+        <tr><td>Pedra de mão comprada <span class="rel-desc">(insumo, já dentro do apurado)</span></td><td class="num rel-valor">${fmt(tP)}</td><td class="rel-desc">${ped.length} compras</td></tr>
       </tbody></table>
 
       <h2>Composição por natureza</h2>
@@ -2996,10 +3004,16 @@ function renderTerraplanagem(){
     <div class="info-box" style="border:1px solid #C0925740;margin-bottom:12px"><span>🚜</span><div><strong>Terraplanagem, muro de arrimo e operação de máquinas — ${CFG.nome}.</strong>
     Escopo conforme as regras da obra: materiais são <strong>aterro, areia do morro e piçarra</strong>; equipamentos e serviços são <strong>pá mecânica, rolo compactador, carro e caminhão pipa, aluguel de caçamba, encarregado de terraplanagem</strong> e o abastecimento das máquinas; fornecedores de referência <strong>EGEN, Saxum e Vanderlei</strong>. <strong>Areia grossa, areia fina e brita ficam de fora</strong> — são material de obra.</div></div>
 
+    ${(function(){ const cA=tpArrimoCusto(); const geral=totalT+totalC+cA;
+      return `<div class="kpi" style="border-top:3px solid #6D9E7F;margin-bottom:12px">
+        <div class="kpi-label">Total estimado do bloco — terraplanagem, máquinas e arrimo${hintIcon('Soma do que foi efetivamente pago em terraplanagem e combustível de máquinas com o custo estimado do muro de arrimo (550 m³ × R$ 400/m³), que não aparece nos lançamentos porque está diluído na folha e nas medições.')}</div>
+        <div class="kpi-value" style="color:#6D9E7F;font-size:2rem">${fmt(geral)}</div>
+        <div class="kpi-sub">${fmt(totalT)} terraplanagem + ${fmt(totalC)} combustível + ${fmt(cA)} arrimo estimado · ${fmt(geral/nCasas)} por casa · ${(geral/custoObra*100).toFixed(1)}% do custo de obra</div></div>`;
+    })()}
     <div class="kpi-grid">
-      ${k('Terraplanagem — total', fmt(totalT), terra.length+' lançamentos · '+(totalT/custoObra*100).toFixed(1)+'% do custo de obra', '#C09257')}
+      ${k('Terraplanagem — apurada', fmt(totalT), terra.length+' lançamentos · '+(totalT/custoObra*100).toFixed(1)+'% do custo de obra', '#C09257')}
       ${k('Combustível de máquinas', fmt(totalC), comb.length+' abastecimentos · '+(totalC/totalT*100).toFixed(1)+'% da terraplanagem', '#BF6B60','Abastecimento de equipamento de obra, compactador e retro. Não inclui moto e carro de equipe, que são despesa administrativa.')}
-      ${k('Terraplanagem + combustível', fmt(totalT+totalC), fmt((totalT+totalC)/nCasas)+' por casa', '#6C8FB5')}
+      ${k('Muro de arrimo — estimado', fmt(tpArrimoCusto()), TP_ARRIMO_M3_ADOTADO+' m³ × '+fmt(TP_ARRIMO_RS_M3)+'/m³', '#8E7FA8','Volume adotado após a investigação do consumo de pedra; custo unitário do serviço executado definido pela direção. Não está nos lançamentos porque mão de obra e argamassa estão diluídas na folha e nas medições do empreiteiro.')}
       ${k('Por m² de área construída', fmt((totalT+totalC)/area)+'/m²', area.toLocaleString('pt-BR')+' m² · referência de infraestrutura', '#8E7FA8','O denominador é a área construída das casas. O custo de terraplanagem se distribui pelo terreno inteiro, então este número serve para comparar com outras obras, não para orçar por casa.')}
     </div>
 

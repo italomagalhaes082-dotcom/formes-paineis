@@ -370,7 +370,11 @@ async function testEmp(emp, checks){
       const der=w.tpArrimoDerivado();
       ok(der && der.picos.length>0,'Arrimo: meses de pico detectados');
       ok(der && der.excedente>0,'Arrimo: excedente calculado');
-      ok(est.E.m3>0,'Arrimo: volume derivado do consumo ('+est.E.m3+' m³)');
+      ok(TP.includes('550 m³'),'Arrimo: volume adotado de 550 m³ exibido');
+      ok(/550 m³ × R\$ 400/.test(TP),'Arrimo: custo adotado de R$ 400/m³ exibido');
+      ok(w.tpArrimoCusto()===220000,'Arrimo: custo total R$ 220.000');
+      ok(TP.includes('Total estimado do bloco'),'Cabeçalho: total do bloco com arrimo somado');
+      ok(TP.includes('Muro de arrimo — estimado'),'Cabeçalho: arrimo como KPI próprio');
       ok(Math.round(est.unit)===276,'Arrimo: custo unitário mantido em R$ 276/m³');
       ok(Math.abs(est.unit-276)<1,'Arrimo: custo unitário mantido em R$ 276/m³');
       ok(!w.tpEhTerra({descricao:'11 AREIAS - BOSSA NOVA'}),'Escopo: areia NÃO entra (é material)');
