@@ -359,8 +359,12 @@ async function testEmp(emp, checks){
       const rowsTerra=(w._DESPESAS||[]);
       ok(typeof w.tpEhTerra==='function','Terraplanagem: função de escopo disponível');
       ok(w.tpEhTerra({descricao:'100 CARRADAS DE ATERROS - BOSSA NOVA'}),'Escopo: aterro entra');
-      ok(w.tpEhTerra({descricao:'08 DIARIAS RETRO - BOSSA NOVA'}),'Escopo: 8 diárias de retro entram');
+      ok(w.tpEhTerra({descricao:'08 DIARIAS RETRO - BOSSA NOVA', valor:18000}),'Escopo: 8 diárias de retro entram');
       ok(!w.tpEhTerra({descricao:'04 DIARIAS RETRO - BOSSA NOVA'}),'Escopo: menos de 5 diárias NÃO entra (serviço pontual)');
+      ok(!w.tpEhTerra({descricao:'MEIA DIARIA MINI RETRO', valor:800}),'Piso: meia diária de mini retro NÃO entra');
+      ok(!w.tpEhTerra({descricao:'DIARIA DE ESCAVADEIRA', valor:2500}),'Piso: serviço de máquina abaixo de R$ 3.000 NÃO entra');
+      ok(w.tpEhTerra({descricao:'08 DIARIAS RETRO', valor:18000}),'Piso: serviço acima do piso entra');
+      ok(w.tpEhTerra({descricao:'1 CARRADA DE ATERRO', valor:1300}),'Piso: MATERIAL entra por qualquer valor');
       ok(!w.tpEhTerra({descricao:'LOCACAO COMPACTADOR', fornecedor:'MEGALOC'}),'Escopo: Megaloc NÃO entra em nada');
       ok(!w.tpEhTerra({descricao:'TERRAPLANAGEM E PAVIMENTACAO', fornecedor:'JS LOCACOES E SERVICOS'}),'Escopo: JS Locações é desmembramento, não terraplanagem');
       ok(typeof w.tpEstimativa==='function','Arrimo: estimativa paramétrica disponível');
