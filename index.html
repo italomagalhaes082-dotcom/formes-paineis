@@ -1117,7 +1117,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v29.07.26-e · piso de R$ 3.000 em serviços</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v29.07.26-f · fornecedores depurados</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -2714,7 +2714,10 @@ const TP_COMB = /ABASTECIMENTO (EQUIPAMENTO|MAQUIN|COMPACTADOR|RETRO|TRATOR|PA )
 //   porte) é para serviço pontual de obra, não terraplanagem.
 // · Serviço com MENOS DE 5 DIÁRIAS de máquina é serviço pontual de obra, não terraplanagem.
 // · JS LOCAÇÕES é custo de DESMEMBRAMENTO do terreno, não terraplanagem.
-const TP_FORN_FORA = /MEGALOC|JS LOCACOES/;
+// Fornecedores que NÃO são de terraplanagem (direção, 28 e 29/07):
+// Megaloc (escoras e compactador pequeno), JS Locações (desmembramento do terreno),
+// Mercado Livre, Josenildo, Menegotti, MakVibro e LocFácil.
+const TP_FORN_FORA = /MEGALOC|JS LOCACOES|MERCADO ?LIVRE|MERCADOLIVRE|JOSENILDO|MENEGOT|MA[KC] ?VIBRO|LOC ?FACIL/;
 const TP_MIN_DIARIAS = 5;
 // Piso de valor (regra prática da direção, 29/07): serviço com máquina ou serviço de
 // terraplanagem abaixo de R$ 3.000 é pontual de obra e não entra no custo. Não se aplica
@@ -2884,7 +2887,7 @@ window.gerarRelatorioTerra = function(){
       <h1>Terraplanagem, muro de arrimo e operação de máquinas</h1>
       <div class="rel-meta">emitido em ${hoje}${ult?' · dados até '+ult.toLocaleDateString('pt-BR'):''} · ${terra.length} lançamentos · <strong>total estimado do bloco ${fmt(tT+tC+tpArrimoCusto())}</strong> · <em>ordenado do maior para o menor valor</em></div>
 
-      <div class="rel-inst"><strong>Escopo desta análise.</strong> Materiais de terraplanagem: aterro, areia do morro e piçarra. Equipamentos e serviços: pá mecânica, pá carregadeira, retro e mini retro, escavadeira, motoniveladora, patrol, trator, rolo compactador, carro e caminhão pipa, aluguel de caçamba, encarregado de terraplanagem, desmatamento, limpeza de terreno, bota-fora e pavimentação, além dos fornecedores EGEN, Saxum e Vanderlei. <strong>Ficam de fora</strong>: areia grossa, areia fina, brita e pó de pedra (material de obra); <strong>Megaloc</strong>, cuja locação é escora e compactador de pequeno porte para serviço pontual; <strong>JS Locações</strong>, que é custo de desmembramento do terreno; qualquer <strong>serviço</strong> de máquina ou de terraplanagem <strong>abaixo de R$ 3.000</strong> ou com <strong>menos de 5 diárias</strong>, por ser pontual de obra — o piso não se aplica a material, que entra por qualquer valor; e o abastecimento de moto e carro da equipe, que é despesa administrativa.</div>
+      <div class="rel-inst"><strong>Escopo desta análise.</strong> Materiais de terraplanagem: aterro, areia do morro e piçarra. Equipamentos e serviços: pá mecânica, pá carregadeira, retro e mini retro, escavadeira, motoniveladora, patrol, trator, rolo compactador, carro e caminhão pipa, aluguel de caçamba, encarregado de terraplanagem, desmatamento, limpeza de terreno, bota-fora e pavimentação, além dos fornecedores EGEN, Saxum e Vanderlei. <strong>Ficam de fora</strong>: areia grossa, areia fina, brita e pó de pedra (material de obra); <strong>Megaloc</strong> (escoras e compactador de pequeno porte), <strong>JS Locações</strong> (desmembramento do terreno), <strong>Mercado Livre, Josenildo, Menegotti, MakVibro e LocFácil</strong>, que não são fornecedores de terraplanagem; qualquer <strong>serviço</strong> de máquina ou de terraplanagem <strong>abaixo de R$ 3.000</strong> ou com <strong>menos de 5 diárias</strong>, por ser pontual de obra — o piso não se aplica a material, que entra por qualquer valor; e o abastecimento de moto e carro da equipe, que é despesa administrativa.</div>
 
       <h2>Números gerais</h2>
       <table><thead><tr><th style="width:52%">Indicador</th><th class="num" style="width:24%">Valor</th><th style="width:24%">Referência</th></tr></thead><tbody>
@@ -3164,7 +3167,7 @@ function renderTerraplanagem(){
 
     <div class="section-title" style="margin-top:16px">O que este painel considera</div>
     <div class="info-box"><span>📋</span><div><strong>Entra:</strong> aterro, piçarra, escavação, bota-fora, desmatamento e limpeza de terreno, diárias de retro, mini retro, pá carregadeira, trator, patrol, motoniveladora, rolo e caçamba, aluguel de máquinas de terraplanagem, compactação e pavimentação.<br>
-    <strong>Não entra:</strong> areia grossa, areia fina, brita e pó de pedra (material de obra); <strong>Megaloc</strong> (escoras e compactador de pequeno porte, serviço pontual); <strong>JS Locações</strong> (custo de desmembramento do terreno); <strong>serviço</strong> de máquina ou terraplanagem <strong>abaixo de R$ 3.000</strong> ou com <strong>menos de 5 diárias</strong> (pontual de obra) — material entra por qualquer valor; abastecimento de moto e carro da equipe (administrativo); e abastecimento de água da Cagece, que casa com "abastecimento" sem ser combustível.<br>
+    <strong>Não entra:</strong> areia grossa, areia fina, brita e pó de pedra (material de obra); <strong>Megaloc</strong> (escoras e compactador de pequeno porte), <strong>JS Locações</strong> (desmembramento do terreno), <strong>Mercado Livre, Josenildo, Menegotti, MakVibro e LocFácil</strong> (não são de terraplanagem); <strong>serviço</strong> de máquina ou terraplanagem <strong>abaixo de R$ 3.000</strong> ou com <strong>menos de 5 diárias</strong> (pontual de obra) — material entra por qualquer valor; abastecimento de moto e carro da equipe (administrativo); e abastecimento de água da Cagece, que casa com "abastecimento" sem ser combustível.<br>
     <strong>Muro de arrimo:</strong> rastreado pelo consumo de pedra de mão, que é o único insumo do serviço com nome próprio nos lançamentos.</div></div>`;
 
   if (anosL.length) fxBarras(document.getElementById('g_tp_ano'), {

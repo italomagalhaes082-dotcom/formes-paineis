@@ -366,6 +366,9 @@ async function testEmp(emp, checks){
       ok(w.tpEhTerra({descricao:'08 DIARIAS RETRO', valor:18000}),'Piso: serviço acima do piso entra');
       ok(w.tpEhTerra({descricao:'1 CARRADA DE ATERRO', valor:1300}),'Piso: MATERIAL entra por qualquer valor');
       ok(!w.tpEhTerra({descricao:'LOCACAO COMPACTADOR', fornecedor:'MEGALOC'}),'Escopo: Megaloc NÃO entra em nada');
+      const forasNovos=[['MERCADO LIVRE','COMPRA DIVERSA'],['JOSENILDO DOS S RIBEIRO','LIMPEZA DE TERRENO'],['MENEGOTTI','RATEIO COMPACTADOR'],['MAKVIBRO','COMPACTADOR'],['LOCFACIL','ALUGUEL DE MAQUINAS']];
+      const aindaEntram=forasNovos.filter(([f,d])=>w.tpEhTerra({descricao:d, fornecedor:f, valor:9000}));
+      ok(aindaEntram.length===0,'Escopo: Mercado Livre, Josenildo, Menegotti, MakVibro e LocFácil fora'+(aindaEntram.length?' — ainda entram: '+aindaEntram.map(x=>x[0]).join(', '):''));
       ok(!w.tpEhTerra({descricao:'TERRAPLANAGEM E PAVIMENTACAO', fornecedor:'JS LOCACOES E SERVICOS'}),'Escopo: JS Locações é desmembramento, não terraplanagem');
       ok(typeof w.tpEstimativa==='function','Arrimo: estimativa paramétrica disponível');
       const est=w.tpEstimativa();
