@@ -415,6 +415,25 @@ async function testEmp(emp, checks){
     ok(t('tab11').includes('Permutante Jazz'),'Jazz: permutante casas 01-10 configurado');
     w.switchTab(9); await new Promise(r=>setTimeout(r,700));
     ok(t('tab9').includes('Reclassificações automáticas aplicadas'),'Item 1: rastro da reclassificação Rafael Santos');
+    // sentinela de carga: detecta queda brusca e volume implausível
+    ok(typeof w.cargaAvaliar==='function' && typeof w.cargaBanner==='function','Sentinela: funções disponíveis');
+    const av0=w.cargaAvaliar();
+    ok(!av0.some(a=>a.tipo==='queda'),'Sentinela: sem referência anterior, não acusa queda');
+    ok(av0.some(a=>a.tipo==='implausivel'),'Sentinela: poucas receitas para muitas casas dispara alerta');
+    // simula filtro na planilha: aba volta com uma fração das linhas
+    const chave=w.cargaChave();
+    w.localStorage.setItem(chave, JSON.stringify(Object.assign({}, w._cargaAtual, {'DESPESAS TOTAIS': 5000})));
+    const avs=w.cargaAvaliar();
+    ok(avs.some(a=>a.tipo==='queda'),'Sentinela: queda brusca de volume é detectada');
+    w.cargaBanner(); await new Promise(r=>setTimeout(r,120));
+    const banner=w.document.getElementById('cargaAviso');
+    ok(!!banner && /Carga incompleta/.test(banner.textContent),'Sentinela: banner aparece no topo do painel');
+    ok(/filtro ativo na planilha/i.test(banner.textContent),'Sentinela: banner explica a causa provável');
+    // carga truncada não pode virar a nova referência
+    w.cargaGravarBaseline();
+    const depois=JSON.parse(w.localStorage.getItem(chave)||'{}');
+    ok(depois['DESPESAS TOTAIS']===5000,'Sentinela: carga suspeita NÃO sobrescreve a referência');
+    w.localStorage.removeItem(chave); w.cargaBanner();
 
     // auditoria: o contador do card precisa refletir o total real, não a lista truncada
     const dadosAud = w._auditData || {};

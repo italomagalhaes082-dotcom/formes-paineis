@@ -866,7 +866,77 @@ async function fetchSheet(aba, sheetId) {
   const mjson = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\)/);
   const json = mjson ? JSON.parse(mjson[1]) : { csv: parseCSV(text) };
   try { sessionStorage.setItem(ck, JSON.stringify({ t: Date.now(), j: json })); } catch(e) {}
+  // Sentinela de carga: guarda quantas linhas cada aba trouxe, para comparar com a
+  // carga anterior. Filtro ativo na planilha faz o Google devolver só as linhas
+  // visíveis, sem erro nenhum — o painel recebe um CSV válido e incompleto.
+  try {
+    const nLinhas = (json && json.csv) ? json.csv.length
+                  : (json && json.table && json.table.rows) ? json.table.rows.length : 0;
+    const nome = (aba && aba.gid !== undefined) ? ('gid'+aba.gid) : String(aba);
+    window._cargaAtual = window._cargaAtual || {};
+    window._cargaAtual[nome] = nLinhas;
+  } catch(e) {}
   return json;
+}
+
+// ═══ Sentinela de integridade de carga ═══
+// Compara o volume de cada aba com a última carga registrada e acusa quedas bruscas
+// ou volumes implausíveis. Objetivo: nenhum número errado passar despercebido.
+const CARGA_QUEDA_ALERTA = 0.25;    // queda de 25% ou mais dispara alerta
+function cargaChave(){ return 'carga_' + SHEET_ID; }
+function cargaBaseline(){ try { return JSON.parse(localStorage.getItem(cargaChave())||'{}'); } catch(e){ return {}; } }
+function cargaAvaliar(){
+  const atual = window._cargaAtual || {};
+  const base = cargaBaseline();
+  const avisos = [];
+  Object.entries(atual).forEach(([aba, n]) => {
+    const ant = base[aba];
+    if (typeof ant === 'number' && ant > 20 && n < ant * (1 - CARGA_QUEDA_ALERTA)) {
+      avisos.push({ aba, n, ant, tipo: 'queda',
+        txt: 'A aba <strong>' + aba + '</strong> trouxe <strong>' + n.toLocaleString('pt-BR') +
+             ' linhas</strong>, contra ' + ant.toLocaleString('pt-BR') + ' na carga anterior — queda de ' +
+             Math.round((1 - n/ant)*100) + '%.' });
+    }
+    if (n === 0) avisos.push({ aba, n, tipo:'vazia', txt: 'A aba <strong>'+aba+'</strong> voltou <strong>vazia</strong>.' });
+  });
+  // plausibilidade: obra com casas vendidas precisa ter muitas parcelas de receita
+  const nRec = (typeof _RECEITAS !== 'undefined' && _RECEITAS) ? _RECEITAS.length : null;
+  const nAp  = (typeof _APORTES  !== 'undefined' && _APORTES)  ? _APORTES.length  : 0;
+  if (nRec !== null && nRec < 100 && (CFG.nCasas||0) > 10) {
+    avisos.push({ aba: CFG.abaReceitas, n: nRec, tipo:'implausivel',
+      txt: 'Só <strong>' + nRec + ' receita(s)</strong> carregadas para um empreendimento de ' + CFG.nCasas +
+           ' casas' + (nAp ? ' (mas ' + nAp + ' aportes vieram normalmente)' : '') + '.' });
+  }
+  return avisos;
+}
+function cargaGravarBaseline(){
+  // só grava como referência uma carga que passou na avaliação — assim uma carga
+  // truncada não vira o novo normal e apaga o alerta na próxima vez
+  try {
+    if (cargaAvaliar().length === 0 && Object.keys(window._cargaAtual||{}).length)
+      localStorage.setItem(cargaChave(), JSON.stringify(window._cargaAtual));
+  } catch(e) {}
+}
+function cargaBanner(){
+  const avisos = cargaAvaliar();
+  let el = document.getElementById('cargaAviso');
+  if (!avisos.length) { if (el) el.remove(); cargaGravarBaseline(); return; }
+  if (!el) {
+    el = document.createElement('div'); el.id = 'cargaAviso';
+    const dash = document.getElementById('dashboard') || document.body;
+    dash.insertBefore(el, dash.firstChild);
+  }
+  el.style.cssText = 'background:rgba(191,107,96,.12);border:1px solid #BF6B60;border-radius:12px;padding:14px 16px;margin:0 0 14px';
+  el.innerHTML =
+    '<div style="display:flex;gap:10px;align-items:flex-start">'
+    + '<span style="font-size:18px;color:#BF6B60">⚠</span><div>'
+    + '<div style="font-weight:700;color:#BF6B60;margin-bottom:5px">Carga incompleta — os números desta tela podem estar errados</div>'
+    + '<div style="font-size:12px;line-height:1.6;color:var(--text)">'
+    + avisos.map(a=>'· '+a.txt).join('<br>')
+    + '<br><br><strong>Causa mais provável: filtro ativo na planilha.</strong> Quando uma aba do Google Sheets está filtrada, '
+    + 'a exportação que o painel consome devolve <em>apenas as linhas visíveis</em>, sem gerar erro. Abra a planilha, '
+    + 'remova o filtro da aba apontada, aguarde alguns minutos (o Google mantém a exportação em cache) e clique em ↻ Atualizar.'
+    + '</div></div></div>';
 }
 
 // Parser CSV (RFC 4180): aspas, vírgulas e quebras de linha dentro de campos
@@ -979,6 +1049,7 @@ async function loadData(force) {
     renderDashboard();
     document.getElementById("loadingScreen").style.display = "none";
     document.getElementById("dashboard").style.display = "block";
+    try { cargaBanner(); } catch(e) { console.warn('sentinela:', e); }
     switchTab(0);
 
   } catch(err) {
@@ -1117,7 +1188,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v29.07.26-f · fornecedores depurados</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v31.07.26-a · sentinela de carga</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -4067,6 +4138,9 @@ const AUD_CONTEXTO = [
  { re:/fim de semana|termos sensíveis/i, agrupar:'quem',
    impacto:'Pagamento fora do dia útil ou com descritivo evasivo não é irregularidade por si só, mas é onde erros e desvios costumam se esconder, porque escapam do fluxo normal de conferência e aprovação.',
    acao:['Confirme o comprovante de cada pagamento listado.','Verifique quem autorizou e se seguiu o fluxo de aprovação.','Detalhe o descritivo para que o lançamento seja compreensível sem consulta.'] },
+ { re:/Sentinela de carga/i, agrupar:'nenhum',
+   impacto:'Este é o achado mais grave que o painel pode emitir, porque ele não aponta um erro nos números — ele avisa que os números NÃO EXISTEM em quantidade suficiente. Quando uma aba da planilha está filtrada, o Google devolve apenas as linhas visíveis e nenhum erro é gerado: o painel recebe um arquivo válido e incompleto, e todo cálculo derivado dele fica menor que a realidade. Custo de obra, receita, VGV, resultado, TIR e todas as comparações entre obras ficam errados na mesma proporção, sem nada na tela indicando isso. Foi exatamente o que aconteceu no Bossa Nova, onde a aba de receitas trouxe 69 linhas em vez de 1.849.',
+   acao:['NÃO use nenhum número desta obra para decisão enquanto o aviso estiver ativo.','Abra a planilha e vá à aba apontada.','Remova qualquer filtro ativo — inclusive filtros de exibição salvos por outra pessoa.','Aguarde alguns minutos: o Google mantém a exportação em cache e a correção não aparece na hora.','Clique em ↻ Atualizar no painel e confirme que o aviso sumiu e que o volume voltou ao normal.'] },
  { re:/Reclassificações automáticas aplicadas/i, agrupar:'quem',
    impacto:'Este achado é informativo, não é erro: são lançamentos que o painel reclassificou sozinho, seguindo regras confirmadas por você, para que as análises fiquem corretas. O ponto de atenção é que a PLANILHA continua com a categoria antiga — quem consultar a planilha direto vai ver um número diferente do painel. Corrigir na origem elimina essa divergência de uma vez.',
    acao:['Confira se cada reclassificação abaixo faz sentido.','Aplique a mesma correção na planilha, na categoria de origem.','Depois de corrigido na planilha, a regra automática deixa de ser necessária — avise o gestor para removê-la.'] },
@@ -4499,6 +4573,15 @@ async function runAuditoria(progressCb) {
       resumo: falhas.length+" contrato(s) com parcelas intermediárias ausentes da planilha",
       pergunta:"Se a parcela 5/13 existe e a 4/13 não, ou o recebimento não foi lançado (receita subestimada e inadimplência invisível) ou foi lançado sem o padrão n/m. Localizar as parcelas faltantes de cada contrato.",
       total: falhas.length, itens: falhas.slice(0, 500).map(f=>_audItem("CS "+String(f.casa).padStart(2,"0")+" · "+(f.cliente||"—"), "faltam: "+f.faltam.slice(0, 500).join(", ")+" de "+f.total, f.tem.size+" lançadas", "#C4A55C")) });
+  }
+  // Q0-. SENTINELA DE CARGA — volume das abas contra a carga anterior
+  { let avs=[]; try { avs = cargaAvaliar(); } catch(e) {}
+    if (avs.length) alerts.push({ sev:"alta", icon:"🛡️",
+      titulo:"Sentinela de carga: volume de dados abaixo do esperado",
+      resumo: avs.length+" aba(s) com volume suspeito — os números do painel podem estar incompletos",
+      pergunta:"O painel guarda quantas linhas cada aba trouxe na última carga íntegra e compara a cada atualização. Queda brusca de volume quase sempre significa FILTRO ATIVO na planilha: o Google devolve apenas as linhas visíveis, sem gerar erro. Abra a planilha, remova o filtro da aba apontada, aguarde alguns minutos pelo cache do Google e atualize. Enquanto o aviso estiver aqui, nenhum número desta obra deve ser usado para decisão.",
+      total: avs.length,
+      itens: avs.map(a=>_audItem(a.aba, String(a.txt||'').replace(/<[^>]+>/g,''), a.n+' linhas', "#BF6B60")) });
   }
   // Q0. DIAGNÓSTICO DE CARGA — linhas descartadas na leitura da planilha
   { const n = window._cargaDropN||0;
