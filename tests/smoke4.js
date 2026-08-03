@@ -420,12 +420,18 @@ async function testEmp(emp, checks){
       ok(/Formes Engenharia/.test(pap.textContent) && /emitido em/.test(pap.textContent),'Relatório universal: cabeçalho de identificação');
       ok(/Responsável:/.test(pap.textContent),'Relatório universal: rodapé de conferência');
       // impressão: a classe alvo tem de existir enquanto o overlay estiver aberto
-      ok(w.document.body.classList.contains('print-aud'),'Impressão: overlay marca o body como alvo ao abrir');
+      // impressão isolada: o que vai para o papel é um documento próprio
+      ok(typeof w.relImprimirIsolado==='function','Impressão isolada: função disponível');
+      w.imprimirRelatorioAud(); await new Promise(r=>setTimeout(r,300));
+      const ifr=w.document.getElementById('relPrintFrame');
+      ok(!!ifr,'Impressão isolada: iframe de impressão criado');
+      const idoc=ifr && (ifr.contentDocument||ifr.contentWindow.document);
+      ok(!!idoc && !!idoc.getElementById('audRelPapel'),'Impressão isolada: papel presente no documento impresso');
+      const itxt=idoc? idoc.body.textContent.replace(/\s+/g,' ').trim() : '';
+      ok(itxt.length>200,'Impressão isolada: documento tem conteúdo ('+itxt.length+' caracteres)');
+      ok(idoc && idoc.querySelectorAll('style').length>0,'Impressão isolada: estilos da página copiados');
+      ok(idoc && idoc.body.children.length===1 && idoc.body.firstElementChild.id==='audRelOv','Impressão isolada: nada além do relatório no documento');
       w.fecharRelatorioAud();
-      ok(!w.document.body.classList.contains('print-aud'),'Impressão: fechar o relatório desmarca o body');
-      // e não pode haver timer removendo a classe no meio da pré-visualização
-      const codigo=[...w.document.querySelectorAll('script')].map(x=>x.textContent).join(' ');
-      ok(!/setTimeout\(limpar,\s*1500\)/.test(codigo),'Impressão: sem timer que apaga o alvo durante o preview');
       // gráficos em canvas viram imagem no papel
       w.switchTab(1); await new Promise(r=>setTimeout(r,500));
       const ovc=w.document.getElementById('audRelOv'); if(ovc) ovc.remove();

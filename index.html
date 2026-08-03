@@ -1270,7 +1270,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v03.08.26-b · pdf em branco corrigido</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v03.08.26-c · impressão isolada</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -3294,10 +3294,9 @@ window.gerarRelatorioPainel = function(idx){
 };
 // A aba Relatório já é papel: imprime direto, sem clonar
 function imprimirRelatorioTab13(){
-  document.body.classList.remove('print-aud');
-  const limpar = ()=>window.removeEventListener('afterprint', limpar);
-  window.addEventListener('afterprint', limpar);
-  setTimeout(()=>window.print(), 40);
+  const papel = document.querySelector('#tab13 .papel');
+  if (papel) relImprimirIsolado('<div class="papel papel-auto">'+papel.innerHTML+'</div>');
+  else window.print();
 }
 // Botão flutuante presente em TODAS as abas
 function relBotaoFlutuante(){
@@ -4486,9 +4485,56 @@ window.fecharRelatorioAud = function(){
 // 1,5 s depois de window.print(): no celular a pré-visualização ainda estava sendo
 // montada quando a classe caía, e a regra de fallback (que esconde tudo fora das abas
 // de relatório) tornava a página inteira invisível — PDF em branco.
+// ═══ Impressão isolada ═══
+// Tentar imprimir a página viva escondendo tudo em volta se mostrou frágil: qualquer
+// regra de visibilidade que escape produz folha em branco, e o comportamento varia
+// entre navegador de celular e de desktop. Agora o relatório é escrito num documento
+// PRÓPRIO, dentro de um iframe, contendo só o papel e as folhas de estilo da página.
+// O que se imprime é esse documento — não há nada em volta para dar errado.
+function relImprimirIsolado(papelHTML){
+  const velho = document.getElementById('relPrintFrame');
+  if (velho) velho.remove();
+  const ifr = document.createElement('iframe');
+  ifr.id = 'relPrintFrame';
+  ifr.setAttribute('aria-hidden','true');
+  ifr.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;height:1123px;border:0;visibility:hidden';
+  document.body.appendChild(ifr);
+  const estilos = [...document.querySelectorAll('style')].map(s=>s.textContent).join('\n');
+  const links   = [...document.querySelectorAll('link[rel="stylesheet"]')].map(l=>l.outerHTML).join('');
+  const doc = ifr.contentDocument || (ifr.contentWindow && ifr.contentWindow.document);
+  if (!doc) { window.print(); return; }
+  doc.open();
+  doc.write('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">'
+    + '<title>Relatório — ' + (CFG && CFG.nome ? CFG.nome : 'Formes') + '</title>'
+    + links + '<style>' + estilos + '</style>'
+    + '<style>'
+    + '@page{size:A4;margin:12mm 11mm}'
+    + 'html,body{background:#fff !important;margin:0;padding:0;height:auto;overflow:visible}'
+    + '#audRelOv{position:static !important;inset:auto !important;background:#fff !important;'
+    +   'padding:0 !important;margin:0 !important;overflow:visible !important;display:block !important;z-index:auto !important}'
+    + '#audRelOv .papel,#audRelOv .papel-auto{max-width:none !important;margin:0 !important;'
+    +   'border-radius:0 !important;box-shadow:none !important;padding:0 !important}'
+    + '.no-print,#relFab{display:none !important}'
+    + '*{-webkit-print-color-adjust:exact;print-color-adjust:exact}'
+    + '</style></head><body class="print-aud"><div id="audRelOv">' + papelHTML + '</div></body></html>');
+  doc.close();
+  const disparar = () => {
+    try { ifr.contentWindow.focus(); ifr.contentWindow.print(); }
+    catch(e) { window.print(); }
+  };
+  const esperar = () => {
+    // dá tempo de as fontes e as imagens dos gráficos entrarem antes de imprimir
+    const w = ifr.contentWindow;
+    if (w && w.document && w.document.fonts && w.document.fonts.ready)
+      w.document.fonts.ready.then(()=>setTimeout(disparar, 250)).catch(()=>setTimeout(disparar, 400));
+    else setTimeout(disparar, 450);
+  };
+  if (doc.readyState === 'complete') esperar(); else ifr.onload = esperar;
+}
 window.imprimirRelatorioAud = function(){
-  document.body.classList.add('print-aud');
-  setTimeout(()=>window.print(), 60);
+  const papel = document.getElementById('audRelPapel');
+  if (!papel) { window.print(); return; }
+  relImprimirIsolado(papel.outerHTML);
 };
 window.gerarRelatorioAud = function(i){
   const data = window._auditData; if(!data || !data.alerts[i]) return;
