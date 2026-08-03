@@ -331,8 +331,9 @@ async function testEmp(emp, checks){
     ok(S.includes('160.000') || S.includes('Despesa realizada'),'Despesas do layout 7 colunas capturadas');
     w.switchTab(9); await new Promise(r=>setTimeout(r,700));
     ok(t('tab9').includes('Retiradas idênticas'),'Check de retiradas gêmeas dispara');
-    w.switchTab(11); await new Promise(r=>setTimeout(r,150));
-    ok(S.includes('Rendimentos de Aplicações') && S.includes('11.000'),'Rendimentos totais R$11.000');
+    w.switchTab(4); await new Promise(r=>setTimeout(r,200));
+    const F4=t('tab4');
+    ok(F4.includes('Rendimentos de Aplicações') && F4.includes('11.000'),'Rendimentos totais R$11.000 (aba Fluxo)');
     w.switchTab(7); await new Promise(r=>setTimeout(r,150));
     ok(t('tab7').includes('Casa a Casa') && t('tab7').includes('CS 01'),'Gestão de Vendas derivada (CS 01)');
   }));
@@ -390,10 +391,11 @@ async function testEmp(emp, checks){
       const AP=w.rendApuracao();
       ok(AP.ir>0 && AP.iof>0,'Rendimentos: IRRF e IOF capturados (IR '+Math.round(AP.ir)+' · IOF '+Math.round(AP.iof)+')');
       ok(Math.round(AP.liquido)===Math.round(AP.bruto-AP.ir-AP.iof),'Rendimentos: líquido = bruto − IR − IOF');
-      w.switchTab(11); await new Promise(r=>setTimeout(r,300));
-      const SOC=t('tab11');
-      ok(/resultado líquido/i.test(SOC),'Rendimentos: seção de resultado líquido na Sociedade');
-      ok(/Ganho líquido/.test(SOC) && /IRRF/.test(SOC) && /IOF/.test(SOC),'Rendimentos: quadro com bruto, IR, IOF e líquido');
+      const FLX=t('tab4');
+      ok(/resultado líquido/i.test(FLX),'Rendimentos: seção de resultado líquido na aba Fluxo');
+      ok(/Ganho líquido/.test(FLX) && /IRRF/.test(FLX) && /IOF/.test(FLX),'Rendimentos: quadro com bruto, IR, IOF e líquido');
+      ok(!/Ganho líquido/.test(t('tab11')),'Rendimentos: saiu da aba Sociedade/Permuta');
+      ok(/rend-grid/.test(FLX) && /col-carga/.test(FLX),'Rendimentos: layout responsivo aplicado');
       // relatório universal: funciona em qualquer aba
       ok(typeof w.gerarRelatorioPainel==='function','Relatório universal: gerador disponível');
       ok(!!w.document.getElementById('relFab'),'Relatório universal: botão presente no painel');
