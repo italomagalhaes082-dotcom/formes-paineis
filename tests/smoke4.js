@@ -443,6 +443,28 @@ async function testEmp(emp, checks){
       const imgs=[...pg.querySelectorAll('img')];
       ok(imgs.every(im=>im.style.height==='auto'),'Gráficos: imagem com altura proporcional');
       ok(w._relTitulo && /Custo CDI/.test(w._relTitulo),'Nome do PDF: aba CDI vira "Custo CDI" ("'+w._relTitulo+'")');
+      // tema de papel: nada escuro pode sobreviver no relatório
+      ok(typeof w.relTemaClaro==='function' && typeof w.relLum==='function','Papel: conversão de tema por luminância disponível');
+      ok(Math.abs(w.relLum('#0d1117')-0.07)<0.05,'Papel: luminância calculada corretamente');
+      const escuros=[...pg.querySelectorAll('[style]')].filter(n=>{
+        const m=(n.getAttribute('style')||'').match(/background(-color)?\s*:\s*(#[0-9a-fA-F]{6})/);
+        return m && w.relLum(m[2])<0.38;
+      });
+      ok(escuros.length===0,'Papel: nenhum fundo escuro sobrevive à conversão'+(escuros.length?' ('+escuros.length+')':''));
+      const claros=[...pg.querySelectorAll('[style]')].filter(n=>{
+        const m=(n.getAttribute('style')||'').match(/(?:^|;)\s*color\s*:\s*(#[0-9a-fA-F]{6})/);
+        return m && w.relLum(m[1])>0.74;
+      });
+      ok(claros.length===0,'Papel: nenhum texto quase branco sobrevive'+(claros.length?' ('+claros.length+')':''));
+      // campos de formulário viram texto, preservando os parâmetros
+      w.fecharRelatorioAud();
+      w.switchTab(6); await new Promise(r=>setTimeout(r,500));
+      const ovp=w.document.getElementById('audRelOv'); if(ovp) ovp.remove();
+      w.gerarRelatorioPainel(6); await new Promise(r=>setTimeout(r,900));
+      const p6=w.document.getElementById('audRelPapel');
+      ok(p6.querySelectorAll('input,select,textarea').length===0,'Papel: sem campos de formulário');
+      ok(/VGV TOTAL BRUTO|VGV Total/i.test(p6.textContent),'Papel: parâmetros do Resultado Final preservados como texto');
+      w.fecharRelatorioAud();
       w.fecharRelatorioAud();
       // gráficos em canvas viram imagem no papel
       w.switchTab(1); await new Promise(r=>setTimeout(r,500));

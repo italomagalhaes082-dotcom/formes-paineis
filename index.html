@@ -295,10 +295,14 @@
   .rend-tab td,.rend-tab th{padding:4px 2px}
 }
 
-/* ═══════════ Papel universal — celular, desktop e impressão ═══════════
-   O conteúdo clonado do painel é escuro. Em vez de reescrever estilo por
-   estilo, redefinimos as variáveis de cor DENTRO do papel: tudo que usa
-   var(--card), var(--border), var(--text) etc. vira claro automaticamente. */
+/* ═══════════════════════════════════════════════════════════════════
+   PAPEL UNIVERSAL — uma versão para celular, desktop e impressão.
+   O conteúdo é clonado do painel (tema escuro) e reveste-se aqui:
+   as variáveis de cor são redefinidas dentro do container, então tudo
+   que usa var(--card), var(--border), var(--text) vira claro sozinho.
+   Layout em INLINE-BLOCK, não em grid: grid não é suportado por vários
+   motores de impressão e a página sairia com um cartão por linha.
+   ═══════════════════════════════════════════════════════════════════ */
 #relFab{position:fixed;right:16px;bottom:16px;z-index:900;background:#6C8FB5;color:#fff;border:0;
   border-radius:26px;padding:13px 20px;font-family:var(--font);font-size:14px;font-weight:600;
   cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.45);display:flex;align-items:center;gap:7px}
@@ -307,58 +311,135 @@
 
 #audRelOv .papel-auto{
   --bg:#fff; --card:#fff; --card2:#f8fafb; --surface-3:#eef2f5;
-  --border:#e2e8ec; --hairline-strong:#cbd5db;
-  --text:#111; --muted:#5a6169; --text-3:#8b939b;
-  background:#fff;color:#111;border-radius:12px;padding:30px 34px;max-width:920px;margin:0 auto;
-  font-family:'Inter',sans-serif;
+  --border:#dfe5ea; --hairline-strong:#c3ced6;
+  --text:#111; --muted:#565e66; --text-3:#828b93;
+  background:#fff;color:#111;border-radius:12px;padding:26px 30px;max-width:940px;margin:0 auto;
+  font-family:'Inter',sans-serif;font-size:12px;line-height:1.45;
 }
-#audRelOv .papel-auto .rel-corpo{margin-top:14px}
-/* superfícies escuras cravadas em estilo inline precisam de override explícito */
-#audRelOv .papel-auto [style*="#161b22"],
-#audRelOv .papel-auto [style*="#0d1117"],
-#audRelOv .papel-auto [style*="#1a1a1d"],
-#audRelOv .papel-auto [style*="#21262d"]{background:#f8fafb !important;border-color:#e2e8ec !important}
-#audRelOv .papel-auto .kpi{background:#f8fafb;border:1px solid #e2e8ec;border-radius:10px;padding:12px 14px}
-#audRelOv .papel-auto .kpi-label{color:#5a6169}
-#audRelOv .papel-auto .kpi-sub{color:#6b7278}
-#audRelOv .papel-auto .kpi-grid{gap:8px}
-#audRelOv .papel-auto .section-title{color:#8b939b;border-bottom:1px solid #e2e8ec;padding-bottom:5px;margin-top:20px}
-#audRelOv .papel-auto table{width:100%;border-collapse:collapse}
-#audRelOv .papel-auto th{color:#8b939b;border-bottom:1.5px solid #111;background:transparent}
-#audRelOv .papel-auto td{color:#111;border-bottom:1px solid #eef1f4}
-#audRelOv .papel-auto tbody tr:nth-child(even){background:#fafbfc}
-#audRelOv .papel-auto .info-box{background:#f8fafb;border:1px solid #e2e8ec;color:#333}
-/* gráficos: a grade branca do tema escuro fica invisível no papel */
-#audRelOv .papel-auto .chart line{stroke:#dfe5ea !important}
-#audRelOv .papel-auto .chart .ax{fill:#8b939b}
-#audRelOv .papel-auto .hbar__track{background:#eef2f5}
-#audRelOv .papel-auto .stack{background:#eef2f5}
-/* gráficos no papel: altura livre, sem transbordo e sem partir entre páginas */
+#audRelOv .papel-auto .rel-corpo{margin-top:12px}
+
+/* ── cabeçalho do documento ── */
+#audRelOv .papel-auto .rel-eyebrow{font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;color:#8b939b;margin-bottom:4px}
+#audRelOv .papel-auto h1{font-size:19px;line-height:1.2;margin:0 0 4px;letter-spacing:-.02em;font-weight:700;color:#111}
+#audRelOv .papel-auto .rel-meta{font-size:10px;color:#565e66;padding-bottom:8px;border-bottom:2px solid #111}
+#audRelOv .papel-auto .rel-rodape{margin-top:16px;padding-top:8px;border-top:1px solid #dfe5ea;font-size:8.5px;color:#98a0a8;line-height:1.5}
+
+/* ── títulos de seção: densos e nunca órfãos ── */
+#audRelOv .papel-auto .section-title{font-size:9px;letter-spacing:1.2px;text-transform:uppercase;
+  color:#6b737b;font-weight:600;border-bottom:1px solid #dfe5ea;
+  padding-bottom:4px;margin:16px 0 8px;background:none}
+
+/* ── KPIs: quatro por linha, compactos, sem grid ── */
+#audRelOv .papel-auto .kpi-grid{display:block;font-size:0;margin:0 0 6px;grid-template-columns:none !important}
+#audRelOv .papel-auto .kpi-grid > *{display:inline-block;vertical-align:top;
+  width:24.25%;margin:0 1% 6px 0;font-size:12px;box-sizing:border-box}
+#audRelOv .papel-auto .kpi-grid > *:nth-child(4n){margin-right:0}
+#audRelOv .papel-auto .kpi{background:#f8fafb;border:1px solid #e4eaee;border-radius:8px;padding:8px 10px;height:100%}
+#audRelOv .papel-auto .kpi-label{font-size:7.5px;letter-spacing:.7px;color:#6b737b;margin-bottom:3px;line-height:1.25}
+#audRelOv .papel-auto .kpi-value{font-size:15px;font-weight:700;line-height:1.1;margin-bottom:2px;letter-spacing:-.02em}
+#audRelOv .papel-auto .kpi-sub{font-size:8px;color:#6b737b;line-height:1.3}
+
+/* ── classes do painel com fundo escuro definido em folha de estilo ── */
+#audRelOv .papel-auto .cdi-highlight{background:#f6f8fa !important;border:1px solid #dfe5ea !important;
+  padding:12px 14px !important;border-radius:10px !important}
+#audRelOv .papel-auto .cdi-pill,#audRelOv .papel-auto .bar-bg,
+#audRelOv .papel-auto .aud-q,#audRelOv .papel-auto .hint-pop,
+#audRelOv .papel-auto .error-box{background:#eef2f5 !important;border-color:#dfe5ea !important}
+#audRelOv .papel-auto .cdi-highlight *,#audRelOv .papel-auto .cdi-pill *{color:inherit}
+/* o herói do CDI: valor grande em azul, rótulos legíveis */
+#audRelOv .papel-auto .cdi-highlight{color:#111 !important}
+
+/* ── superfícies escuras cravadas em estilo inline ── */
+#audRelOv .papel-auto [style*="#161b22"],#audRelOv .papel-auto [style*="#0d1117"],
+#audRelOv .papel-auto [style*="#1a1a1d"],#audRelOv .papel-auto [style*="#21262d"],
+#audRelOv .papel-auto [style*="#0A0A0B"],#audRelOv .papel-auto [style*="#0a0a0b"]{
+  background:#f8fafb !important;border-color:#e4eaee !important;color:#111 !important}
+
+/* ── tabelas: densas, cabeçalho repetido, linha inteira por página ── */
+#audRelOv .papel-auto .table-wrap{max-height:none !important;overflow:visible !important;margin-bottom:8px}
+#audRelOv .papel-auto table{width:100%;border-collapse:collapse;font-size:9.5px}
+#audRelOv .papel-auto thead{display:table-header-group}
+#audRelOv .papel-auto tr{page-break-inside:avoid}
+#audRelOv .papel-auto th{color:#6b737b;border-bottom:1.5px solid #111;background:transparent;
+  font-size:7.5px;letter-spacing:.6px;padding:5px 5px;position:static !important}
+#audRelOv .papel-auto td{color:#111;border-bottom:1px solid #eef1f4;padding:4.5px 5px;font-size:9.5px}
+#audRelOv .papel-auto tbody tr:nth-child(even){background:#fbfcfd}
+
+/* ── caixas de texto ── */
+#audRelOv .papel-auto .info-box{background:#f8fafb;border:1px solid #e4eaee;color:#333;
+  border-radius:8px;padding:9px 12px;font-size:10.5px;line-height:1.5;margin:8px 0}
+
+/* ── gráficos: altura livre, sem transbordo, sem partir ── */
 #audRelOv .papel-auto img{max-width:100%;height:auto;display:block}
-#audRelOv .papel-auto .chart-card{page-break-inside:avoid;background:#fff;border:1px solid #e2e8ec;padding:10px}
-#audRelOv .papel-auto .chart-card > div,
-#audRelOv .papel-auto [style*="height:280px"],
-#audRelOv .papel-auto [style*="height: 280px"]{height:auto !important;position:static !important;min-height:0 !important}
 #audRelOv .papel-auto canvas{display:none}
-/* celular: mesma versão, só respira menos */
-@media (max-width:680px){
+#audRelOv .papel-auto .chart-card{page-break-inside:avoid;background:#fff;border:1px solid #e4eaee;
+  border-radius:8px;padding:8px;margin-bottom:8px}
+#audRelOv .papel-auto .chart-card > div,
+#audRelOv .papel-auto [style*="height:280px"],#audRelOv .papel-auto [style*="height: 280px"]{
+  height:auto !important;position:static !important;min-height:0 !important}
+#audRelOv .papel-auto svg.chart{max-height:180px;width:100%;height:auto}
+/* cartões de gráfico lado a lado: um por linha desperdiça metade da página */
+/* float, não inline-block: o espaço em branco entre os cartões no HTML somaria
+   alguns pixels e jogaria o segundo cartão para a linha de baixo. Com float a
+   conta fecha exata: 48% + 2% de margem, dois por linha. */
+#audRelOv .papel-auto .fx-card{float:left;width:48%;
+  margin:0 2% 8px 0 !important;padding:9px 11px !important;box-sizing:border-box;
+  border-radius:8px !important;border-color:#e4eaee !important}
+#audRelOv .papel-auto .section-title,#audRelOv .papel-auto .rel-rodape,
+#audRelOv .papel-auto .info-box{clear:both}
+#audRelOv .papel-auto .fx-card__t{font-size:11px !important;margin-bottom:5px !important}
+#audRelOv .papel-auto .legend{font-size:8px;gap:8px;margin-bottom:4px}
+/* barras horizontais: o painel usa grid, que nem todo motor de impressão entende */
+#audRelOv .papel-auto .hbar{display:block !important;padding:4px 0}
+#audRelOv .papel-auto .hbar__name{display:inline-block;width:69%;font-size:10px;vertical-align:middle}
+#audRelOv .papel-auto .hbar__val{display:inline-block;width:30%;text-align:right;font-size:10px;vertical-align:middle}
+#audRelOv .papel-auto .hbar__track{display:block;width:100%;margin-top:3px;height:4px}
+#audRelOv .papel-auto .chart line{stroke:#e1e7eb !important}
+#audRelOv .papel-auto .chart .ax{fill:#8b939b}
+#audRelOv .papel-auto .hbar__track,#audRelOv .papel-auto .stack{background:#eef2f5}
+#audRelOv .papel-auto .hbar{padding:5px 0}
+#audRelOv .papel-auto .hbar__name,#audRelOv .papel-auto .hbar__val{font-size:10px}
+
+/* ── blocos de cartão diversos do painel ── */
+#audRelOv .papel-auto .fases-grid{display:block;font-size:0}
+#audRelOv .papel-auto .fases-grid > *{display:inline-block;vertical-align:top;width:32.2%;
+  margin:0 1.5% 6px 0;font-size:11px;box-sizing:border-box}
+#audRelOv .papel-auto .fases-grid > *:nth-child(3n){margin-right:0}
+#audRelOv .papel-auto .fase-card{background:#f8fafb;border-radius:8px;padding:8px 10px}
+
+/* ── celular: mesma versão, só respira menos. Restrito a TELA: o motor de
+      impressão renderiza numa largura estreita e dispararia este bloco,
+      jogando o relatório para duas colunas e desperdiçando a página. ── */
+@media screen and (max-width:680px){
   #audRelOv{padding:8px}
-  #audRelOv .papel-auto{padding:16px 13px;border-radius:8px}
-  #audRelOv .papel-auto h1{font-size:17px}
-  #audRelOv .papel-auto .kpi-grid{grid-template-columns:1fr 1fr !important}
-  #audRelOv .papel-auto .kpi-value{font-size:15px !important}
-  #audRelOv .papel-auto table{font-size:9.5px}
-  #audRelOv .papel-auto td,#audRelOv .papel-auto th{padding:4px 3px}
-  #audRelOv .papel-auto .table-wrap{overflow-x:auto}
+  #audRelOv .papel-auto{padding:14px 12px;border-radius:8px;font-size:11.5px}
+  #audRelOv .papel-auto h1{font-size:16px}
+  #audRelOv .papel-auto .kpi-grid > *{width:48.9%;margin-right:2.2%}
+  #audRelOv .papel-auto .kpi-grid > *:nth-child(2n){margin-right:0}
+  #audRelOv .papel-auto .kpi-grid > *:nth-child(4n){margin-right:2.2%}
+  #audRelOv .papel-auto .fases-grid > *{width:100%;margin-right:0}
+  #audRelOv .papel-auto table{font-size:8.5px}
+  #audRelOv .papel-auto td,#audRelOv .papel-auto th{padding:3.5px 3px}
+  #audRelOv .papel-auto .table-wrap{overflow-x:auto !important}
 }
-/* impressão: nada de cartão partido ao meio e cor fiel */
+
+/* ── impressão: aproveitar a página e não quebrar no lugar errado ── */
 @media print{
   #relFab{display:none !important}
   #audRelOv .papel-auto,#audRelOv .papel-auto *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  #audRelOv .papel-auto .kpi,#audRelOv .papel-auto .info-box,#audRelOv .papel-auto tr{page-break-inside:avoid}
+  /* layout de página cheia, independente da largura que o motor usar */
+  #audRelOv .papel-auto{padding:0 !important;font-size:11.5px}
+  #audRelOv .papel-auto .kpi-grid > *{width:24.25% !important;margin:0 1% 5px 0 !important}
+  #audRelOv .papel-auto .kpi-grid > *:nth-child(4n){margin-right:0 !important}
+  #audRelOv .papel-auto .fases-grid > *{width:32.2% !important;margin-right:1.5% !important}
+  #audRelOv .papel-auto .fases-grid > *:nth-child(3n){margin-right:0 !important}
+  #audRelOv .papel-auto .table-wrap{overflow:visible !important}
+  #audRelOv .papel-auto .kpi,#audRelOv .papel-auto .info-box,
+  #audRelOv .papel-auto .chart-card,#audRelOv .papel-auto .fase-card{page-break-inside:avoid}
   #audRelOv .papel-auto .section-title{page-break-after:avoid}
-  #audRelOv .papel-auto .kpi-grid{grid-template-columns:repeat(4,1fr) !important}
-  #audRelOv .papel-auto svg.chart{max-height:220px}
+  #audRelOv .papel-auto h1,#audRelOv .papel-auto h2{page-break-after:avoid}
+  #audRelOv .papel-auto svg.chart{max-height:150px}
+  #audRelOv .papel-auto .fx-card{width:48% !important;margin:0 2% 7px 0 !important}
 }
 
 /* ═══ Relatório de correção da Auditoria — documento de trabalho ═══ */
@@ -1277,7 +1358,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v03.08.26-d · gráficos e nome do PDF</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v03.08.26-n · relatórios reformatados</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -2500,8 +2581,8 @@ function fxBarrasH(alvo, itens){
 }
 // helper de cartão para as seções com gráfico
 function fxCard(titulo, idGrafico, legenda, hint){
-  return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px">'
-    +'<div style="font-size:1.0625rem;font-weight:600;letter-spacing:-.02em;margin-bottom:10px">'+titulo+(hint?hintIcon(hint):'')+'</div>'
+  return '<div class="fx-card" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px">'
+    +'<div class="fx-card__t" style="font-size:1.0625rem;font-weight:600;letter-spacing:-.02em;margin-bottom:10px">'+titulo+(hint?hintIcon(hint):'')+'</div>'
     +(legenda||'')+'<div id="'+idGrafico+'"></div></div>';
 }
 
@@ -3234,6 +3315,88 @@ function relDadosAte(){
   return u ? u.toLocaleDateString('pt-BR') : null;
 }
 // Limpa o clone: tira controle interativo, solta tabelas presas e prepara para papel
+// ═══ Conversão de tema para papel ═══
+// O painel é escuro e muitos estilos estão cravados no HTML (não em variáveis).
+// Em vez de perseguir cada cor uma a uma, medimos a luminância de cada cor inline:
+// fundo escuro vira claro, texto quase branco vira quase preto. Cores de acento
+// (verde, terracota, latão, azul) ficam na faixa do meio e são preservadas.
+function relLum(cor){
+  let r,g,b;
+  const h = String(cor).trim();
+  let m = h.match(/^#([0-9a-f]{3})$/i);
+  if (m){ r=parseInt(m[1][0]+m[1][0],16); g=parseInt(m[1][1]+m[1][1],16); b=parseInt(m[1][2]+m[1][2],16); }
+  else if ((m = h.match(/^#([0-9a-f]{6})/i))){ r=parseInt(m[1].slice(0,2),16); g=parseInt(m[1].slice(2,4),16); b=parseInt(m[1].slice(4,6),16); }
+  else if ((m = h.match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i))){ r=+m[1]; g=+m[2]; b=+m[3]; }
+  else return null;
+  return (0.2126*r + 0.7152*g + 0.0722*b) / 255;
+}
+function relSat(cor){
+  const h=String(cor).trim(); let m,r,g,b;
+  if ((m=h.match(/^#([0-9a-f]{6})/i))){ r=parseInt(m[1].slice(0,2),16); g=parseInt(m[1].slice(2,4),16); b=parseInt(m[1].slice(4,6),16); }
+  else if ((m=h.match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i))){ r=+m[1]; g=+m[2]; b=+m[3]; }
+  else return null;
+  return (Math.max(r,g,b)-Math.min(r,g,b))/255;
+}
+function relTemaClaro(el){
+  const nos = [el].concat([...el.querySelectorAll('[style]')]);
+  nos.forEach(n=>{
+    const s = n.getAttribute && n.getAttribute('style');
+    if (!s) return;
+    let novo = s;
+    // fundo escuro → superfície clara
+    novo = novo.replace(/background(-color|-image)?\s*:\s*([^;]+)/gi, (tudo, sufixo, valor)=>{
+      // gradiente: avalia as cores que ele contém — o cartão-herói do CDI usa um
+      if (/gradient/i.test(valor)) {
+        const cores = valor.match(/#[0-9a-fA-F]{3,6}|rgba?\([^)]*\)/g) || [];
+        const lums = cores.map(relLum).filter(x=>x!==null);
+        if (lums.length && lums.every(x=>x<0.42))
+          return 'background:#f6f8fa';
+        return tudo;
+      }
+      const L = relLum(valor);
+      return (L !== null && L < 0.38) ? 'background'+(sufixo||'')+':#f6f8fa' : tudo;
+    });
+    // texto quase branco → quase preto (acentos ficam intactos)
+    novo = novo.replace(/(^|;)(\s*)color\s*:\s*([^;]+)/gi, (tudo, pre, esp, valor)=>{
+      const L = relLum(valor), S = relSat(valor);
+      if (L === null) return tudo;
+      if (L > 0.74) return pre+esp+'color:#111';                    // quase branco → quase preto
+      if (S !== null && S < 0.12 && L > 0.50) return pre+esp+'color:#565e66';  // cinza neutro claro → legível
+      return tudo;                                                   // acentos preservados
+    });
+    // bordas escuras → hairline claro
+    novo = novo.replace(/border(-top|-bottom|-left|-right)?\s*:\s*([^;]*?)(#[0-9a-fA-F]{3,6})/gi, (tudo, lado, meio, cor)=>{
+      const L = relLum(cor);
+      return (L !== null && L < 0.35) ? 'border'+(lado||'')+':'+meio+'#dfe5ea' : tudo;
+    });
+    if (novo !== s) n.setAttribute('style', novo);
+  });
+  return el;
+}
+// Campos de formulário guardam informação (VGV, percentuais, % de obra). Removê-los
+// apagaria os parâmetros do relatório — então viram texto com o valor preenchido.
+function relCamposEmTexto(clone, origem){
+  if (!origem) return;
+  const oi = origem.querySelectorAll('input, select, textarea');
+  const ci = clone.querySelectorAll('input, select, textarea');
+  for (let i=0;i<ci.length;i++){
+    const orig = oi[i];
+    let val = '';
+    if (orig){
+      val = (orig.tagName==='SELECT' && orig.selectedOptions && orig.selectedOptions[0])
+            ? orig.selectedOptions[0].textContent : (orig.value || '');
+    }
+    const span = document.createElement('span');
+    span.textContent = (val && String(val).trim()) ? val : '—';
+    span.style.cssText = 'font-family:DM Mono,monospace;font-weight:700;color:#111;font-size:12px;display:inline-block';
+    const pai = ci[i].parentNode;
+    pai.replaceChild(span, ci[i]);
+    // o rótulo é o irmão anterior e é um bloco: passa a inline para caber na mesma linha
+    const rot = span.previousElementSibling;
+    if (rot && rot.style) { rot.style.display='inline-block'; rot.style.marginRight='6px'; rot.style.marginBottom='0'; }
+    if (pai && pai.style) { pai.style.display='inline-block'; pai.style.width='32%'; pai.style.verticalAlign='top'; pai.style.marginBottom='4px'; }
+  }
+}
 function relLimpar(el, origem){
   // Canvas clonado nasce em branco: o bitmap não é copiado. Troca cada um por uma
   // imagem tirada do canvas original, para os gráficos aparecerem no PDF.
@@ -3253,14 +3416,54 @@ function relLimpar(el, origem){
       } catch(e) { try { cc[i].remove(); } catch(_){} }
     }
   }
-  return relLimparBase(el);
+  relCamposEmTexto(el, origem);
+  relGridsEmColunas(el);
+  return relTemaClaro(relLimparBase(el));
+}
+// Vários blocos declaram a grade em estilo inline (display:grid). Motores de
+// impressão sem suporte a grid empilham tudo em coluna única e a página fica vazia
+// pela metade. Aqui a grade vira colunas de largura fixa, que qualquer motor entende.
+function relGridsEmColunas(el){
+  const alvos = [...el.querySelectorAll('[style*="display:grid"],[style*="display: grid"]')];
+  alvos.forEach(g=>{
+    const st = g.getAttribute('style') || '';
+    let n = 0;
+    const rep = st.match(/grid-template-columns\s*:\s*repeat\(\s*(\d+)/i);
+    if (rep) n = +rep[1];
+    else {
+      const cols = st.match(/grid-template-columns\s*:\s*([^;]+)/i);
+      if (cols) n = (cols[1].match(/\b[\d.]*(?:fr|px|%)\b|auto|minmax\([^)]*\)/gi)||[]).length;
+    }
+    if (!n || n < 1) n = 2;
+    if (n > 4) n = 4;
+    const larg = (100/n) - 1;
+    g.setAttribute('style', st.replace(/display\s*:\s*grid/i,'display:block')
+                              .replace(/grid-template-columns\s*:[^;]+;?/i,'') + ';font-size:0');
+    [...g.children].forEach((c,i)=>{
+      const cs = c.getAttribute('style') || '';
+      c.setAttribute('style', cs + ';display:inline-block;vertical-align:top;box-sizing:border-box;font-size:12px;width:'
+        + larg.toFixed(2) + '%;margin-right:' + ((i+1)%n===0 ? '0' : '1%') + ';margin-bottom:6px');
+    });
+  });
+  return el;
 }
 function relLimparBase(el){
-  el.querySelectorAll('.no-print, button, input, select, textarea, [data-fxgraf] .legend + div:empty').forEach(n=>n.remove());
+  el.querySelectorAll('.no-print, button, [data-fxgraf] .legend + div:empty').forEach(n=>n.remove());
+  el.querySelectorAll('input, select, textarea').forEach(n=>n.remove());   // resíduo, se algum escapou
+  // texto de interação não faz sentido no papel
+  el.querySelectorAll('span').forEach(n=>{
+    const t=(n.textContent||'').trim();
+    if (t==='↗' || /^↗?\s*ver\s+tod/i.test(t) || /^clique/i.test(t)) n.remove();
+  });
+  el.querySelectorAll('.section-title, h2').forEach(n=>{
+    n.innerHTML = n.innerHTML
+      .replace(/\s*[—-]\s*clique[^<]*/gi,'')
+      .replace(/\s*clique para[^<]*/gi,'');
+  });
   el.querySelectorAll('[onclick]').forEach(n=>n.removeAttribute('onclick'));
   el.querySelectorAll('[title]').forEach(n=>n.removeAttribute('title'));
   // ícones de ajuda viram nada: a explicação já está no texto do relatório
-  el.querySelectorAll('.hint, .hint-icon').forEach(n=>n.remove());
+  el.querySelectorAll('.hint, .hint-icon, .hint-ico, .hint-box').forEach(n=>n.remove());
   // tabelas com rolagem precisam sair inteiras no papel
   el.querySelectorAll('.table-wrap').forEach(n=>{ n.style.maxHeight='none'; n.style.overflow='visible'; });
   el.querySelectorAll('thead').forEach(n=>{ n.style.position='static'; });
