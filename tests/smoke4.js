@@ -394,6 +394,32 @@ async function testEmp(emp, checks){
       const SOC=t('tab11');
       ok(/resultado líquido/i.test(SOC),'Rendimentos: seção de resultado líquido na Sociedade');
       ok(/Ganho líquido/.test(SOC) && /IRRF/.test(SOC) && /IOF/.test(SOC),'Rendimentos: quadro com bruto, IR, IOF e líquido');
+      // relatório universal: funciona em qualquer aba
+      ok(typeof w.gerarRelatorioPainel==='function','Relatório universal: gerador disponível');
+      ok(!!w.document.getElementById('relFab'),'Relatório universal: botão presente no painel');
+      const abasTeste=[0,5,8,9,11,15,16];
+      const falhas=[];
+      for (const idx of abasTeste){
+        w.switchTab(idx); await new Promise(r=>setTimeout(r,420));
+        const ov0=w.document.getElementById('audRelOv'); if(ov0) ov0.remove();
+        w.gerarRelatorioPainel(idx); await new Promise(r=>setTimeout(r,220));
+        const p=w.document.getElementById('audRelPapel');
+        const corpo=p && p.querySelector('.rel-corpo');
+        if (!p || !corpo || corpo.textContent.trim().length<40) falhas.push(idx);
+      }
+      ok(falhas.length===0,'Relatório universal: gera em todas as abas testadas'+(falhas.length?' — falhou em '+falhas.join(', '):''));
+      // o papel precisa herdar o tema claro e limpar controles
+      w.switchTab(5); await new Promise(r=>setTimeout(r,400));
+      const ovx=w.document.getElementById('audRelOv'); if(ovx) ovx.remove();
+      w.gerarRelatorioPainel(5); await new Promise(r=>setTimeout(r,200));
+      const pap=w.document.getElementById('audRelPapel');
+      ok(pap.classList.contains('papel-auto'),'Relatório universal: papel aplica tema claro');
+      ok(pap.querySelectorAll('button, input, select').length===0,'Relatório universal: controles interativos removidos');
+      ok(/Formes Engenharia/.test(pap.textContent) && /emitido em/.test(pap.textContent),'Relatório universal: cabeçalho de identificação');
+      ok(/Responsável:/.test(pap.textContent),'Relatório universal: rodapé de conferência');
+      const presas=[...pap.querySelectorAll('.table-wrap')].filter(n=>n.style.maxHeight && n.style.maxHeight!=='none');
+      ok(presas.length===0,'Relatório universal: tabelas liberadas para impressão completa');
+      w.fecharRelatorioAud();
       ok(typeof w.tpAterroDomina==='function','Dominância: função disponível');
       const dom=(d)=>w.tpAterroDomina({descricao:d});
       ok(dom('RELATORIO ATERROS, AREIAS, DIARIAS DE RETRO'),'Dominância: 2 materiais contra 1 máquina vira aterro');

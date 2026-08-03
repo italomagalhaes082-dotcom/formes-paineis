@@ -275,6 +275,65 @@
 #tab13 .papel , #tab14 .papel { background:#fff; color:#1a1f24; border-radius:12px; padding:28px 30px; max-width:820px; margin:0 auto; font-family:'Space Grotesk',sans-serif; }
 #tab13 .papel h1 , #tab14 .papel h1 { font-size:22px; margin:0 0 2px; } #tab13 .papel h2 , #tab14 .papel h2 { font-size:14px; margin:20px 0 8px; border-bottom:2px solid #1a1f24; padding-bottom:4px; text-transform:uppercase; letter-spacing:1px; }
 #tab13 .papel , #tab14 .papel { overflow:hidden; }
+/* ═══════════ Papel universal — celular, desktop e impressão ═══════════
+   O conteúdo clonado do painel é escuro. Em vez de reescrever estilo por
+   estilo, redefinimos as variáveis de cor DENTRO do papel: tudo que usa
+   var(--card), var(--border), var(--text) etc. vira claro automaticamente. */
+#relFab{position:fixed;right:16px;bottom:16px;z-index:900;background:#6C8FB5;color:#fff;border:0;
+  border-radius:26px;padding:13px 20px;font-family:var(--font);font-size:14px;font-weight:600;
+  cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.45);display:flex;align-items:center;gap:7px}
+#relFab:active{transform:translateY(1px)}
+@media (max-width:680px){ #relFab{right:12px;bottom:12px;padding:12px 16px;font-size:13px} }
+
+#audRelOv .papel-auto{
+  --bg:#fff; --card:#fff; --card2:#f8fafb; --surface-3:#eef2f5;
+  --border:#e2e8ec; --hairline-strong:#cbd5db;
+  --text:#111; --muted:#5a6169; --text-3:#8b939b;
+  background:#fff;color:#111;border-radius:12px;padding:30px 34px;max-width:920px;margin:0 auto;
+  font-family:'Inter',sans-serif;
+}
+#audRelOv .papel-auto .rel-corpo{margin-top:14px}
+/* superfícies escuras cravadas em estilo inline precisam de override explícito */
+#audRelOv .papel-auto [style*="#161b22"],
+#audRelOv .papel-auto [style*="#0d1117"],
+#audRelOv .papel-auto [style*="#1a1a1d"],
+#audRelOv .papel-auto [style*="#21262d"]{background:#f8fafb !important;border-color:#e2e8ec !important}
+#audRelOv .papel-auto .kpi{background:#f8fafb;border:1px solid #e2e8ec;border-radius:10px;padding:12px 14px}
+#audRelOv .papel-auto .kpi-label{color:#5a6169}
+#audRelOv .papel-auto .kpi-sub{color:#6b7278}
+#audRelOv .papel-auto .kpi-grid{gap:8px}
+#audRelOv .papel-auto .section-title{color:#8b939b;border-bottom:1px solid #e2e8ec;padding-bottom:5px;margin-top:20px}
+#audRelOv .papel-auto table{width:100%;border-collapse:collapse}
+#audRelOv .papel-auto th{color:#8b939b;border-bottom:1.5px solid #111;background:transparent}
+#audRelOv .papel-auto td{color:#111;border-bottom:1px solid #eef1f4}
+#audRelOv .papel-auto tbody tr:nth-child(even){background:#fafbfc}
+#audRelOv .papel-auto .info-box{background:#f8fafb;border:1px solid #e2e8ec;color:#333}
+/* gráficos: a grade branca do tema escuro fica invisível no papel */
+#audRelOv .papel-auto .chart line{stroke:#dfe5ea !important}
+#audRelOv .papel-auto .chart .ax{fill:#8b939b}
+#audRelOv .papel-auto .hbar__track{background:#eef2f5}
+#audRelOv .papel-auto .stack{background:#eef2f5}
+/* celular: mesma versão, só respira menos */
+@media (max-width:680px){
+  #audRelOv{padding:8px}
+  #audRelOv .papel-auto{padding:16px 13px;border-radius:8px}
+  #audRelOv .papel-auto h1{font-size:17px}
+  #audRelOv .papel-auto .kpi-grid{grid-template-columns:1fr 1fr !important}
+  #audRelOv .papel-auto .kpi-value{font-size:15px !important}
+  #audRelOv .papel-auto table{font-size:9.5px}
+  #audRelOv .papel-auto td,#audRelOv .papel-auto th{padding:4px 3px}
+  #audRelOv .papel-auto .table-wrap{overflow-x:auto}
+}
+/* impressão: nada de cartão partido ao meio e cor fiel */
+@media print{
+  #relFab{display:none !important}
+  #audRelOv .papel-auto,#audRelOv .papel-auto *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  #audRelOv .papel-auto .kpi,#audRelOv .papel-auto .info-box,#audRelOv .papel-auto tr{page-break-inside:avoid}
+  #audRelOv .papel-auto .section-title{page-break-after:avoid}
+  #audRelOv .papel-auto .kpi-grid{grid-template-columns:repeat(4,1fr) !important}
+  #audRelOv .papel-auto svg.chart{max-height:220px}
+}
+
 /* ═══ Relatório de correção da Auditoria — documento de trabalho ═══ */
 #audRelOv .papel { background:#fff; color:#111; border-radius:12px; padding:30px 34px; max-width:920px; margin:0 auto; font-family:'Inter',sans-serif; }
 #audRelOv .rel-eyebrow { font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:#8a8f94; margin-bottom:5px; }
@@ -1050,6 +1109,7 @@ async function loadData(force) {
     document.getElementById("loadingScreen").style.display = "none";
     document.getElementById("dashboard").style.display = "block";
     try { cargaBanner(); } catch(e) { console.warn('sentinela:', e); }
+    try { relBotaoFlutuante(); } catch(e) {}
     switchTab(0);
 
   } catch(err) {
@@ -1188,7 +1248,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v01.08.26-a · rendimentos líquidos</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v01.08.26-b · relatório em todas as abas</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -3056,6 +3116,93 @@ window.gerarRelatorioTerra = function(){
     </div>`;
   document.body.style.overflow='hidden';
 };
+
+// ═══════════════════════════════════════════════════════════════════
+// RELATÓRIO UNIVERSAL — qualquer aba vira PDF, em uma única versão que
+// serve a celular, desktop e impressão. Em vez de escrever um relatório
+// por aba, o gerador CLONA o conteúdo já renderizado e o reveste com o
+// tema de papel: as variáveis de cor são redefinidas dentro do container,
+// então todo o conteúdo escuro vira claro sem tocar no painel.
+// ═══════════════════════════════════════════════════════════════════
+function relNomeAba(idx){
+  const b = document.querySelectorAll('.tabs .tab')[idx];
+  return b ? b.textContent.trim().replace(/^[^\wÀ-ÿ]+/,'').trim() : 'Painel';
+}
+function relAbaAtiva(){
+  const cs = document.querySelectorAll('.tab-content');
+  for (let i=0;i<cs.length;i++) if (cs[i].classList.contains('active')) return i;
+  return 0;
+}
+function relDadosAte(){
+  let u = null;
+  const veja = arr => (arr||[]).forEach(r=>{ const d=parseDate(r.data||r.dataComp); if(d && (!u||d>u)) u=d; });
+  try { veja(_DESPESAS); veja(_RECEITAS); } catch(e){}
+  return u ? u.toLocaleDateString('pt-BR') : null;
+}
+// Limpa o clone: tira controle interativo, solta tabelas presas e prepara para papel
+function relLimpar(el){
+  el.querySelectorAll('.no-print, button, input, select, textarea, [data-fxgraf] .legend + div:empty').forEach(n=>n.remove());
+  el.querySelectorAll('[onclick]').forEach(n=>n.removeAttribute('onclick'));
+  el.querySelectorAll('[title]').forEach(n=>n.removeAttribute('title'));
+  // ícones de ajuda viram nada: a explicação já está no texto do relatório
+  el.querySelectorAll('.hint, .hint-icon').forEach(n=>n.remove());
+  // tabelas com rolagem precisam sair inteiras no papel
+  el.querySelectorAll('.table-wrap').forEach(n=>{ n.style.maxHeight='none'; n.style.overflow='visible'; });
+  el.querySelectorAll('thead').forEach(n=>{ n.style.position='static'; });
+  // cabeçalho de tabela repete em cada página impressa
+  el.querySelectorAll('table').forEach(n=>{ n.style.pageBreakInside='auto'; });
+  return el;
+}
+window.gerarRelatorioPainel = function(idx){
+  const i = (typeof idx === 'number') ? idx : relAbaAtiva();
+  // abas que já têm relatório próprio, mais rico que o clone genérico
+  if (i===17 && typeof gerarRelatorioTerra === 'function') return gerarRelatorioTerra();
+  if (i===14 && typeof aliToggleRel === 'function' && !window._aliRelMode) { aliToggleRel(); return; }
+  if (i===13) { imprimirRelatorioTab13(); return; }
+
+  const origem = document.getElementById('tab'+i);
+  if (!origem || !origem.innerHTML.trim()) { alert('Abra a aba e aguarde os dados carregarem antes de gerar o relatório.'); return; }
+  const corpo = relLimpar(origem.cloneNode(true));
+  const hoje = new Date().toLocaleDateString('pt-BR');
+  const ate = relDadosAte();
+  const versao = ((document.body.innerText||document.body.textContent||'').match(/painel v[\d.]+[\w-]*/)||[''])[0];
+
+  let ov = document.getElementById('audRelOv');
+  if (!ov) { ov = document.createElement('div'); ov.id='audRelOv'; document.body.appendChild(ov); }
+  ov.style.cssText = 'position:fixed;inset:0;background:#000c;z-index:1000;overflow:auto;padding:16px';
+  ov.innerHTML = `
+    <div class="no-print" style="max-width:920px;margin:0 auto 12px;display:flex;justify-content:space-between;gap:8px">
+      <button onclick="fecharRelatorioAud()" style="background:var(--surface-3);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 16px;cursor:pointer;font-family:var(--font)">← fechar</button>
+      <button onclick="imprimirRelatorioAud()" style="background:#6C8FB5;color:#fff;border:0;border-radius:8px;padding:10px 18px;cursor:pointer;font-family:var(--font);font-weight:600">🖨️ Imprimir / Salvar PDF</button>
+    </div>
+    <div class="papel papel-auto" id="audRelPapel">
+      <div class="rel-eyebrow">Formes Engenharia · ${CFG.nome}</div>
+      <h1>${relNomeAba(i)}</h1>
+      <div class="rel-meta">emitido em ${hoje}${ate?' · <strong>dados até '+ate+'</strong>':''}</div>
+      <div class="rel-corpo"></div>
+      <div class="rel-rodape">Gerado pelo painel gerencial de ${CFG.nome} em ${hoje}${ate?', com dados até '+ate:''}. ${versao}<br>
+      Responsável: ______________________________  Data: ____/____/______  ·  Conferido por: ______________________________  Data: ____/____/______</div>
+    </div>`;
+  ov.querySelector('.rel-corpo').appendChild(corpo);
+  document.body.style.overflow='hidden';
+};
+// A aba Relatório já é papel: imprime direto, sem clonar
+function imprimirRelatorioTab13(){
+  document.body.classList.remove('print-aud');
+  const limpar = ()=>window.removeEventListener('afterprint', limpar);
+  window.addEventListener('afterprint', limpar);
+  setTimeout(()=>window.print(), 40);
+}
+// Botão flutuante presente em TODAS as abas
+function relBotaoFlutuante(){
+  if (document.getElementById('relFab')) return;
+  const b = document.createElement('button');
+  b.id = 'relFab'; b.className = 'no-print';
+  b.innerHTML = '📄 <span class="relFabTxt">Relatório PDF</span>';
+  b.title = 'Gerar relatório desta aba em PDF';
+  b.onclick = () => gerarRelatorioPainel();
+  document.body.appendChild(b);
+}
 
 // ═══ Rendimentos de aplicação: bruto, tributos e líquido ═══
 // O rendimento entra pelas receitas, mas o IRRF e o IOF sobre a aplicação saem como
