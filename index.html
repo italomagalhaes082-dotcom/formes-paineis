@@ -1188,7 +1188,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v31.07.26-c · dominância do aterro</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v01.08.26-a · rendimentos líquidos</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -1228,7 +1228,7 @@ function renderDashboard() {
       ${kpi("Exposição Máxima",fmt(maxExp),"em "+maxExpData,"#8E7FA8",undefined,"O maior volume de capital dos sócios simultaneamente dentro do projeto, e a data em que isso ocorreu. É o pico de risco do empreendimento.")}
       ${kpi("Payback",paybackData?paybackData:"Não atingido",paybackData?"Capital 100% devolvido":pct.toFixed(1)+"% do capital devolvido",paybackData?"#6D9E7F":"#C4A55C",undefined,"Data em que as retiradas acumuladas igualam os aportes acumulados — o momento em que os sócios recuperam todo o capital investido.")}
       ${kpi("Burn Rate Médio",fmt(burn)+"/mês","Média de despesas · últimos "+_burnBase.length+" meses fechados","#BF6B60",undefined,"Velocidade média de gasto do empreendimento, considerando apenas meses fechados (o mês corrente, parcial, fica de fora para não distorcer).")}
-      ${_RENDIMENTOS.length?kpi("Rendimentos de Aplicações",fmt(_RENDIMENTOS.reduce((s,r)=>s+r.valor,0)),"Recupera "+(custoCDI_total>0?(_RENDIMENTOS.reduce((s,r)=>s+r.valor,0)/custoCDI_total*100).toFixed(1):"—")+"% do Custo CDI","#6D9E7F",undefined,"Rendimentos das aplicações financeiras do caixa da SPE (lançamentos puros). Compare com o Custo CDI acumulado: é a parte do custo de oportunidade que a gestão de caixa está devolvendo. Detalhes na aba "+(CFG.socLabel||"Sociedade")+"."):""}
+      ${_RENDIMENTOS.length?(function(){const A=rendApuracao();return kpi("Rendimentos de Aplicações (líquido)",fmt(A.liquido),"bruto "+fmt(A.bruto)+" − IR e IOF "+fmt(A.tributos)+" · recupera "+(custoCDI_total>0?(A.liquido/custoCDI_total*100).toFixed(1):"—")+"% do Custo CDI","#6D9E7F",undefined,"Rendimento das aplicações do caixa da SPE JÁ DESCONTADOS o IRRF e o IOF pagos sobre cada resgate — que saem como despesa na categoria Impostos/Tributos. A carga tributária sobre o rendimento bruto é de "+A.carga.toFixed(1)+"%. Detalhes na aba "+(CFG.socLabel||"Sociedade")+".");})():""}
     </div>
     ${(totalRet+_RETIRADAS.filter(r=>r.cat==="Devolução de AFAC").reduce((s,r)=>s+r.valor,0)) > totalAp*3 && totalAp < 100000 ? `
     <div class="info-box" style="border:1px solid #BF6B6066;background:#BF6B600d;margin-top:16px">
@@ -3057,6 +3057,26 @@ window.gerarRelatorioTerra = function(){
   document.body.style.overflow='hidden';
 };
 
+// ═══ Rendimentos de aplicação: bruto, tributos e líquido ═══
+// O rendimento entra pelas receitas, mas o IRRF e o IOF sobre a aplicação saem como
+// despesa na categoria Impostos/Tributos. Olhar só a entrada superestima o ganho.
+const RE_IR_APLIC  = /IRRF\s*S\/?\s*APLICA|\bIR\b\s*S\/?\s*APLICA|IMPOSTO DE RENDA S\/?\s*APLICA/;
+const RE_IOF_APLIC = /\bIOF\b/;
+function rendApuracao(despesas, rendimentos){
+  const D = despesas || _DESPESAS || [];
+  const R = rendimentos || (typeof _RENDIMENTOS!=='undefined' ? _RENDIMENTOS : []) || [];
+  const nd = r => _audNorm(r.descOriginal||r.descricao||'');
+  const irL  = D.filter(r=>RE_IR_APLIC.test(nd(r)));
+  const iofL = D.filter(r=>RE_IOF_APLIC.test(nd(r)) && !RE_IR_APLIC.test(nd(r)));
+  const bruto = R.reduce((s,r)=>s+(r.valor||r.valReceb||0),0);
+  const ir  = irL.reduce((s,r)=>s+r.valor,0);
+  const iof = iofL.reduce((s,r)=>s+r.valor,0);
+  return { bruto, ir, iof, tributos: ir+iof, liquido: bruto-ir-iof,
+           nRend: R.length, nIR: irL.length, nIOF: iofL.length,
+           carga: bruto>0 ? (ir+iof)/bruto*100 : 0,
+           listaIR: irL, listaIOF: iofL, listaRend: R };
+}
+
 function renderTerraplanagem(){
   const el = document.getElementById('tab17');
   if (!el) return;
@@ -3967,6 +3987,8 @@ async function renderConsolidado(force) {
       try { if (ap.length) { const rows = calcCDI(ap, ret); cdi = rows[rows.length-1]?.custoCDI_acum || 0; } } catch(e) {}
       // Volume de compras: despesas completas da obra (fluxos de sócio já fora)
       const desp = parseDespesasRows(rowsD);
+      // tributos sobre a aplicação (IRRF e IOF) pagos por esta SPE
+      const rendTrib = rendApuracao(desp, outRec.rendimentos).tributos;
       const porMes = {}, porAno = {}, porForn = {}, porCat = {};
       desp.forEach(r => {
         const d = parseDate(r.data); if (!d) return;
@@ -3986,7 +4008,7 @@ async function renderConsolidado(force) {
         F.meses[ym] = (F.meses[ym]||0) + r.valor;
         if ((new Date()-d) < 366*86400000) F.u12 += r.valor;
       });
-      return { key:k, nome:c.nome, cor:c.cor, tAp, tRet, exposto:tAp-tRet, nAp:ap.length, nRet:ret.length, cdi, rend, porMes, porAno, porForn, porCat, tDesp: desp.reduce((s,r)=>s+r.valor,0) };
+      return { key:k, nome:c.nome, cor:c.cor, tAp, tRet, exposto:tAp-tRet, nAp:ap.length, nRet:ret.length, cdi, rend, rendTrib, porMes, porAno, porForn, porCat, tDesp: desp.reduce((s,r)=>s+r.valor,0) };
     }));
     window._consolData = results;
     paintConsolidado(results);
@@ -4020,7 +4042,14 @@ function paintConsolidado(R) {
       ${kpiC("Custo CDI Consolidado",fmt(sCdi),"Custo de oportunidade do grupo","#BF6B60","Soma do custo de oportunidade (CDI líquido, juros compostos) dos três empreendimentos.")}
     </div>
     <div class="kpi-grid" style="margin-top:12px;grid-template-columns:1fr">
-      ${kpiC("💹 Rendimentos de Aplicações (3 SPEs)",fmt(R.reduce((s,r)=>s+(r.rend||0),0)),"Recupera "+(sCdi>0?(R.reduce((s,r)=>s+(r.rend||0),0)/sCdi*100).toFixed(1):"—")+"% do custo CDI do grupo","#6D9E7F","Soma dos rendimentos de aplicações financeiras lançados nas receitas das três SPEs. Comparado ao Custo CDI: mostra quanto do custo de oportunidade do capital exposto está sendo recuperado com a gestão de caixa.")}
+      ${(function(){
+        const b=R.reduce((s,r)=>s+(r.rend||0),0);
+        const t=R.reduce((s,r)=>s+(r.rendTrib||0),0);
+        const liq=b-t;
+        return kpiC("💹 Rendimentos de Aplicações (3 SPEs) — líquido",fmt(liq),
+          "bruto "+fmt(b)+" − IR e IOF "+fmt(t)+" · recupera "+(sCdi>0?(liq/sCdi*100).toFixed(1):"—")+"% do custo CDI do grupo","#6D9E7F",
+          "Rendimento das aplicações das três SPEs já descontados o IRRF e o IOF pagos sobre cada resgate. A carga tributária do grupo é de "+(b>0?(t/b*100).toFixed(1):"0")+"% sobre o rendimento bruto.");
+      })()}
     </div>
 
     <div id="volCompras"></div>
@@ -5195,13 +5224,47 @@ function renderSociedade() {
 
   // ── RENDIMENTOS DE APLICAÇÕES (todas as obras) ──
   if (_RENDIMENTOS.length) {
-    const tot=_RENDIMENTOS.reduce((s,r)=>s+r.valor,0);
+    const A = rendApuracao();
     const u12=_RENDIMENTOS.filter(r=>{const d=parseDate(r.data);return d&&(new Date()-d)<366*86400000;}).reduce((s,r)=>s+r.valor,0);
-    html += `<div class="section-title" style="margin-top:22px">💹 Rendimentos de Aplicações</div>
-      <div class="kpi-grid" style="grid-template-columns:repeat(2,1fr)">
-        <div class="kpi" style="border-top:2px solid #6D9E7F"><div class="kpi-label">Total acumulado${hintIcon('Soma da categoria Rendimentos de Aplicações nas receitas — lançamentos puros de rendimento. É a recuperação parcial do custo de oportunidade (Custo CDI) que o painel calcula na aba Geral.')}</div><div class="kpi-value" style="color:#6D9E7F">${fmt(tot)}</div><div class="kpi-sub">${_RENDIMENTOS.length} lançamentos</div></div>
-        <div class="kpi" style="border-top:2px solid #6C8FB5"><div class="kpi-label">Últimos 12 meses</div><div class="kpi-value" style="color:#6C8FB5">${fmt(u12)}</div></div>
-      </div>`;
+    // série anual: bruto, IR, IOF e líquido
+    const ano={}; const add=(arr,campo)=>arr.forEach(r=>{const d=parseDate(r.data); if(!d)return;
+      const y=d.getFullYear(); (ano[y]=ano[y]||{b:0,ir:0,iof:0})[campo]+= (r.valor||r.valReceb||0);});
+    add(A.listaRend,'b'); add(A.listaIR,'ir'); add(A.listaIOF,'iof');
+    const anos=Object.entries(ano).sort();
+    html += `<div class="section-title" style="margin-top:22px">💹 Rendimentos de Aplicações — resultado líquido${hintIcon('O rendimento entra pelas receitas, mas o IRRF e o IOF sobre cada resgate saem como despesa em Impostos/Tributos. Olhar só a entrada superestima o ganho da gestão de caixa.')}</div>
+      <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+        <div class="kpi" style="border-top:2px solid #6C8FB5;cursor:pointer" onclick="openDrillLista('💹 Rendimentos brutos', (window._rendA||{listaRend:[]}).listaRend.map(function(r){return {data:r.data, valor:(r.valor||r.valReceb||0), categoria:'Rendimento de aplicação', descricao:r.desc||r.descricao||'Rendimento', fornecedor:r.cliente||'—'};}), '#6C8FB5')">
+          <div class="kpi-label">Rendimento bruto <span style="color:#6C8FB5;font-size:10px">↗</span></div>
+          <div class="kpi-value" style="color:#6C8FB5">${fmt(A.bruto)}</div><div class="kpi-sub">${A.nRend} resgates</div></div>
+        <div class="kpi" style="border-top:2px solid #BF6B60;cursor:pointer" onclick="openDrillLista('🧾 IRRF sobre aplicação', (window._rendA||{listaIR:[]}).listaIR, '#BF6B60')">
+          <div class="kpi-label">(−) IRRF <span style="color:#BF6B60;font-size:10px">↗</span></div>
+          <div class="kpi-value" style="color:#BF6B60">${fmt(A.ir)}</div><div class="kpi-sub">${A.nIR} recolhimentos</div></div>
+        <div class="kpi" style="border-top:2px solid #C09257;cursor:pointer" onclick="openDrillLista('🧾 IOF sobre aplicação', (window._rendA||{listaIOF:[]}).listaIOF, '#C09257')">
+          <div class="kpi-label">(−) IOF <span style="color:#C09257;font-size:10px">↗</span></div>
+          <div class="kpi-value" style="color:#C09257">${fmt(A.iof)}</div><div class="kpi-sub">${A.nIOF} recolhimentos</div></div>
+        <div class="kpi" style="border-top:2px solid #6D9E7F">
+          <div class="kpi-label">= Ganho líquido</div>
+          <div class="kpi-value" style="color:#6D9E7F">${fmt(A.liquido)}</div>
+          <div class="kpi-sub">carga de ${A.carga.toFixed(1)}% sobre o bruto</div></div>
+      </div>
+      <div class="table-wrap" style="margin-top:10px"><table>
+        <thead><tr><th>Ano</th><th style="text-align:right">Bruto</th><th style="text-align:right">IRRF</th><th style="text-align:right">IOF</th><th style="text-align:right">Líquido</th><th style="text-align:right">Carga</th></tr></thead>
+        <tbody>${anos.map(([y,g])=>{const liq=g.b-g.ir-g.iof; const c=g.b>0?((g.ir+g.iof)/g.b*100):0;
+          return `<tr><td style="font-family:'DM Mono',monospace;font-size:11px">${y}</td>
+            <td style="text-align:right">${fmt(g.b)}</td>
+            <td style="text-align:right;color:#BF6B60">${g.ir?fmt(g.ir):'—'}</td>
+            <td style="text-align:right;color:#C09257">${g.iof?fmt(g.iof):'—'}</td>
+            <td style="text-align:right;font-weight:700;color:#6D9E7F">${fmt(liq)}</td>
+            <td style="text-align:right;color:var(--muted);font-size:10.5px">${c?c.toFixed(1)+'%':'—'}</td></tr>`;}).join('')}
+          <tr style="border-top:2px solid var(--border)"><td style="font-weight:700">Total</td>
+            <td style="text-align:right;font-weight:700">${fmt(A.bruto)}</td>
+            <td style="text-align:right;font-weight:700;color:#BF6B60">${fmt(A.ir)}</td>
+            <td style="text-align:right;font-weight:700;color:#C09257">${fmt(A.iof)}</td>
+            <td style="text-align:right;font-weight:700;color:#6D9E7F">${fmt(A.liquido)}</td>
+            <td style="text-align:right;font-weight:700">${A.carga.toFixed(1)}%</td></tr>
+        </tbody></table></div>
+      <div class="kpi-sub" style="margin-top:6px">Últimos 12 meses, em rendimento bruto: ${fmt(u12)}. O IRRF e o IOF já estão lançados como despesa em Impostos/Tributos — este quadro apenas os reúne ao rendimento que os originou.</div>`;
+    window._rendA = A;
   }
 
   el.innerHTML = html || '<div class="info-box">Sem regras societárias configuradas para este empreendimento.</div>';

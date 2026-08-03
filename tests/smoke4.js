@@ -47,6 +47,7 @@ dsp7('Corretor','05/01/2025','COMISSAO CASA 1',10000,'Comissão Corretor');
 // ── BOSSA: permuta Harmony (casa 7 quitada, paga ALÉM do devido), devolução AFAC > AFACs
 const recB=[R(32)];
 recB.push(rec('CZ SECURITIZADORA S/A','01/02/2022','AFAC CZ',0,10000,'AFAC - CZ SECURITIZADORA','Lançamento financeiro'));
+recB.push(rec('BANCO','15/01/2025','RENDIMENTO APLICACAO',0,10000,'Rendimentos de Aplicações'));
 recB.push(rec('Cliente X','10/01/2024','1/2 - CASA 07 - BOSSA',150000,150000,'Vendas'));
 recB.push(rec('Cliente X','10/04/2024','2/2 - CASA 07 - BOSSA',150000,150000,'Vendas'));
 recB.push(rec('Cliente X','10/04/2024','INCC CASA 07',0,10000,'INCC / IGPM'));
@@ -60,6 +61,8 @@ dspB.push(dsp('HARMONY EMPREENDIMENTOS IMOBILIARIOS LTDA','05/07/2024','1 PAGTO 
 dspB.push(dsp('CZ SECURITIZADORA S/A','10/03/2025','DEVOLUCAO AFAC CZ',750000,'Devolução de Afac'));
 dspB.push(dsp('Loja','05/02/2025','ACO',60000,'Fornecedor - Aquisição de materiais'));
 dspB.push(dsp('RESTAURANTE BOM PRATO','12/01/2025','ALMOCO EQUIPE',4000,'Alimentação da Obra'));
+dspB.push(dsp('BANCO','20/01/2025','IRRF S/APLICACAO 01-2025',2000,'Impostos/Tributos'));
+dspB.push(dsp('BANCO','20/01/2025','IOF S/APLICACAO 01-2025',500,'Impostos/Tributos'));
 dspB.push(dsp('RESTAURANTE BOM PRATO','12/02/2025','ALMOCO EQUIPE',4000,'Alimentação da Obra'));
 dspB.push(dsp('M C OLIVEIRA','10/05/2024','100 CARRADAS DE ATERROS - BOSSA NOVA',20000,'Limpeza/Terraplanagem'));
 dspB.push(dsp('SAXUM DEMOLICOES','12/05/2024','04 DIARIAS RETRO - BOSSA NOVA',9000,'Limpeza/Terraplanagem'));
@@ -382,6 +385,15 @@ async function testEmp(emp, checks){
       ok(w.tpArrimoCusto()===220000,'Arrimo: custo total R$ 220.000');
       ok(TP.includes('Total estimado do bloco'),'Cabeçalho: total do bloco com arrimo somado');
       ok(TP.includes('Muro de arrimo — estimado'),'Cabeçalho: arrimo como KPI próprio');
+      // rendimentos líquidos de IR e IOF
+      ok(typeof w.rendApuracao==='function','Rendimentos: apuração líquida disponível');
+      const AP=w.rendApuracao();
+      ok(AP.ir>0 && AP.iof>0,'Rendimentos: IRRF e IOF capturados (IR '+Math.round(AP.ir)+' · IOF '+Math.round(AP.iof)+')');
+      ok(Math.round(AP.liquido)===Math.round(AP.bruto-AP.ir-AP.iof),'Rendimentos: líquido = bruto − IR − IOF');
+      w.switchTab(11); await new Promise(r=>setTimeout(r,300));
+      const SOC=t('tab11');
+      ok(/resultado líquido/i.test(SOC),'Rendimentos: seção de resultado líquido na Sociedade');
+      ok(/Ganho líquido/.test(SOC) && /IRRF/.test(SOC) && /IOF/.test(SOC),'Rendimentos: quadro com bruto, IR, IOF e líquido');
       ok(typeof w.tpAterroDomina==='function','Dominância: função disponível');
       const dom=(d)=>w.tpAterroDomina({descricao:d});
       ok(dom('RELATORIO ATERROS, AREIAS, DIARIAS DE RETRO'),'Dominância: 2 materiais contra 1 máquina vira aterro');
