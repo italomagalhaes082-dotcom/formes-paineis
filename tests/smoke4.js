@@ -431,6 +431,18 @@ async function testEmp(emp, checks){
       ok(itxt.length>200,'Impressão isolada: documento tem conteúdo ('+itxt.length+' caracteres)');
       ok(idoc && idoc.querySelectorAll('style').length>0,'Impressão isolada: estilos da página copiados');
       ok(idoc && idoc.body.children.length===1 && idoc.body.firstElementChild.id==='audRelOv','Impressão isolada: nada além do relatório no documento');
+      ok(/Custo CDI|Panorama|Despesas|Receitas|Consolidado/.test(idoc.title),'Nome do PDF: título descritivo do conteúdo ("'+idoc.title+'")');
+      // gráficos não podem transbordar do contêiner de altura fixa
+      w.fecharRelatorioAud();
+      w.switchTab(1); await new Promise(r=>setTimeout(r,600));
+      const ovg=w.document.getElementById('audRelOv'); if(ovg) ovg.remove();
+      w.gerarRelatorioPainel(1); await new Promise(r=>setTimeout(r,900));
+      const pg=w.document.getElementById('audRelPapel');
+      const presos=[...pg.querySelectorAll('[style*="height:280px"]')].filter(n=>!/auto/.test(n.style.height));
+      ok(presos.length===0,'Gráficos: contêiner de altura fixa liberado no papel');
+      const imgs=[...pg.querySelectorAll('img')];
+      ok(imgs.every(im=>im.style.height==='auto'),'Gráficos: imagem com altura proporcional');
+      ok(w._relTitulo && /Custo CDI/.test(w._relTitulo),'Nome do PDF: aba CDI vira "Custo CDI" ("'+w._relTitulo+'")');
       w.fecharRelatorioAud();
       // gráficos em canvas viram imagem no papel
       w.switchTab(1); await new Promise(r=>setTimeout(r,500));

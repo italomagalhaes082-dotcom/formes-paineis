@@ -333,6 +333,13 @@
 #audRelOv .papel-auto .chart .ax{fill:#8b939b}
 #audRelOv .papel-auto .hbar__track{background:#eef2f5}
 #audRelOv .papel-auto .stack{background:#eef2f5}
+/* gráficos no papel: altura livre, sem transbordo e sem partir entre páginas */
+#audRelOv .papel-auto img{max-width:100%;height:auto;display:block}
+#audRelOv .papel-auto .chart-card{page-break-inside:avoid;background:#fff;border:1px solid #e2e8ec;padding:10px}
+#audRelOv .papel-auto .chart-card > div,
+#audRelOv .papel-auto [style*="height:280px"],
+#audRelOv .papel-auto [style*="height: 280px"]{height:auto !important;position:static !important;min-height:0 !important}
+#audRelOv .papel-auto canvas{display:none}
 /* celular: mesma versão, só respira menos */
 @media (max-width:680px){
   #audRelOv{padding:8px}
@@ -1270,7 +1277,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v03.08.26-c · impressão isolada</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v03.08.26-d · gráficos e nome do PDF</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -3027,6 +3034,7 @@ function tpEstimativa(){
 // Relatório em papel A4 da terraplanagem — reaproveita o overlay e o modo de impressão
 // já usados nos relatórios da Auditoria.
 window.gerarRelatorioTerra = function(){
+  window._relTitulo = relTituloDoc(17);
   const D=_DESPESAS||[];
   const terra=D.filter(tpEhTerra), comb=D.filter(r=>TP_COMB.test(_audNorm(r.descOriginal||r.descricao||''))), ped=D.filter(tpEhPedra);
   const tT=terra.reduce((s,r)=>s+r.valor,0), tC=comb.reduce((s,r)=>s+r.valor,0), tP=ped.reduce((s,r)=>s+r.valor,0);
@@ -3197,6 +3205,19 @@ function rendPainelHTML(){
 // tema de papel: as variáveis de cor são redefinidas dentro do container,
 // então todo o conteúdo escuro vira claro sem tocar no painel.
 // ═══════════════════════════════════════════════════════════════════
+// Nome do documento — vira o nome do arquivo PDF no navegador
+const REL_TITULOS = {
+  0:'Panorama Geral', 1:'Custo CDI', 2:'Aportes dos Socios', 3:'Retiradas dos Socios',
+  4:'Fluxo de Caixa e Aplicacoes', 5:'Despesas', 6:'Resultado Final', 7:'Gestao de Vendas',
+  8:'Consolidado das Obras', 9:'Auditoria', 10:'Fornecedores', 11:'Sociedade',
+  12:'Analise Comparativa', 13:'Relatorio Gerencial', 14:'Alimentacao de Obra',
+  15:'Indicadores Financeiros', 16:'Receitas', 17:'Terraplanagem e Arrimo'
+};
+function relTituloDoc(idx){
+  const base = REL_TITULOS[idx] || relNomeAba(idx);
+  const obra = (CFG && CFG.nome) ? CFG.nome.replace(/\s+Resid[êe]ncia$/i,'') : 'Formes';
+  return base + ' - ' + obra;
+}
 function relNomeAba(idx){
   const b = document.querySelectorAll('.tabs .tab')[idx];
   return b ? b.textContent.trim().replace(/^[^\wÀ-ÿ]+/,'').trim() : 'Painel';
@@ -3223,8 +3244,12 @@ function relLimpar(el, origem){
         const src2 = co[i] && co[i].toDataURL ? co[i].toDataURL('image/png') : null;
         if (!src2) { cc[i].remove(); continue; }
         const img = document.createElement('img');
-        img.src = src2; img.style.width='100%'; img.style.maxWidth='760px'; img.style.display='block';
-        cc[i].parentNode.replaceChild(img, cc[i]);
+        img.src = src2; img.style.cssText = 'width:100%;height:auto;max-width:760px;display:block;margin:0 auto';
+        const pai = cc[i].parentNode;
+        // o contêiner do gráfico tem altura fixa (280px) para o canvas. A imagem tem
+        // proporção própria e transbordava, sobrepondo a seção seguinte no PDF.
+        if (pai && pai.style) { pai.style.height='auto'; pai.style.position='static'; }
+        pai.replaceChild(img, cc[i]);
       } catch(e) { try { cc[i].remove(); } catch(_){} }
     }
   }
@@ -3250,6 +3275,7 @@ window.gerarRelatorioPainel = function(idx){
   if (i===14 && typeof aliToggleRel === 'function' && !window._aliRelMode) { aliToggleRel(); return; }
   if (i===13) { imprimirRelatorioTab13(); return; }
 
+  window._relTitulo = relTituloDoc(i);
   const origem = document.getElementById('tab'+i);
   const pronto = el => el && el.textContent.replace(/\s+/g,' ').trim().length > 120
                     && !/carregando|⏳/i.test(el.textContent);
@@ -3294,6 +3320,7 @@ window.gerarRelatorioPainel = function(idx){
 };
 // A aba Relatório já é papel: imprime direto, sem clonar
 function imprimirRelatorioTab13(){
+  window._relTitulo = relTituloDoc(13);
   const papel = document.querySelector('#tab13 .papel');
   if (papel) relImprimirIsolado('<div class="papel papel-auto">'+papel.innerHTML+'</div>');
   else window.print();
@@ -4505,7 +4532,7 @@ function relImprimirIsolado(papelHTML){
   if (!doc) { window.print(); return; }
   doc.open();
   doc.write('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">'
-    + '<title>Relatório — ' + (CFG && CFG.nome ? CFG.nome : 'Formes') + '</title>'
+    + '<title>' + (window._relTitulo || ('Relatorio - ' + (CFG && CFG.nome ? CFG.nome : 'Formes'))) + '</title>'
     + links + '<style>' + estilos + '</style>'
     + '<style>'
     + '@page{size:A4;margin:12mm 11mm}'
@@ -4539,6 +4566,7 @@ window.imprimirRelatorioAud = function(){
 window.gerarRelatorioAud = function(i){
   const data = window._auditData; if(!data || !data.alerts[i]) return;
   const a = data.alerts[i];
+  window._relTitulo = 'Auditoria - ' + String(a.titulo).replace(/[^\wÀ-ÿ \-]/g,'').slice(0,44) + ' - ' + (CFG.nome||'').replace(/\s+Resid[êe]ncia$/i,'');
   const hoje = new Date().toLocaleDateString('pt-BR');
   let ultData=null; (_DESPESAS||[]).forEach(r=>{ const d=parseDate(r.data); if(d&&(!ultData||d>ultData)) ultData=d; });
   // Padrão de todo relatório: maior valor primeiro, para que a correção mais
