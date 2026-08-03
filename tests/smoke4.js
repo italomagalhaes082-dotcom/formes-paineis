@@ -398,7 +398,8 @@ async function testEmp(emp, checks){
       ok(/rend-grid/.test(FLX) && /col-carga/.test(FLX),'Rendimentos: layout responsivo aplicado');
       // relatório universal: funciona em qualquer aba
       ok(typeof w.gerarRelatorioPainel==='function','Relatório universal: gerador disponível');
-      ok(!!w.document.getElementById('relFab'),'Relatório universal: botão presente no painel');
+      ok(!!w.document.getElementById('btnRelPDF'),'Relatório universal: botão no cabeçalho, alinhado');
+    ok(!w.document.getElementById('relFab'),'Relatório universal: sem botão flutuante sobre o conteúdo');
       const abasTeste=[0,5,8,9,11,15,16];
       const falhas=[];
       for (const idx of abasTeste){

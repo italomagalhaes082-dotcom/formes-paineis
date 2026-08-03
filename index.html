@@ -303,11 +303,8 @@
    Layout em INLINE-BLOCK, não em grid: grid não é suportado por vários
    motores de impressão e a página sairia com um cartão por linha.
    ═══════════════════════════════════════════════════════════════════ */
-#relFab{position:fixed;right:16px;bottom:16px;z-index:900;background:#6C8FB5;color:#fff;border:0;
-  border-radius:26px;padding:13px 20px;font-family:var(--font);font-size:14px;font-weight:600;
-  cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.45);display:flex;align-items:center;gap:7px}
-#relFab:active{transform:translateY(1px)}
-@media (max-width:680px){ #relFab{right:12px;bottom:12px;padding:12px 16px;font-size:13px} }
+#btnRelPDF{white-space:nowrap}
+@media (max-width:680px){ #btnRelPDF{font-size:11px;padding:6px 9px} }
 
 #audRelOv .papel-auto{
   --bg:#fff; --card:#fff; --card2:#f8fafb; --surface-3:#eef2f5;
@@ -323,6 +320,9 @@
 #audRelOv .papel-auto h1{font-size:19px;line-height:1.2;margin:0 0 4px;letter-spacing:-.02em;font-weight:700;color:#111}
 #audRelOv .papel-auto .rel-meta{font-size:10px;color:#565e66;padding-bottom:8px;border-bottom:2px solid #111}
 #audRelOv .papel-auto .rel-rodape{margin-top:16px;padding-top:8px;border-top:1px solid #dfe5ea;font-size:8.5px;color:#98a0a8;line-height:1.5}
+/* fecha os floats dos cartões de gráfico: sem isso sobra uma página em branco */
+#audRelOv .papel-auto .rel-corpo::after{content:"";display:block;clear:both;height:0}
+#audRelOv .papel-auto{overflow:hidden}
 
 /* ── títulos de seção: densos e nunca órfãos ── */
 #audRelOv .papel-auto .section-title{font-size:9px;letter-spacing:1.2px;text-transform:uppercase;
@@ -334,7 +334,11 @@
 #audRelOv .papel-auto .kpi-grid > *{display:inline-block;vertical-align:top;
   width:24.25%;margin:0 1% 6px 0;font-size:12px;box-sizing:border-box}
 #audRelOv .papel-auto .kpi-grid > *:nth-child(4n){margin-right:0}
-#audRelOv .papel-auto .kpi{background:#f8fafb;border:1px solid #e4eaee;border-radius:8px;padding:8px 10px;height:100%}
+#audRelOv .papel-auto .kpi{background:#f8fafb;border:1px solid #e4eaee;border-radius:8px;padding:8px 10px;
+  height:100%;overflow:hidden;overflow-wrap:anywhere}
+#audRelOv .papel-auto .kpi-value{overflow-wrap:anywhere}
+/* valor grande em coluna estreita quebrava por cima do cartão vizinho */
+#audRelOv .papel-auto .kpi-grid > *{overflow:hidden}
 #audRelOv .papel-auto .kpi-label{font-size:7.5px;letter-spacing:.7px;color:#6b737b;margin-bottom:3px;line-height:1.25}
 #audRelOv .papel-auto .kpi-value{font-size:15px;font-weight:700;line-height:1.1;margin-bottom:2px;letter-spacing:-.02em}
 #audRelOv .papel-auto .kpi-sub{font-size:8px;color:#6b737b;line-height:1.3}
@@ -362,7 +366,8 @@
 #audRelOv .papel-auto tr{page-break-inside:avoid}
 #audRelOv .papel-auto th{color:#6b737b;border-bottom:1.5px solid #111;background:transparent;
   font-size:7.5px;letter-spacing:.6px;padding:5px 5px;position:static !important}
-#audRelOv .papel-auto td{color:#111;border-bottom:1px solid #eef1f4;padding:4.5px 5px;font-size:9.5px}
+#audRelOv .papel-auto td{color:#111;border-bottom:1px solid #eef1f4;padding:4.5px 5px;font-size:9.5px;
+  overflow-wrap:break-word;word-break:normal}
 #audRelOv .papel-auto tbody tr:nth-child(even){background:#fbfcfd}
 
 /* ── caixas de texto ── */
@@ -379,14 +384,17 @@
   height:auto !important;position:static !important;min-height:0 !important}
 #audRelOv .papel-auto svg.chart{max-height:180px;width:100%;height:auto}
 /* cartões de gráfico lado a lado: um por linha desperdiça metade da página */
-/* float, não inline-block: o espaço em branco entre os cartões no HTML somaria
-   alguns pixels e jogaria o segundo cartão para a linha de baixo. Com float a
-   conta fecha exata: 48% + 2% de margem, dois por linha. */
-#audRelOv .papel-auto .fx-card{float:left;width:48%;
-  margin:0 2% 8px 0 !important;padding:9px 11px !important;box-sizing:border-box;
-  border-radius:8px !important;border-color:#e4eaee !important}
+/* Sem float: float vazava para o conteúdo seguinte e espremia a página inteira em
+   meia largura. O posicionamento lado a lado é feito no clone, e só quando há dois
+   cartões irmãos — cartão sozinho ocupa a largura inteira. */
+#audRelOv .papel-auto .fx-card{padding:9px 11px !important;margin-bottom:8px !important;
+  box-sizing:border-box;border-radius:8px !important;border-color:#e4eaee !important}
+/* Tudo que não é cartão de gráfico limpa o float. Sem isso o conteúdo seguinte
+   escoa ao lado do cartão e a página inteira fica espremida em meia largura. */
+#audRelOv .papel-auto .rel-corpo > * > *:not(.fx-card){clear:both}
 #audRelOv .papel-auto .section-title,#audRelOv .papel-auto .rel-rodape,
-#audRelOv .papel-auto .info-box{clear:both}
+#audRelOv .papel-auto .info-box,#audRelOv .papel-auto .table-wrap,
+#audRelOv .papel-auto .kpi-grid,#audRelOv .papel-auto table{clear:both}
 #audRelOv .papel-auto .fx-card__t{font-size:11px !important;margin-bottom:5px !important}
 #audRelOv .papel-auto .legend{font-size:8px;gap:8px;margin-bottom:4px}
 /* barras horizontais: o painel usa grid, que nem todo motor de impressão entende */
@@ -439,7 +447,7 @@
   #audRelOv .papel-auto .section-title{page-break-after:avoid}
   #audRelOv .papel-auto h1,#audRelOv .papel-auto h2{page-break-after:avoid}
   #audRelOv .papel-auto svg.chart{max-height:150px}
-  #audRelOv .papel-auto .fx-card{width:48% !important;margin:0 2% 7px 0 !important}
+
 }
 
 /* ═══ Relatório de correção da Auditoria — documento de trabalho ═══ */
@@ -637,7 +645,10 @@
         <div class="header-title" id="dash-title">—</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-        <button class="refresh-btn" onclick="loadData(true)">↻ Atualizar</button>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="refresh-btn" id="btnRelPDF" onclick="gerarRelatorioPainel()" title="Gerar relatório desta aba em PDF">📄 Relatório</button>
+          <button class="refresh-btn" onclick="loadData(true)">↻ Atualizar</button>
+        </div>
         <div class="header-meta" id="headerMeta"></div>
         <div class="device-note" id="deviceNote"><span id="deviceLabel"></span>
           <button type="button" id="trocarVersao">trocar versão</button></div>
@@ -1358,7 +1369,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v03.08.26-n · relatórios reformatados</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v03.08.26-s · botão no cabeçalho</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -3392,6 +3403,12 @@ function relCamposEmTexto(clone, origem){
     const pai = ci[i].parentNode;
     pai.replaceChild(span, ci[i]);
     // o rótulo é o irmão anterior e é um bloco: passa a inline para caber na mesma linha
+    // Só compacta quando o pai é DE FATO um campo de parâmetro — um invólucro com
+    // rótulo e campo, nada mais. Sem essa guarda, um campo de busca dentro de uma
+    // seção grande faria a seção inteira virar uma coluna de 32% da página.
+    const ehCampoParametro = pai && pai.children.length <= 2
+      && span.previousElementSibling && span.previousElementSibling.children.length === 0;
+    if (!ehCampoParametro) continue;
     const rot = span.previousElementSibling;
     if (rot && rot.style) { rot.style.display='inline-block'; rot.style.marginRight='6px'; rot.style.marginBottom='0'; }
     if (pai && pai.style) { pai.style.display='inline-block'; pai.style.width='32%'; pai.style.verticalAlign='top'; pai.style.marginBottom='4px'; }
@@ -3418,13 +3435,33 @@ function relLimpar(el, origem){
   }
   relCamposEmTexto(el, origem);
   relGridsEmColunas(el);
+  relCartoesEmColunas(el);
   return relTemaClaro(relLimparBase(el));
+}
+// Cartões de gráfico lado a lado, de forma determinística: só quando dois deles
+// dividem o mesmo pai. Sozinho, o cartão fica com a largura inteira — melhor que
+// deixar meia página vazia ao lado.
+function relCartoesEmColunas(el){
+  const pais = new Set([...el.querySelectorAll('.fx-card')].map(c=>c.parentElement).filter(Boolean));
+  pais.forEach(p=>{
+    const cards = [...p.children].filter(c=>c.classList && c.classList.contains('fx-card'));
+    if (cards.length < 2) return;
+    // font-size:0 no pai elimina o espaço em branco entre os inline-block do HTML
+    p.style.fontSize = '0';
+    [...p.children].forEach(c=>{ if (c.style && !c.style.fontSize) c.style.fontSize = '12px'; });
+    cards.forEach((c,i)=>{
+      c.style.display='inline-block'; c.style.verticalAlign='top';
+      c.style.width='49%'; c.style.marginRight = (i%2===0 ? '1.6%' : '0');
+      c.style.boxSizing='border-box'; c.style.fontSize='12px';
+    });
+  });
+  return el;
 }
 // Vários blocos declaram a grade em estilo inline (display:grid). Motores de
 // impressão sem suporte a grid empilham tudo em coluna única e a página fica vazia
 // pela metade. Aqui a grade vira colunas de largura fixa, que qualquer motor entende.
 function relGridsEmColunas(el){
-  const alvos = [...el.querySelectorAll('[style*="display:grid"],[style*="display: grid"]')];
+  const alvos = [...el.querySelectorAll('[style*="display:grid"],[style*="display: grid"],[style*="grid-template-columns"]')];
   alvos.forEach(g=>{
     const st = g.getAttribute('style') || '';
     let n = 0;
@@ -3442,7 +3479,8 @@ function relGridsEmColunas(el){
     [...g.children].forEach((c,i)=>{
       const cs = c.getAttribute('style') || '';
       c.setAttribute('style', cs + ';display:inline-block;vertical-align:top;box-sizing:border-box;font-size:12px;width:'
-        + larg.toFixed(2) + '%;margin-right:' + ((i+1)%n===0 ? '0' : '1%') + ';margin-bottom:6px');
+        + larg.toFixed(2) + '%;margin-right:' + ((i+1)%n===0 ? '0' : '1%') + ';margin-bottom:6px'
+        + ';overflow:hidden;overflow-wrap:anywhere');
     });
   });
   return el;
@@ -3528,15 +3566,11 @@ function imprimirRelatorioTab13(){
   if (papel) relImprimirIsolado('<div class="papel papel-auto">'+papel.innerHTML+'</div>');
   else window.print();
 }
-// Botão flutuante presente em TODAS as abas
+// O botão de relatório vive no cabeçalho, ao lado do Atualizar. Antes era flutuante
+// sobre o conteúdo e, no celular, cobria informação e quebrava o alinhamento da tela.
 function relBotaoFlutuante(){
-  if (document.getElementById('relFab')) return;
-  const b = document.createElement('button');
-  b.id = 'relFab'; b.className = 'no-print';
-  b.innerHTML = '📄 <span class="relFabTxt">Relatório PDF</span>';
-  b.title = 'Gerar relatório desta aba em PDF';
-  b.onclick = () => gerarRelatorioPainel();
-  document.body.appendChild(b);
+  const fab = document.getElementById('relFab');
+  if (fab) fab.remove();
 }
 
 // ═══ Rendimentos de aplicação: bruto, tributos e líquido ═══
@@ -4748,6 +4782,14 @@ function relImprimirIsolado(papelHTML){
     + '*{-webkit-print-color-adjust:exact;print-color-adjust:exact}'
     + '</style></head><body class="print-aud"><div id="audRelOv">' + papelHTML + '</div></body></html>');
   doc.close();
+  // O navegador usa o título do documento como nome do arquivo. Em alguns celulares
+  // a impressão do iframe cai para a janela principal — então o título dela também
+  // é ajustado, e restaurado depois.
+  const tituloOriginal = document.title;
+  const nome = window._relTitulo || ('Relatorio - ' + (CFG && CFG.nome ? CFG.nome : 'Formes'));
+  document.title = nome;
+  const restaurar = () => { document.title = tituloOriginal; window.removeEventListener('afterprint', restaurar); };
+  window.addEventListener('afterprint', restaurar);
   const disparar = () => {
     try { ifr.contentWindow.focus(); ifr.contentWindow.print(); }
     catch(e) { window.print(); }
