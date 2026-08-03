@@ -432,6 +432,8 @@
     border-radius:0 !important; overflow:visible !important; box-shadow:none !important; }
 
   /* ── Relatórios das abas (Relatório e Alimentação) ── */
+  /* fallback para as abas que são o próprio relatório (13 e 14). Só se aplica quando
+     não há overlay aberto — do contrário esconderia o overlay e imprimiria em branco. */
   body:not(.print-aud) * { visibility: hidden !important; }
   body:not(.print-aud) #tab13, body:not(.print-aud) #tab13 *,
   body:not(.print-aud) #tab14, body:not(.print-aud) #tab14 * { visibility: visible !important; }
@@ -1268,7 +1270,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v03.08.26-a · rendimentos no Fluxo</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v03.08.26-b · pdf em branco corrigido</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -3211,7 +3213,24 @@ function relDadosAte(){
   return u ? u.toLocaleDateString('pt-BR') : null;
 }
 // Limpa o clone: tira controle interativo, solta tabelas presas e prepara para papel
-function relLimpar(el){
+function relLimpar(el, origem){
+  // Canvas clonado nasce em branco: o bitmap não é copiado. Troca cada um por uma
+  // imagem tirada do canvas original, para os gráficos aparecerem no PDF.
+  if (origem) {
+    const co = origem.querySelectorAll('canvas'), cc = el.querySelectorAll('canvas');
+    for (let i=0;i<cc.length;i++){
+      try {
+        const src2 = co[i] && co[i].toDataURL ? co[i].toDataURL('image/png') : null;
+        if (!src2) { cc[i].remove(); continue; }
+        const img = document.createElement('img');
+        img.src = src2; img.style.width='100%'; img.style.maxWidth='760px'; img.style.display='block';
+        cc[i].parentNode.replaceChild(img, cc[i]);
+      } catch(e) { try { cc[i].remove(); } catch(_){} }
+    }
+  }
+  return relLimparBase(el);
+}
+function relLimparBase(el){
   el.querySelectorAll('.no-print, button, input, select, textarea, [data-fxgraf] .legend + div:empty').forEach(n=>n.remove());
   el.querySelectorAll('[onclick]').forEach(n=>n.removeAttribute('onclick'));
   el.querySelectorAll('[title]').forEach(n=>n.removeAttribute('title'));
@@ -3248,7 +3267,7 @@ window.gerarRelatorioPainel = function(idx){
     setTimeout(esperar, 400);
     return;
   }
-  const corpo = relLimpar(origem.cloneNode(true));
+  const corpo = relLimpar(origem.cloneNode(true), origem);
   const hoje = new Date().toLocaleDateString('pt-BR');
   const ate = relDadosAte();
   const versao = ((document.body.innerText||document.body.textContent||'').match(/painel v[\d.]+[\w-]*/)||[''])[0];
@@ -3256,6 +3275,7 @@ window.gerarRelatorioPainel = function(idx){
   let ov = document.getElementById('audRelOv');
   if (!ov) { ov = document.createElement('div'); ov.id='audRelOv'; document.body.appendChild(ov); }
   ov.style.cssText = 'position:fixed;inset:0;background:#000c;z-index:1000;overflow:auto;padding:16px';
+  document.body.classList.add('print-aud');   // alvo de impressão enquanto o overlay existir
   ov.innerHTML = `
     <div class="no-print" style="max-width:920px;margin:0 auto 12px;display:flex;justify-content:space-between;gap:8px">
       <button onclick="fecharRelatorioAud()" style="background:var(--surface-3);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 16px;cursor:pointer;font-family:var(--font)">← fechar</button>
@@ -4462,11 +4482,13 @@ window.fecharRelatorioAud = function(){
 };
 // print-aud faz o overlay sair do modo fixed na impressão — sem isso o navegador
 // repete o mesmo quadro em todas as páginas e a lista nunca sai.
+// A classe print-aud vive junto com o overlay, nunca em timer. Antes ela era removida
+// 1,5 s depois de window.print(): no celular a pré-visualização ainda estava sendo
+// montada quando a classe caía, e a regra de fallback (que esconde tudo fora das abas
+// de relatório) tornava a página inteira invisível — PDF em branco.
 window.imprimirRelatorioAud = function(){
   document.body.classList.add('print-aud');
-  const limpar = ()=>{ document.body.classList.remove('print-aud'); window.removeEventListener('afterprint', limpar); };
-  window.addEventListener('afterprint', limpar);
-  setTimeout(()=>{ window.print(); setTimeout(limpar, 1500); }, 40);
+  setTimeout(()=>window.print(), 60);
 };
 window.gerarRelatorioAud = function(i){
   const data = window._auditData; if(!data || !data.alerts[i]) return;
@@ -4516,6 +4538,7 @@ window.gerarRelatorioAud = function(i){
   let ov = document.getElementById('audRelOv');
   if (!ov) { ov = document.createElement('div'); ov.id='audRelOv'; document.body.appendChild(ov); }
   ov.style.cssText = 'position:fixed;inset:0;background:#000c;z-index:1000;overflow:auto;padding:16px';
+  document.body.classList.add('print-aud');   // alvo de impressão enquanto o overlay existir
   ov.innerHTML = `
     <div class="no-print" style="max-width:920px;margin:0 auto 12px;display:flex;justify-content:space-between;gap:8px">
       <button onclick="fecharRelatorioAud()" style="background:var(--surface-3);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 16px;cursor:pointer;font-family:var(--font)">← fechar</button>

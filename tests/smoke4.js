@@ -419,6 +419,20 @@ async function testEmp(emp, checks){
       ok(pap.querySelectorAll('button, input, select').length===0,'Relatório universal: controles interativos removidos');
       ok(/Formes Engenharia/.test(pap.textContent) && /emitido em/.test(pap.textContent),'Relatório universal: cabeçalho de identificação');
       ok(/Responsável:/.test(pap.textContent),'Relatório universal: rodapé de conferência');
+      // impressão: a classe alvo tem de existir enquanto o overlay estiver aberto
+      ok(w.document.body.classList.contains('print-aud'),'Impressão: overlay marca o body como alvo ao abrir');
+      w.fecharRelatorioAud();
+      ok(!w.document.body.classList.contains('print-aud'),'Impressão: fechar o relatório desmarca o body');
+      // e não pode haver timer removendo a classe no meio da pré-visualização
+      const codigo=[...w.document.querySelectorAll('script')].map(x=>x.textContent).join(' ');
+      ok(!/setTimeout\(limpar,\s*1500\)/.test(codigo),'Impressão: sem timer que apaga o alvo durante o preview');
+      // gráficos em canvas viram imagem no papel
+      w.switchTab(1); await new Promise(r=>setTimeout(r,500));
+      const ovc=w.document.getElementById('audRelOv'); if(ovc) ovc.remove();
+      w.gerarRelatorioPainel(1); await new Promise(r=>setTimeout(r,900));
+      const pc=w.document.getElementById('audRelPapel');
+      ok(pc && pc.querySelectorAll('canvas').length===0,'Gráficos: nenhum canvas vazio sobra no papel');
+      w.fecharRelatorioAud();
       const presas=[...pap.querySelectorAll('.table-wrap')].filter(n=>n.style.maxHeight && n.style.maxHeight!=='none');
       ok(presas.length===0,'Relatório universal: tabelas liberadas para impressão completa');
       w.fecharRelatorioAud();
