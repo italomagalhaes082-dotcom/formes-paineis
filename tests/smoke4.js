@@ -382,6 +382,15 @@ async function testEmp(emp, checks){
       ok(w.tpArrimoCusto()===220000,'Arrimo: custo total R$ 220.000');
       ok(TP.includes('Total estimado do bloco'),'Cabeçalho: total do bloco com arrimo somado');
       ok(TP.includes('Muro de arrimo — estimado'),'Cabeçalho: arrimo como KPI próprio');
+      ok(typeof w.tpEhMistoAterro==='function','Mistos: função de reclassificação disponível');
+      const mA={fornecedor:'SAXUM DEMOLICOES', data:'23/10/2024', valor:69450, descricao:'RELATORIO ATERROS, AREIAS, DIARIAS DE RETRO'};
+      ok(w.tpEhMistoAterro(mA) && /Aterro/.test(w.tpNatureza(mA)),'Mistos: Saxum 69.450 vai para aterro');
+      const mB={fornecedor:'EGEN EMPRESA', data:'11/09/2024', valor:62913, descricao:'ALUGUEL DE MAQUINAS TERRAPLANAGEM'};
+      ok(w.tpEhMistoAterro(mB) && /Aterro/.test(w.tpNatureza(mB)),'Mistos: Egen 62.913 vai para aterro');
+      const mC={fornecedor:'EGEN EMPRESA', data:'21/08/2024', valor:30000, descricao:'ADIANTAMENTO ALUGUEL DE MAQUINAS'};
+      ok(w.tpEhMistoAterro(mC) && /Aterro/.test(w.tpNatureza(mC)),'Mistos: Egen 30.000 vai para aterro');
+      const outro={fornecedor:'EGEN EMPRESA', data:'26/09/2024', valor:13564, descricao:'MATERIAL DE DESGASTE PA CARREGADEIRA'};
+      ok(!w.tpEhMistoAterro(outro),'Mistos: só os três fixados são reclassificados');
       ok(Math.round(est.unit)===276,'Arrimo: custo unitário mantido em R$ 276/m³');
       ok(Math.abs(est.unit-276)<1,'Arrimo: custo unitário mantido em R$ 276/m³');
       ok(!w.tpEhTerra({descricao:'11 AREIAS - BOSSA NOVA'}),'Escopo: areia NÃO entra (é material)');
