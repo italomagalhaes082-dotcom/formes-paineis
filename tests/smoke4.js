@@ -402,7 +402,7 @@ async function testEmp(emp, checks){
       for (const idx of abasTeste){
         w.switchTab(idx); await new Promise(r=>setTimeout(r,420));
         const ov0=w.document.getElementById('audRelOv'); if(ov0) ov0.remove();
-        w.gerarRelatorioPainel(idx); await new Promise(r=>setTimeout(r,220));
+        w.gerarRelatorioPainel(idx); await new Promise(r=>setTimeout(r,900));
         const p=w.document.getElementById('audRelPapel');
         const corpo=p && p.querySelector('.rel-corpo');
         if (!p || !corpo || corpo.textContent.trim().length<40) falhas.push(idx);

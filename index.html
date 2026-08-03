@@ -1248,7 +1248,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v01.08.26-b · relatório em todas as abas</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v01.08.26-c · relatório aguarda carga</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -3161,7 +3161,22 @@ window.gerarRelatorioPainel = function(idx){
   if (i===13) { imprimirRelatorioTab13(); return; }
 
   const origem = document.getElementById('tab'+i);
-  if (!origem || !origem.innerHTML.trim()) { alert('Abra a aba e aguarde os dados carregarem antes de gerar o relatório.'); return; }
+  const pronto = el => el && el.textContent.replace(/\s+/g,' ').trim().length > 120
+                    && !/carregando|⏳/i.test(el.textContent);
+  if (!pronto(origem)) {
+    // abas que carregam dados de forma assíncrona (Consolidado, Análise, Alimentação)
+    // podem ainda estar montando: dispara o render e espera antes de clonar
+    try { switchTab(i); } catch(e) {}
+    let tent = 0;
+    const esperar = () => {
+      tent++;
+      if (pronto(origem)) return gerarRelatorioPainel(i);
+      if (tent > 30) { alert('A aba ainda está carregando os dados. Aguarde a tela ficar pronta e gere o relatório de novo.'); return; }
+      setTimeout(esperar, 400);
+    };
+    setTimeout(esperar, 400);
+    return;
+  }
   const corpo = relLimpar(origem.cloneNode(true));
   const hoje = new Date().toLocaleDateString('pt-BR');
   const ate = relDadosAte();
