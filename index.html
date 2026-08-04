@@ -1412,11 +1412,16 @@ function extratoVendasDados(){
     if (!/CONCILIADO/i.test(r.situacao||'') && r.situacao) return;   // só dinheiro confirmado
     const c = extrairCasa(r.desc); if (!c) return;
     const g = zero(c); const v = r.valReceb||0;
-    if (r.tipo === 'VendaDistratada') {
-      const kk = c + '|' + String(r.cliente||'—').trim();
-      const p = (distPorPessoa[kk] = distPorPessoa[kk] || { casa:c, cliente:String(r.cliente||'—').trim(),
-                                                            recebido:0, devolvido:0, primeiro:null, ultimo:null });
+    // TODO crédito da casa é registrado por pessoa, não só o marcado como distrato.
+    // Sinal, reserva, pix, entrada e parcela avulsa entram — é o que permite parear a
+    // devolução com o dinheiro que aquele comprador realmente pôs.
+    {
+      const nome = String(r.cliente||'—').trim();
+      const kk = c + '|' + nome;
+      const p = (distPorPessoa[kk] = distPorPessoa[kk] || { casa:c, cliente:nome, recebido:0, devolvido:0,
+                                                            marcadoDistrato:false, primeiro:null, ultimo:null });
       p.recebido += v;
+      if (r.tipo === 'VendaDistratada' || /DISTRAT/i.test(r.desc||'')) p.marcadoDistrato = true;
       const dd = parseDate(r.dataComp);
       if (dd) { if (!p.primeiro || dd < p.primeiro) p.primeiro = dd; if (!p.ultimo || dd > p.ultimo) p.ultimo = dd; }
     }
@@ -1443,12 +1448,25 @@ function extratoVendasDados(){
     const quem = String(r.fornecedor||'—').trim();
     if (devol[c].quem.length < 3) devol[c].quem.push(quem);
     // casa a devolução no comprador distratado correspondente
+    // Pareamento em três tentativas, da mais forte para a mais frouxa:
+    // nome exato → primeiras palavras do nome → único crédito da casa sem devolução.
     const kk = c + '|' + quem;
-    if (distPorPessoa[kk]) distPorPessoa[kk].devolvido += r.valor;
-    else { const alt = Object.keys(distPorPessoa).find(x=>x.startsWith(c+'|') &&
-             _audNorm(x.split('|')[1]).slice(0,14) === _audNorm(quem).slice(0,14));
-           if (alt) distPorPessoa[alt].devolvido += r.valor;
-           else distPorPessoa[kk] = { casa:c, cliente:quem, recebido:0, devolvido:r.valor, primeiro:null, ultimo:null }; }
+    const marcar = alvo => { alvo.devolvido += r.valor; alvo.marcadoDistrato = true; };
+    if (distPorPessoa[kk]) marcar(distPorPessoa[kk]);
+    else {
+      const nq = _audNorm(quem).split(/\s+/).slice(0,2).join(' ');
+      const alt = Object.keys(distPorPessoa).filter(x=>x.startsWith(c+'|'))
+        .find(x=>{ const n2=_audNorm(x.split('|')[1]).split(/\s+/).slice(0,2).join(' ');
+                   return n2 && nq && (n2===nq || n2.startsWith(nq) || nq.startsWith(n2)); });
+      if (alt) marcar(distPorPessoa[alt]);
+      else {
+        // sem nome compatível: se a casa tem um único crédito ainda sem devolução, é ele
+        const candidatos = Object.keys(distPorPessoa).filter(x=>x.startsWith(c+'|') && distPorPessoa[x].devolvido===0 && distPorPessoa[x].recebido>0);
+        if (candidatos.length === 1) marcar(distPorPessoa[candidatos[0]]);
+        else distPorPessoa[kk] = { casa:c, cliente:quem, recebido:0, devolvido:r.valor,
+                                   marcadoDistrato:true, semCredito:true, primeiro:null, ultimo:null };
+      }
+    }
   });
 
   // ── linha por casa: as 66 ──
@@ -1482,7 +1500,8 @@ function extratoVendasDados(){
     const custoRev = cst ? cst.valor : 0;
     // Cada comprador distratado da casa vira uma OCORRÊNCIA própria. Uma casa com dois
     // distratos aparece com duas linhas, uma sob a outra.
-    const ocor = Object.values(distPorPessoa).filter(p=>p.casa===l.casa)
+    const ocor = Object.values(distPorPessoa)
+                       .filter(p=>p.casa===l.casa && (p.devolvido>0 || p.marcadoDistrato))
                        .sort((a,b)=>(a.primeiro||0)-(b.primeiro||0));
     const somaRec = ocor.reduce((s,o)=>s+o.recebido,0);
     ocor.forEach((o,i)=>{
@@ -1597,7 +1616,7 @@ function renderExtratoVendas(){
           <td class="num" style="color:#C4A55C">${o.recebido?fmt(o.recebido):'—'}</td>
           <td class="num" style="color:#BF6B60">${o.devolvido?'−'+fmt(o.devolvido):'—'}</td>
           <td class="num" style="color:${o.comPerdidas>0.5?'#BF6B60':'var(--text-3)'}">${o.comPerdidas>0.5?'−'+fmt(o.comPerdidas):'—'}</td>
-          <td class="num" style="font-weight:600;color:${o.resultado>=0?'#6D9E7F':'#BF6B60'}">${fmt(o.resultado)}</td>
+          <td class="num" style="font-weight:600;color:${o.resultado>=0?'#6D9E7F':'#BF6B60'}">${fmt(o.resultado)}${o.semCredito?'<div class="kpi-sub" style="color:#BF6B60">crédito não localizado</div>':''}</td>
           ${i===0? `<td rowspan="${n}" class="num" style="vertical-align:top;color:${d.ganhoRevLiq>0?'#6D9E7F':d.ganhoRevLiq<0?'#BF6B60':'var(--text-3)'}">${d.ganhoRevLiq?fmt(d.ganhoRevLiq):'—'}${d.custoRev?'<div class="kpi-sub">bruto '+fmt(d.ganhoRevBruto)+'</div>':''}</td>
           <td rowspan="${n}" class="num" style="vertical-align:top;font-weight:700;color:${d.total>=0?'#6D9E7F':'#BF6B60'}">${fmt(d.total)}</td>` : ''}
         </tr>`).join('');
