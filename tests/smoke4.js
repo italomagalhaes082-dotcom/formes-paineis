@@ -338,6 +338,16 @@ async function testEmp(emp, checks){
     ok(CC.todos.length>0,'Contratos: carteira montada ('+CC.todos.length+')');
     ok(CC.ativos.length + CC.encerrados.length === CC.todos.length,'Contratos: ativos e encerrados somam o total');
     ok(CC.encerrados.every(c=>c.distratado),'Contratos: encerrados são os distratados');
+    // um contrato é uma CASA: não pode haver mais contratos que casas na obra
+    const casasDistintas=new Set(CC.todos.map(u=>u.casa)).size;
+    ok(CC.todos.length===casasDistintas,'Contratos: uma unidade por casa, sem duplicidade ('+CC.todos.length+')');
+    ok(CC.ativos.length <= CC.nCasas,'Contratos: ativos ('+CC.ativos.length+') não excedem as casas da obra ('+CC.nCasas+')');
+    ok(CC.ativos.length + CC.nEstoque === CC.nCasas || CC.nCasas===0,'Contratos: vendidas + estoque = total de casas');
+    // notação CS deve virar casa
+    ok(w.extrairCasa('PERSONALIZAÇÃO CS 05 - JAZZ')===5,'Casa: notação CS reconhecida');
+    ok(w.extrairCasa('CORREÇÃO INCC CS 02 - JAZZ')===2,'Casa: CS em correção de INCC');
+    ok(w.extrairCasa('3/10 - CASA 05 - JAZZ')===5,'Casa: notação CASA continua valendo');
+    ok(w.extrairCasa('SALDO EXCEDENTE FINANCIAMENTO CS 01')===1,'Casa: CS em saldo de financiamento');
     ok(PR.contratado <= PR.contratoTodos,'Projeção: contratado ativo não excede o total de contratos');
     ok(PR.aRealizar === PR.aReceber + PR.estoqueVGV,'Projeção: a realizar = cobrança + estoque');
     ok(typeof PR.nEstoque === 'number','Projeção: estoque de casas sem contrato contabilizado ('+PR.nEstoque+')');

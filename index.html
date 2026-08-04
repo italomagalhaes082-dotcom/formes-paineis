@@ -1129,28 +1129,48 @@ function contratosComerciais(){
   const com = (window._comercial && window._comercial.receitas) ? window._comercial.receitas
             : (typeof _RECEITAS!=='undefined' ? _RECEITAS : []);
   const venda = r => r.grupo === 'venda' || /Venda|INCC/i.test(r.tipo||'');
-  const mapa = {};
+  // Um CONTRATO é uma CASA com um titular. Agrupar por casa e, dentro dela, por
+  // titular — assim personalização, INCC e saldo de financiamento entram no
+  // contrato da casa a que pertencem, em vez de virarem contratos fantasma.
+  const casas = {};
+  const semCasa = [];
   com.filter(venda).forEach(r=>{
-    const casa = r.casa || extrairCasa(r.desc) || '—';
-    const k = casa + '|' + String(r.cliente||'—').trim();
-    const g = (mapa[k] = mapa[k] || { casa, cliente:String(r.cliente||'—').trim(),
-      orig:0, receb:0, parcelas:[], distratado:false, ultima:null });
-    g.orig += (r.valOrig || 0);
-    g.receb += (r.valReceb || 0);
-    if (/DISTRAT/i.test(r.desc||'')) g.distratado = true;
-    const d = parseDate(r.dataComp); if (d && (!g.ultima || d > g.ultima)) g.ultima = d;
-    g.parcelas.push(r);
+    const casa = r.casa || extrairCasa(r.desc);
+    if (!casa) { semCasa.push(r); return; }
+    const cli = String(r.cliente||'—').trim();
+    const c = (casas[casa] = casas[casa] || { casa, titulares:{} });
+    const t = (c.titulares[cli] = c.titulares[cli] || { cliente:cli, orig:0, receb:0, parcelas:[], distratado:false, ultima:null });
+    t.orig += (r.valOrig||0); t.receb += (r.valReceb||0); t.parcelas.push(r);
+    if (/DISTRAT/i.test(r.desc||'')) t.distratado = true;
+    const d = parseDate(r.dataComp); if (d && (!t.ultima || d > t.ultima)) t.ultima = d;
   });
-  const todos = Object.values(mapa).map(c=>Object.assign(c,{ saldo: Math.max(0, c.orig - c.receb) }));
-  const ativos = todos.filter(c=>!c.distratado);
-  const encerrados = todos.filter(c=>c.distratado);
-  // casas com contrato ativo × casas da obra = estoque
-  const casasAtivas = new Set(ativos.map(c=>c.casa).filter(x=>x && x!=='—'));
-  const nCasas = CFG.nCasas || 0;
-  const ticketMedio = ativos.length ? ativos.reduce((s,c)=>s+c.orig,0)/ativos.length : 0;
+  const unidades = Object.values(casas).map(c=>{
+    const tits = Object.values(c.titulares);
+    const ativosT = tits.filter(t=>!t.distratado);
+    // titular vigente: entre os não distratados, o de maior valor contratado.
+    // Os demais costumam ser acessórios (sinal de terceiro, ajuste) e são somados a ele.
+    ativosT.sort((a,b)=>b.orig-a.orig);
+    const vigente = ativosT[0] || null;
+    const orig  = ativosT.reduce((s,t)=>s+t.orig,0);
+    const receb = ativosT.reduce((s,t)=>s+t.receb,0);
+    const parcelas = ativosT.flatMap(t=>t.parcelas);
+    return { casa:c.casa, cliente: vigente ? vigente.cliente : '—',
+             titulares: tits, nTitulares: tits.length,
+             distratosNaCasa: tits.filter(t=>t.distratado).length,
+             vendida: !!vigente, orig, receb, saldo: Math.max(0, orig-receb),
+             parcelas, distratado: !vigente,
+             ultima: vigente ? vigente.ultima : null };
+  }).sort((a,b)=>a.casa-b.casa);
+
+  const ativos     = unidades.filter(u=>u.vendida);
+  const encerrados = unidades.filter(u=>!u.vendida);
+  const casasAtivas = new Set(ativos.map(u=>u.casa));
+  const nCasas = CFG.nCasas || unidades.length;
+  const ticketMedio = ativos.length ? ativos.reduce((s,u)=>s+u.orig,0)/ativos.length : 0;
   const nEstoque = Math.max(0, nCasas - casasAtivas.size);
-  return { todos, ativos, encerrados, casasAtivas, nCasas, nEstoque, ticketMedio,
-           estoqueVGV: nEstoque * ticketMedio };
+  return { todos:unidades, ativos, encerrados, casasAtivas, nCasas, nEstoque,
+           ticketMedio, estoqueVGV: nEstoque*ticketMedio,
+           semCasa, semCasaValor: semCasa.reduce((s,r)=>s+(r.valOrig||0),0) };
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1628,7 +1648,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-d · inadimplência e estoque</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-e · contrato por casa</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -7125,6 +7145,11 @@ function extrairCasa(desc) {
   const d = String(desc).toUpperCase();
   // Padrão "CASA XX"
   let m = d.match(/CASA\s+(\d+)/);
+  if (m) return parseInt(m[1]);
+  // Padrão "CS XX" — usado em personalização, correção de INCC e saldo de
+  // financiamento. Sem isso, esses lançamentos ficam sem casa e o painel os
+  // trata como se fossem contratos de venda distintos.
+  m = d.match(/\bCS\s*\.?\s*(\d{1,3})\b/);
   if (m) return parseInt(m[1]);
   // Padrão "DISTRA XX" — "3/13 - DISTRA 13" significa casa 13
   m = d.match(/DISTRA[A-Z]*\s+(\d+)/);
