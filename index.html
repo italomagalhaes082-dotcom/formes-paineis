@@ -1629,6 +1629,10 @@ async function loadData(force) {
     // ═══ EXTRATO GERAL: assume caixa e custo, se a aba existir ═══
     // A base comercial (parcela, casa, cliente, cronograma) continua vindo das abas
     // de receitas — o extrato tem o dinheiro, mas não tem o contrato.
+    // A apuração curada de vendas é autoridade sobre status e preço das unidades —
+    // carrega junto com o resto, para as abas de Receitas e Inadimplência já a terem.
+    if (CFG.abaGestaoVendas) { try { await loadGestaoVendas(); } catch(e) { console.warn('GESTAO VENDAS indisponível', e); } }
+
     window._extrato = null;
     if (CFG.abaExtrato) {
       try {
@@ -1793,7 +1797,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-g · saldo devedor com INCC</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-h · curadoria na carga</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
