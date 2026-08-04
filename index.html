@@ -1249,15 +1249,21 @@ function saldoDevedorCasas(){
     const inccPago = parc.filter(p=>p.tipo==='INCC').reduce((s,p)=>s+(p.valReceb||0),0);
     const pagoPrincipal = principais.reduce((s,p)=>s+p.v,0);
     // simulação mês a mês desde a venda
-    let saldo = valor, corrigido = 0;
+    let saldo = valor, corrigido = 0, pagoAntesDaVenda = 0;
     if (dv && valor > 0) {
       let y = dv.getFullYear(), m = dv.getMonth()+1;
-      // abate o que foi pago no próprio mês da venda
-      const noMes = (yy,mm) => principais.filter(p=>p.d.getFullYear()===yy && p.d.getMonth()+1===mm)
+      const ym = (yy,mm) => yy*100+mm;
+      const noMes = (yy,mm) => principais.filter(p=>ym(p.d.getFullYear(), p.d.getMonth()+1) === ym(yy,mm))
                                           .reduce((s,p)=>s+p.v,0);
+      // Pagamentos ANTERIORES ao mês do contrato — sinal, reserva, entrada — abatem o
+      // saldo desde o início. Sem isso, o saldo cheio corrigia por todo o período e a
+      // correção estourava: era o que fazia a casa 31 acusar R$ 840 mil de INCC.
+      pagoAntesDaVenda = principais.filter(p=>ym(p.d.getFullYear(), p.d.getMonth()+1) < ym(y,m))
+                                   .reduce((s,p)=>s+p.v,0);
+      saldo -= pagoAntesDaVenda;
       saldo -= noMes(y,m);
       let guarda = 0;
-      while ((y < ultimo.ano || (y === ultimo.ano && m < ultimo.mes)) && guarda++ < 300) {
+      while ((y < ultimo.ano || (y === ultimo.ano && m < ultimo.mes)) && guarda++ < 400) {
         m++; if (m > 12) { m = 1; y++; }
         if (saldo > 0) { const j = saldo * inccMes(y,m)/100; corrigido += j; saldo += j; }
         saldo -= noMes(y,m);
@@ -1268,7 +1274,7 @@ function saldoDevedorCasas(){
     const inccDevido = Math.max(0, saldoCorrigido - saldoNominal);
     return { casa:g.casa, cliente: (u && u.cliente) || g.cliente || '—', status:g.status||'',
              dataVenda:g.dataVenda, valor, pagoPrincipal, inccPago,
-             saldoNominal, saldoCorrigido, inccDevido, corrigidoTotal: corrigido,
+             saldoNominal, saldoCorrigido, inccDevido, corrigidoTotal: corrigido, pagoAntesDaVenda,
              pct: valor>0 ? pagoPrincipal/valor*100 : 0,
              meses: dv ? Math.max(0, Math.round((hoje-dv)/2629800000)) : null };
   }).sort((a,b)=>b.saldoCorrigido-a.saldoCorrigido);
@@ -1797,7 +1803,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-h · curadoria na carga</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-i · INCC corrigido</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">

@@ -354,6 +354,13 @@ async function testEmp(emp, checks){
       ok(SD.linhas.every(l=>l.saldoCorrigido>=0),'Saldo devedor: nunca negativo');
       ok(SD.totalCorrigido>=SD.totalNominal-1,'Saldo devedor: corrigido não fica abaixo do nominal');
       ok(SD.linhas.every(l=>l.inccDevido>=0),'Saldo devedor: correção do INCC sempre positiva');
+      // a correção incide sobre o SALDO, nunca sobre o valor cheio: se o pagamento veio
+      // antes da data do contrato, ele tem de abater o saldo inicial
+      const absurdos=SD.linhas.filter(l=>l.inccDevido > l.valor*0.6);
+      ok(absurdos.length===0,'Saldo devedor: correção não estoura o razoável'+(absurdos.length?' — '+absurdos.map(x=>'CS'+x.casa).join(', '):''));
+      const quaseQuitadas=SD.linhas.filter(l=>l.pct>90);
+      ok(quaseQuitadas.every(l=>l.inccDevido < l.valor*0.25),'Saldo devedor: casa quase quitada não acumula correção de saldo cheio');
+      ok(SD.linhas.every(l=>'pagoAntesDaVenda' in l),'Saldo devedor: pagamentos anteriores ao contrato são rastreados');
     } else ok(true,'Saldo devedor: sem apuração curada neste cenário');
     if (CC.curado) {
       ok(CC.nEstoque===CC.curado.nDisponiveis,'Estoque: quantidade vem da apuração curada');
