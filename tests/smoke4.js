@@ -343,6 +343,12 @@ async function testEmp(emp, checks){
     ok(CC.todos.length===casasDistintas,'Contratos: uma unidade por casa, sem duplicidade ('+CC.todos.length+')');
     ok(CC.ativos.length <= CC.nCasas,'Contratos: ativos ('+CC.ativos.length+') não excedem as casas da obra ('+CC.nCasas+')');
     ok(CC.ativos.length + CC.nEstoque === CC.nCasas || CC.nCasas===0,'Contratos: vendidas + estoque = total de casas');
+    ok('curado' in CC,'Estoque: campo de curadoria presente');
+    if (CC.curado) {
+      ok(CC.nEstoque===CC.curado.nDisponiveis,'Estoque: quantidade vem da apuração curada');
+      ok(CC.estoqueVGV===CC.curado.vgvEstoque,'Estoque: VGV soma o valor de venda de cada casa disponível');
+      ok(CC.curado.casasDisponiveis.every(n=>Number.isFinite(n)),'Estoque: lista de casas disponíveis identificada');
+    } else ok(true,'Estoque: sem apuração curada neste cenário, usa inferência');
     // notação CS deve virar casa
     ok(w.extrairCasa('PERSONALIZAÇÃO CS 05 - JAZZ')===5,'Casa: notação CS reconhecida');
     ok(w.extrairCasa('CORREÇÃO INCC CS 02 - JAZZ')===2,'Casa: CS em correção de INCC');

@@ -1162,14 +1162,41 @@ function contratosComerciais(){
              ultima: vigente ? vigente.ultima : null };
   }).sort((a,b)=>a.casa-b.casa);
 
+  // ═══ A apuração curada manda ═══
+  // Quando existe a aba GESTAO VENDAS, ela é a autoridade sobre o que está vendido
+  // e sobre o preço de cada unidade. A base de parcelas não sabe dizer que uma casa
+  // voltou ao estoque quando a revenda ainda não começou a ser lançada.
+  const gv = (typeof _GV !== 'undefined' && _GV && _GV.length) ? _GV : null;
+  let curado = null;
+  if (gv) {
+    const disp = gv.filter(g=>/DISPON/i.test(String(g.status||'')));
+    curado = {
+      status: {}, valor: {},
+      nDisponiveis: disp.length,
+      vgvEstoque: disp.reduce((s,g)=>s+(g.valor||0),0),
+      casasDisponiveis: disp.map(g=>g.casa).sort((a,b)=>a-b),
+      total: gv.length
+    };
+    gv.forEach(g=>{ curado.status[g.casa] = String(g.status||''); curado.valor[g.casa] = g.valor||0; });
+    unidades.forEach(u=>{
+      const st = curado.status[u.casa];
+      if (st !== undefined) {
+        u.statusCurado = st;
+        u.valorVenda = curado.valor[u.casa] || 0;
+        u.vendida = !/DISPON/i.test(st);        // a curadoria decide
+        u.distratado = !u.vendida;
+      }
+    });
+  }
   const ativos     = unidades.filter(u=>u.vendida);
   const encerrados = unidades.filter(u=>!u.vendida);
   const casasAtivas = new Set(ativos.map(u=>u.casa));
-  const nCasas = CFG.nCasas || unidades.length;
+  const nCasas = (curado ? curado.total : 0) || CFG.nCasas || unidades.length;
   const ticketMedio = ativos.length ? ativos.reduce((s,u)=>s+u.orig,0)/ativos.length : 0;
-  const nEstoque = Math.max(0, nCasas - casasAtivas.size);
+  const nEstoque = curado ? curado.nDisponiveis : Math.max(0, nCasas - casasAtivas.size);
+  const estoqueVGV = curado ? curado.vgvEstoque : nEstoque*ticketMedio;
   return { todos:unidades, ativos, encerrados, casasAtivas, nCasas, nEstoque,
-           ticketMedio, estoqueVGV: nEstoque*ticketMedio,
+           ticketMedio, estoqueVGV, curado,
            semCasa, semCasaValor: semCasa.reduce((s,r)=>s+(r.valOrig||0),0) };
 }
 
@@ -1234,7 +1261,7 @@ function renderInadimplencia(){
       ${k('Vencido e não pago', fmt(D.totalVencido), D.vencidas.length+' parcela(s) · '+D.clientes.length+' cliente(s)', D.totalVencido>0?'#BF6B60':'#6D9E7F')}
       ${k('A vencer', fmt(D.totalAVencer), D.aVencer.length+' parcela(s) de contratos ativos', '#6C8FB5')}
       ${k('Contratos ativos', String(D.C.ativos.length), D.C.casasAtivas.size+' casa(s) com contrato vigente', '#6D9E7F')}
-      ${k('Estoque a vender', D.C.nEstoque+' casa(s)', D.C.nEstoque? 'VGV estimado '+fmt(D.C.estoqueVGV)+' · ticket médio '+fmt(D.C.ticketMedio) : 'obra 100% vendida', D.C.nEstoque?'#C09257':'#6D9E7F','Casas do empreendimento sem contrato ativo — inclui as que voltaram ao estoque após distrato. Não são recebível: são venda a realizar.')}
+      ${k('Estoque a vender', D.C.nEstoque+' casa(s)', D.C.nEstoque? fmt(D.C.estoqueVGV)+(D.C.curado? ' · casas '+D.C.curado.casasDisponiveis.join(', ') : ' · ticket '+fmt(D.C.ticketMedio)) : 'obra 100% vendida', D.C.nEstoque?'#C09257':'#6D9E7F','Casas sem contrato vigente. Quando existe a apuração curada de vendas, ela é a autoridade sobre o status e sobre o preço de cada unidade. Não são recebível: são venda a realizar.')}
     </div>
 
     ${D.totalVencido>0 ? `
@@ -1326,6 +1353,7 @@ function projecaoRecebiveis(){
            mesesParaZerar: ritmo>0 ? aReceber/ritmo : null,
            pctRecebido: contratado>0 ? recebidoBase/contratado*100 : 0,
            nEstoque: C.nEstoque, estoqueVGV: C.estoqueVGV, ticketMedio: C.ticketMedio,
+           casasEstoque: C.curado ? C.curado.casasDisponiveis : [], fonteEstoque: C.curado ? 'apuração curada' : 'inferido das parcelas',
            nAtivos: C.ativos.length, nEncerrados: C.encerrados.length,
            aRealizar: aReceber + C.estoqueVGV };
 }
@@ -1648,7 +1676,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-e · contrato por casa</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-f · estoque pela curadoria</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -3216,10 +3244,11 @@ function renderReceitas() {
           <div class="kpi-sub">${P.vencidoAberto>0? fmt(P.vencidoAberto)+' já vencido' : 'nada vencido'}</div></div>
         <div class="kpi" style="border-top:2px solid #8E7FA8"><div class="kpi-label">Estoque a vender</div>
           <div class="kpi-value" style="color:#8E7FA8">${fmt(P.estoqueVGV)}</div>
-          <div class="kpi-sub">${P.nEstoque} casa(s) sem contrato · ticket ${fmt(P.ticketMedio)}</div></div>
+          <div class="kpi-sub">${P.nEstoque} casa(s)${P.casasEstoque && P.casasEstoque.length ? ': '+P.casasEstoque.join(', ') : ' · ticket '+fmt(P.ticketMedio)}</div></div>
       </div>
       <div class="info-box" style="border:1px solid #6C8FB544;margin-top:8px"><span>📊</span><div>
         <strong>Receita ainda a realizar: ${fmt(P.aRealizar)}</strong> — ${fmt(P.aReceber)} de cobrança em contratos vigentes mais ${fmt(P.estoqueVGV)} de estoque a vender.
+        ${P.fonteEstoque? '<br><span style="font-size:11px;color:var(--muted)">Estoque pela '+P.fonteEstoque+(P.casasEstoque&&P.casasEstoque.length? ' — casas '+P.casasEstoque.join(', ')+', pelo valor de venda de cada uma':'')+'.</span>' : ''}
         ${P.saldoEncerrados>1000? '<br><br>Ficam de fora '+fmt(P.saldoEncerrados)+' de saldo em '+P.nEncerrados+' contratos distratados: não são cobráveis de ninguém, e as casas correspondentes já estão contadas no estoque.' : ''}
         ${P.contratoTodos>P.contratado+1000? '<br><br><span style="font-size:11px;color:var(--muted)">Somando todos os contratos que já existiram, inclusive os encerrados, o contratado apareceria como '+fmt(P.contratoTodos)+' — '+fmt(P.contratoTodos-P.contratado)+' a mais. É a mesma casa vendida duas vezes.</span>' : ''}
       </div>
