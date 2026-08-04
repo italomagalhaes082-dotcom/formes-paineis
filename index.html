@@ -710,7 +710,7 @@ const EMPREENDIMENTOS = {
   "liberty": {
     nome: "Liberty Unique", subtitulo: "Painel Gerencial", cor: "#6C8FB5", corSecund: "#6D9E7F",
     sheetId: "1mvNNh2r43GeEmW9h90B_NeyfXWkyoc8k2QHnbVZyUH0",
-    abaDespesas: "DESPESAS TOTAIS", abaReceitas: "RECEITAS TOTAIS", abaVendas: null,
+    abaDespesas: "DESPESAS TOTAIS", abaReceitas: "RECEITAS TOTAIS", abaExtrato: "EXTRATO GERAL", abaVendas: null,
     nCasas: 42, areaCasa: 114, areaTotal: 4788, pctObraDefault: 75, estruturaPrevisaoFim: '2026-08',
     senha: "unique2024", bioKey: "lu_bio", rpId: "liberty-formes.netlify.app",
     socLabel: "🤝 Sociedade",
@@ -737,7 +737,7 @@ const EMPREENDIMENTOS = {
   "jazz": {
     nome: "Jazz Exclusive", subtitulo: "Painel Gerencial", cor: "#C4A55C", corSecund: "#6D9E7F",
     sheetId: "1D660xfizv39rn0pxDJA2Whqeye3bp4hB4vxCAxrXRvw",
-    abaDespesas: "DESPESAS TOTAIS", abaReceitas: "RECEITAS TOTAIS", abaVendas: "VALORES DE VENDA",
+    abaDespesas: "DESPESAS TOTAIS", abaReceitas: "RECEITAS TOTAIS", abaExtrato: "EXTRATO GERAL", abaVendas: "VALORES DE VENDA",
     abaGestaoVendas: "GESTAO VENDAS",
     nCasas: 66, areaCasa: 144, areaTotal: 8958, mixCasas: '45 casas de 144 m² + 21 casas de 118 m²', pctObraDefault: 82, estruturaPrevisaoFim: '2026-08',
     senha: "jazz2024", bioKey: "jazz_bio", rpId: "liberty-formes.netlify.app",
@@ -762,7 +762,7 @@ const EMPREENDIMENTOS = {
   "bossa": {
     nome: "Bossa Nova Residência", subtitulo: "Painel Gerencial", cor: "#8E7FA8", corSecund: "#6C8FB5",
     sheetId: "1B-AG_5lU9JW8TAjybn4OGwK2E3b676xVIE6Yoz9CRjI",
-    abaDespesas: "DESPESAS TOTAIS", abaReceitas: "RECEITAS TOTAIS", abaVendas: null,
+    abaDespesas: "DESPESAS TOTAIS", abaReceitas: "RECEITAS TOTAIS", abaExtrato: "EXTRATO GERAL", abaVendas: null,
     nCasas: 69, areaCasa: 118, areaTotal: 8142, pctObraDefault: 84, estruturaConcluidaEm: '2026-06', obsEstrutura: 'restam muros de divisão (pequenas fundações e pilaretes)',
     senha: "bossa2024", bioKey: "bossa_bio", rpId: "liberty-formes.netlify.app",
     socLabel: "🤝 Permuta",
@@ -1099,6 +1099,74 @@ function cargaGravarBaseline(){
       localStorage.setItem(cargaChave(), JSON.stringify(window._cargaAtual));
   } catch(e) {}
 }
+// Deixa explícito de onde vêm os números — e o que muda quando o extrato entra.
+// ═══ Projeção de recebíveis, refeita sobre o caixa real ═══
+// Antes, "recebido" vinha da base de parcelas e trazia junto a quitação contábil dos
+// distratos — o recebido aparecia maior e, por consequência, o A RECEBER aparecia
+// menor do que realmente é. Com o extrato, o recebido é dinheiro; o contratado e o
+// cronograma continuam vindo da base comercial. A diferença entre os dois é a
+// projeção honesta do que ainda entra.
+function projecaoRecebiveis(){
+  const com = (window._comercial && window._comercial.receitas) ? window._comercial.receitas
+            : (typeof _RECEITAS!=='undefined' ? _RECEITAS : []);
+  const ex  = window._extrato;
+  const soVenda = r => r.grupo === 'venda' || /Venda|INCC/i.test(r.tipo||'');
+  // contratado: tudo que a base comercial registra como devido pelo cliente
+  const contratado = com.filter(soVenda).reduce((s,r)=>s+(r.valOrig||r.valReceb||0),0);
+  // recebido de verdade
+  const recebidoCaixa = ex
+    ? ex.receitas.filter(soVenda).reduce((s,r)=>s+(r.valReceb||0),0)
+    : com.filter(r=>soVenda(r) && !r.baixaSemCaixa).reduce((s,r)=>s+(r.valReceb||0),0);
+  // o que a base comercial dizia ter recebido, para medir a distorção antiga
+  const recebidoBase = com.filter(soVenda).reduce((s,r)=>s+(r.valReceb||0),0);
+  const baixas = com.filter(r=>r.baixaSemCaixa).reduce((s,r)=>s+(r.valReceb||0),0);
+  const aReceber = Math.max(0, contratado - recebidoCaixa);
+  // vencidas e não recebidas
+  const hoje = new Date();
+  const vencidas = com.filter(r=>{
+    if (!soVenda(r)) return false;
+    const dv = parseDate(r.dataVenc); if (!dv || dv > hoje) return false;
+    return (r.valOrig||0) > (r.valReceb||0) + 1;
+  });
+  const vencidoAberto = vencidas.reduce((s,r)=>s+((r.valOrig||0)-(r.valReceb||0)),0);
+  // ritmo dos últimos 6 meses fechados, para estimar o prazo de entrada
+  const porMes = {};
+  (ex? ex.receitas : com).filter(soVenda).forEach(r=>{ const d=parseDate(r.dataComp||r.data); if(!d) return;
+    porMes[d.getFullYear()*100+(d.getMonth()+1)] = (porMes[d.getFullYear()*100+(d.getMonth()+1)]||0) + (r.valReceb||0); });
+  const meses = Object.keys(porMes).map(Number).sort((a,b)=>a-b);
+  const ymH = hoje.getFullYear()*100+(hoje.getMonth()+1);
+  const u6 = meses.filter(m=>m<ymH).slice(-6);
+  const ritmo = u6.length ? u6.reduce((s,m)=>s+porMes[m],0)/u6.length : 0;
+  const mesesParaZerar = ritmo>0 ? aReceber/ritmo : null;
+  return { contratado, recebidoCaixa, recebidoBase, baixas, aReceber, vencidoAberto,
+           nVencidas: vencidas.length, ritmo, mesesParaZerar,
+           pctRecebido: contratado>0 ? recebidoCaixa/contratado*100 : 0,
+           distorcaoAntiga: recebidoBase - recebidoCaixa };
+}
+window.projecaoRecebiveis = projecaoRecebiveis;
+
+function fonteBanner(){
+  const ex = window._extrato;
+  let el = document.getElementById('fonteAviso');
+  if (!el) { el = document.createElement('div'); el.id='fonteAviso';
+    const dash = document.getElementById('dashboard') || document.body;
+    dash.insertBefore(el, dash.firstChild); }
+  if (!ex) {
+    el.style.cssText = 'background:rgba(196,165,92,.10);border:1px solid #C4A55C66;border-radius:12px;padding:11px 14px;margin:0 0 12px';
+    el.innerHTML = '<div style="display:flex;gap:9px;align-items:flex-start"><span style="color:#C4A55C;font-size:15px">ℹ</span><div style="font-size:11.5px;line-height:1.55">'
+      + '<strong>Fonte atual: abas de Receitas e Despesas.</strong> A aba <strong>EXTRATO GERAL</strong> ainda não foi encontrada nesta planilha. '
+      + 'Enquanto ela não existir, o caixa fica superestimado, porque a base de receitas traz a quitação contábil de contratos distratados como se fosse dinheiro recebido.</div></div>';
+    return;
+  }
+  const r = ex.resumo;
+  el.style.cssText = 'background:rgba(109,158,127,.10);border:1px solid #6D9E7F66;border-radius:12px;padding:11px 14px;margin:0 0 12px';
+  el.innerHTML = '<div style="display:flex;gap:9px;align-items:flex-start"><span style="color:#6D9E7F;font-size:15px">✓</span><div style="font-size:11.5px;line-height:1.55">'
+    + '<strong>Caixa e custo vindo do EXTRATO GERAL</strong> — ' + r.linhas.toLocaleString('pt-BR') + ' movimentos conciliados com o banco. '
+    + 'Saldo conciliado <strong>' + fmt(r.conciliado) + '</strong>'
+    + (r.nQuit ? ' · ' + r.nQuit + ' baixado(s) e ainda não conciliado(s): ' + fmt(r.quitado) : '')
+    + (r.nAtr ? ' · <span style="color:#BF6B60">' + r.nAtr + ' em atraso: ' + fmt(r.atrasado) + '</span>' : '')
+    + '.<br>A base de parcelas segue alimentando VGV, Gestão de Vendas e inadimplência.</div></div>';
+}
 function cargaBanner(){
   const avisos = cargaAvaliar();
   let el = document.getElementById('cargaAviso');
@@ -1227,11 +1295,34 @@ async function loadData(force) {
     // RETIRADAS ← despesas com categoria Retirada Sócios / Devolução de AFAC
     _RETIRADAS = _DESP_RETIRADAS;
 
+    // ═══ EXTRATO GERAL: assume caixa e custo, se a aba existir ═══
+    // A base comercial (parcela, casa, cliente, cronograma) continua vindo das abas
+    // de receitas — o extrato tem o dinheiro, mas não tem o contrato.
+    window._extrato = null;
+    if (CFG.abaExtrato) {
+      try {
+        const jx = await fetchSheet(CFG.abaExtrato);
+        const rx = parseSheet(jx);
+        const ex = (rx && rx.length > 1) ? parseExtrato(rx) : null;
+        if (ex && ex.despesas.length + ex.receitas.length > 50) {
+          window._extrato = ex;
+          window._comercial = { receitas: _RECEITAS, aportes: _APORTES };   // preservada
+          _DESPESAS   = ex.despesas;
+          _RECEITAS   = ex.receitas;
+          _APORTES    = ex.aportes.length    ? ex.aportes    : _APORTES;
+          _RETIRADAS  = ex.retiradas.length  ? ex.retiradas  : _RETIRADAS;
+          if (ex.rendimentos.length) _RENDIMENTOS = ex.rendimentos;
+          console.info('EXTRATO GERAL em uso:', ex.resumo);
+        }
+      } catch(e) { console.warn('EXTRATO GERAL indisponível — seguindo com as abas atuais.', e); }
+    }
+
     document.getElementById("loadingMsg").textContent = "Calculando...";
     renderDashboard();
     document.getElementById("loadingScreen").style.display = "none";
     document.getElementById("dashboard").style.display = "block";
     try { cargaBanner(); } catch(e) { console.warn('sentinela:', e); }
+    try { fonteBanner(); } catch(e) {}
     try { relBotaoFlutuante(); } catch(e) {}
     switchTab(0);
 
@@ -1371,7 +1462,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v03.08.26-w · baixa de distrato fora do caixa</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-b · projeção de recebíveis</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -2924,6 +3015,28 @@ function renderReceitas() {
     })()}
 
     ${(function(){
+      let P; try { P = projecaoRecebiveis(); } catch(e) { return ''; }
+      if (!P || !(P.contratado>0)) return '';
+      return `<div class="section-title" style="margin-top:16px">📈 Projeção de recebíveis${hintIcon('Contratado vem da base de parcelas; recebido vem do extrato, que é dinheiro de verdade. A diferença é o que ainda entra. Antes do extrato, a quitação contábil dos distratos inflava o recebido e escondia parte do que há a receber.')}</div>
+      <div class="kpi-grid">
+        <div class="kpi" style="border-top:2px solid #6C8FB5"><div class="kpi-label">Contratado</div>
+          <div class="kpi-value" style="color:#6C8FB5">${fmt(P.contratado)}</div>
+          <div class="kpi-sub">valor devido pelos clientes</div></div>
+        <div class="kpi" style="border-top:2px solid #6D9E7F"><div class="kpi-label">Recebido de fato</div>
+          <div class="kpi-value" style="color:#6D9E7F">${fmt(P.recebidoCaixa)}</div>
+          <div class="kpi-sub">${P.pctRecebido.toFixed(1)}% do contratado${window._extrato?' · fonte: extrato':''}</div></div>
+        <div class="kpi" style="border-top:2px solid #C09257"><div class="kpi-label">Ainda a receber</div>
+          <div class="kpi-value" style="color:#C09257">${fmt(P.aReceber)}</div>
+          <div class="kpi-sub">${P.mesesParaZerar!==null? 'ritmo atual: '+P.mesesParaZerar.toFixed(1)+' meses' : 'sem ritmo apurado'}</div></div>
+        <div class="kpi" style="border-top:2px solid ${P.vencidoAberto>0?'#BF6B60':'#8E7FA8'}"><div class="kpi-label">Vencido em aberto</div>
+          <div class="kpi-value" style="color:${P.vencidoAberto>0?'#BF6B60':'#8E7FA8'}">${fmt(P.vencidoAberto)}</div>
+          <div class="kpi-sub">${P.nVencidas} parcela(s) vencida(s)</div></div>
+      </div>
+      ${P.distorcaoAntiga>1000? `<div class="info-box" style="border:1px solid #C4A55C55;background:rgba(196,165,92,.05);margin-top:8px"><span style="color:#C4A55C">ℹ</span><div>
+        <strong>A base de parcelas registra ${fmt(P.recebidoBase)} de recebimento — ${fmt(P.distorcaoAntiga)} a mais que o dinheiro que entrou.</strong>
+        A diferença é a quitação contábil de contratos encerrados${P.baixas>1000? ' ('+fmt(P.baixas)+' identificados como baixa de distrato)':''}: fecha o contrato no sistema, mas não entra em conta.
+        Enquanto essa quitação era contada como recebida, o <em>a receber</em> aparecia menor do que é de verdade.</div></div>`:''}
+      ${(function(){
       const R2=_RECEITAS||[];
       if(!R2.length) return '';
       const gV=R2.filter(r=>r.grupo==='venda'), gO=R2.filter(r=>r.grupo!=='venda');
@@ -2952,6 +3065,7 @@ function renderReceitas() {
           ${porTipoG('outras').map(([t2,v])=>`<tr style="cursor:pointer" onclick="openDrill('receita_tipo','${t2}')"><td style="padding-left:18px;font-size:11.5px">${t2}</td><td style="text-align:right;font-weight:600">${fmt(v)}</td><td style="text-align:right;color:var(--muted);font-size:10.5px">${(v/tot*100).toFixed(1)}%</td></tr>`).join('')}
         </tbody></table></div>
       ${rec>0?`<div class="info-box" style="border:1px solid #C4A55C55;background:rgba(196,165,92,.05);margin-bottom:12px"><span style="color:#C4A55C">ℹ</span><div><strong>${fmt(rec)} das outras receitas é recuperação de custo</strong> (reembolso de material e de fornecedor). Somando como receita, o <em>resultado</em> fica correto — mas o custo de obra continua pelo valor bruto, então o <strong>custo por m² não desconta essa devolução</strong>. Se preferir que ela abata o custo em vez de somar à receita, é troca de uma linha.</div></div>`:''}`;
+      })()}`;
     })()}
 
     <div class="section-title">🔎 Inconsistências encontradas na leitura dos descritivos${totalInc?` <span style="color:#C4A55C">(${totalInc})</span>`:''}</div>
@@ -3847,6 +3961,100 @@ function imprimirRelatorioTab13(){
 function relBotaoFlutuante(){
   const fab = document.getElementById('relFab');
   if (fab) fab.remove();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// EXTRATO GERAL — fonte de CAIXA e CUSTO
+// Extrato de movimentação: receitas e despesas na mesma aba, valor com sinal,
+// situação (Conciliado / Quitado / Atrasado), conta bancária e saldo corrente.
+// Validado no Jazz: filtrando por Conciliado, o saldo fecha a 0,03% do extrato
+// bancário real, enquanto a base de receitas erra por R$ 13,1 milhões — porque
+// aquela traz a quitação contábil de contratos distratados como se fosse dinheiro.
+//
+// DIVISÃO DE PAPÉIS, para não perdermos nada do que já foi construído:
+//   EXTRATO GERAL          → caixa, custo de obra, categorias, fornecedores, auditoria
+//   RECEITAS/DESPESAS TOTAIS → base COMERCIAL: parcela contratada, casa, cliente,
+//                              cronograma de recebíveis, VGV, inadimplência, vendas
+// ═══════════════════════════════════════════════════════════════════
+const EXT_COLS = { data:0, quem:2, desc:5, tipo:7, origem:8, conta:9, forma:10,
+                   valor:11, saldo:12, situacao:13, valorOrig:14, juros:15, multa:16,
+                   desconto:17, taxas:18, competencia:19, vencimento:20, obs:22, nf:23,
+                   cat:24, centroCusto:26 };
+// O extrato usa nomes de categoria um pouco diferentes. Mapeamos para os nomes que
+// todas as regras já construídas conhecem, para nada precisar ser reescrito.
+const EXT_CAT_MAP = [
+  [/^FORNECEDOR\s*-\s*AQUISI[CÇ][AÃ]O DE MATERIAIS/i, 'Aquisição de Materiais'],
+  [/^TAXAS?\/LICEN[CÇ]AS?\/ALVAR[AÁ]/i,                'Taxas/Licenças/Alvará'],
+  [/^ESCRIT[OÓ]RIO/i,                                   'Escritório/Administrativo'],
+  [/^IMPOSTOS?\s*[-–]/i,                                'Impostos/Tributos'],
+  [/^IMPOSTO\s*[-–]/i,                                  'Impostos/Tributos'],
+];
+function extNormCat(c){
+  const s = String(c||'').trim();
+  for (const [re, alvo] of EXT_CAT_MAP) if (re.test(s)) return alvo;
+  return s;
+}
+function extEhRetirada(cat){ return /RETIRADA\s*S[OÓ]CIOS?|DEVOLU[CÇ][AÃ]O DE AFAC/i.test(String(cat||'')); }
+function extEhAporte(desc, cat){ return /\bAFAC\b/i.test(String(desc||'')) || /\bAFAC\b/i.test(String(cat||'')); }
+function extEhRendimento(cat, desc){ return /RENDIMENTO/i.test(String(cat||'')) || /RENDIMENTO DE APLICA/i.test(String(desc||'')); }
+
+// Converte o extrato nas estruturas que o painel inteiro já consome.
+function parseExtrato(allRows){
+  const C = EXT_COLS;
+  const hdr = (allRows[0]||[]).map(x=>_audNorm(x));
+  // confere que é mesmo o extrato antes de usar
+  if (!hdr.some(h=>h.includes('SALDO CONTA')) || !hdr.some(h=>h.includes('SITUACAO'))) return null;
+  const despesas=[], receitas=[], aportes=[], retiradas=[], rendimentos=[];
+  const resumo = { conciliado:0, quitado:0, atrasado:0, nConc:0, nQuit:0, nAtr:0, linhas:0 };
+  allRows.slice(1).forEach(r=>{
+    if (!r || !r[C.data]) return;
+    const data = normalizeDate(String(r[C.data]||'').trim());
+    if (!data) return;
+    const bruto = parseVal(r[C.valor]);
+    if (!bruto) return;
+    const situacao = String(r[C.situacao]||'').trim();
+    const catRaw = extNormCat(r[C.cat]);
+    const quem = String(r[C.quem]||'').trim() || '—';
+    const descRaw = String(r[C.desc]||'').trim();
+    const conta = String(r[C.conta]||'').trim();
+    const v = Math.abs(bruto);
+    resumo.linhas++;
+    if (/CONCILIADO/i.test(situacao)) { resumo.conciliado += bruto; resumo.nConc++; }
+    else if (/ATRASAD/i.test(situacao)) { resumo.atrasado += bruto; resumo.nAtr++; }
+    else { resumo.quitado += bruto; resumo.nQuit++; }
+    const comum = { data, conta, situacao, obs:String(r[C.obs]||'').trim(),
+                    juros:parseVal(r[C.juros]), multa:parseVal(r[C.multa]),
+                    desconto:parseVal(r[C.desconto]), taxas:parseVal(r[C.taxas]),
+                    competencia:normalizeDate(String(r[C.competencia]||'').trim()),
+                    centroCusto:String(r[C.centroCusto]||'').trim(), nf:String(r[C.nf]||'').trim(),
+                    doExtrato:true };
+    if (bruto < 0) {
+      if (extEhRetirada(catRaw)) { retiradas.push(Object.assign({ socio:quem, valor:v, descricao:descRaw, categoria:catRaw }, comum)); return; }
+      let categoria = normCat(catRaw, descRaw), reclassDe = null;
+      if (categoria && _audNorm(quem).includes('RAFAEL SANTOS') && !_audNorm(categoria).includes('MAO DE OBRA')) {
+        reclassDe = categoria; categoria = 'Mão de obra - Terceiros';
+      }
+      despesas.push(Object.assign({ fornecedor:quem, descricao:normDesc(descRaw), descOriginal:descRaw||'—',
+                                    valor:v, categoria, reclassDe }, comum));
+    } else {
+      if (extEhAporte(descRaw, catRaw)) { aportes.push(Object.assign({ socio:quem, valor:v, desc:descRaw }, comum)); return; }
+      if (extEhRendimento(catRaw, descRaw)) { rendimentos.push(Object.assign({ valor:v, desc:descRaw }, comum)); return; }
+      const casa = extrairCasa(descRaw);
+      const descU = _audNorm(descRaw), catU = _audNorm(catRaw);
+      const tipo = isIncc(descRaw) || catU.includes('INCC') || catU.includes('IGPM') ? 'INCC'
+                 : descU.includes('DISTR') ? 'VendaDistratada'
+                 : catU.includes('PERSONALIZ') ? 'Personalizacao'
+                 : catU.includes('REEMBOLS') ? 'Reembolso'
+                 : catU.includes('BONIFICA') ? 'Bonificacao'
+                 : catU.includes('RATEIO') ? 'Rateio'
+                 : (catU === 'VENDAS' || casa) ? 'Venda' : 'OutraReceita';
+      const grupo = ['Venda','INCC','VendaDistratada','Personalizacao'].includes(tipo) ? 'venda' : 'outras';
+      receitas.push(Object.assign({ cliente:quem, dataComp:data, desc:descRaw, origem:String(r[C.origem]||''),
+                                    valOrig:parseVal(r[C.valorOrig])||v, valReceb:v, casa, tipo, grupo,
+                                    recupera: tipo==='Reembolso', cat:catRaw, baixaSemCaixa:false }, comum));
+    }
+  });
+  return { despesas, receitas, aportes, retiradas, rendimentos, resumo };
 }
 
 // ═══ Rendimentos de aplicação: bruto, tributos e líquido ═══

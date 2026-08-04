@@ -300,6 +300,34 @@ async function testEmp(emp, checks){
     const cora=PCt.find(x=>x.conta==='Cora');
     ok(cora && cora.saldo===-70,'Conciliação: saldo por conta calculado (Cora -70)');
     ok(CX.includes('Conciliação por conta bancária'),'Conciliação: seção no painel');
+    // ── EXTRATO GERAL: parser e divisão de papéis ──
+    ok(typeof w.parseExtrato==='function','Extrato: parser disponível');
+    const hdrX=['Data movimento','Id','Nome do fornecedor/cliente','Rec','Qtd','Descrição','Ag','Tipo','Origem do lançamento','Conta bancária','Forma','Valor (R$)','Saldo conta (R$)','Situação','Valor original (R$)','Juros (R$)','Multa (R$)','Desconto (R$)','Taxas (R$)','Data de competência','Venc','Prev','Obs','NF','Categoria 1','Val','Centro de Custo 1','ValCC'];
+    const lin=(data,quem,desc,tipo,conta,valor,situ,cat)=>{const a=new Array(28).fill('');
+      a[0]=data;a[2]=quem;a[5]=desc;a[7]=tipo;a[8]='Lançamento Financeiro';a[9]=conta;a[11]=valor;a[13]=situ;a[24]=cat;a[26]='JAZZ';return a;};
+    const rowsX=[hdrX,
+      lin('10/01/2025','FORN A','CIMENTO CP2','Despesa','07 - JAZZ CORA BANK',-1000,'Conciliado','Fornecedor - Aquisição de materiais'),
+      lin('11/01/2025','CLIENTE X','3/10 - CASA 05 - JAZZ','Receita','01 JAZZ OFICIAL 2528-9',5000,'Conciliado','Vendas'),
+      lin('12/01/2025','SOCIO Y','RETIRADA DE LUCROS','Despesa','07 - JAZZ CORA BANK',-2000,'Conciliado','Retirada Sócios'),
+      lin('13/01/2025','FORMES','AFAC - FORMES','Receita','01 JAZZ OFICIAL 2528-9',3000,'Conciliado','AFAC'),
+      lin('14/01/2025','BANCO','RENDIMENTO DE APLICACAO','Receita','02 - APL',120,'Conciliado','Rendimentos de Aplicações'),
+      lin('15/01/2025','FORN B','TELHA','Despesa','07 - JAZZ CORA BANK',-500,'Atrasado','Fornecedor - Aquisição de materiais')];
+    const EX=w.parseExtrato(rowsX);
+    ok(!!EX,'Extrato: reconhece o formato pelo cabeçalho');
+    ok(EX && EX.despesas.length===2,'Extrato: despesas separadas pelo sinal');
+    ok(EX && EX.receitas.length===1,'Extrato: receitas separadas');
+    ok(EX && EX.retiradas.length===1 && EX.retiradas[0].valor===2000,'Extrato: retirada de sócio vira categoria própria');
+    ok(EX && EX.aportes.length===1 && EX.aportes[0].valor===3000,'Extrato: AFAC vira aporte');
+    ok(EX && EX.rendimentos.length===1,'Extrato: rendimento de aplicação separado');
+    ok(EX && EX.despesas[0].categoria==='Aquisição de Materiais','Extrato: categoria remapeada para o nome que as regras conhecem');
+    ok(EX && EX.resumo.nConc===5 && EX.resumo.nAtr===1,'Extrato: situação contabilizada');
+    ok(!w.parseExtrato([['Data','Fornecedor','Valor'],[]]),'Extrato: rejeita planilha que não é extrato');
+    ok(typeof w.projecaoRecebiveis==='function','Projeção: função disponível');
+    const PR=w.projecaoRecebiveis();
+    ok(PR && PR.contratado>0,'Projeção: contratado apurado');
+    ok(PR && PR.aReceber === Math.max(0, PR.contratado-PR.recebidoCaixa),'Projeção: a receber = contratado menos recebido de fato');
+    w.switchTab(16); await new Promise(r=>setTimeout(r,400));
+    ok(t('tab16').includes('Projeção de recebíveis'),'Projeção: seção na aba Receitas');
     // aba Receitas
     w.switchTab(16); await new Promise(r=>setTimeout(r,400));
     const REC=t('tab16');
