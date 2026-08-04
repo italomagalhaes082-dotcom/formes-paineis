@@ -2283,7 +2283,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-z · INCC até o repasse</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-aa · aba ativa por ID</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -7405,7 +7405,12 @@ window.fornToggle=function(nome){_fornState.open[nome]=!_fornState.open[nome];re
 
 function switchTab(i) {
   document.querySelectorAll(".tab").forEach((t,j)=>t.classList.toggle("active",j===i));
-  document.querySelectorAll(".tab-content").forEach((c,j)=>c.classList.toggle("active",j===i));
+  // Ativa pelo ID, não pela posição na lista: qualquer aba nova ou fora de ordem
+  // deslocava o índice e o conteúdo ficava com display:none enquanto o botão
+  // aparecia selecionado — foi o que deixou a tela preta.
+  document.querySelectorAll(".tab-content").forEach(c=>c.classList.remove("active"));
+  const _alvoTab = document.getElementById("tab"+i);
+  if (_alvoTab) _alvoTab.classList.add("active");
   if(i===5 && _DESPESAS.length>0) renderDespesas();
   else if(i===6) renderResultadoFinal();
   else if(i===7) renderGestaoVendas();
