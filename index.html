@@ -1838,7 +1838,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-k · caixa mensal navegável</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-l · caixa conciliado e média</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -3504,25 +3504,42 @@ function caixaSerie(desp, rec, aportes, retiradas, rendimentos){
   const put = (ym) => (M[ym] = M[ym] || zero());
   const excl = { n:0, v:0 };
   const baixa = { n:0, v:0 };
+  // Situação do extrato: só CONCILIADO é dinheiro confirmado no banco. QUITADO foi
+  // baixado no sistema mas ainda não bateu com o extrato, e ATRASADO simplesmente não
+  // foi pago — contá-los inflava o caixa. Registros sem situação (fonte antiga) entram,
+  // para não quebrar quem ainda não tem o extrato.
+  const pend = { quitN:0, quitV:0, atrN:0, atrV:0 };
+  const confirmado = r => {
+    const s = r.situacao;
+    if (!s) return true;
+    if (/CONCILIADO/i.test(s)) return true;
+    const v = (r.valor || r.valReceb || 0);
+    const sinal = (r.valReceb !== undefined) ? 1 : -1;
+    if (/ATRASAD/i.test(s)) { pend.atrN++; pend.atrV += v*sinal; }
+    else { pend.quitN++; pend.quitV += v*sinal; }
+    return false;
+  };
 
   (rec||[]).forEach(r=>{
     const d = parseDate(r.dataComp||r.data); if(!d) return;
     const v = r.valReceb||0; if(!(v>0)) return;
     if (cxEhTransferencia(r.desc, r.cat)) { excl.n++; excl.v+=v; put(cxYM(d)).excluido+=v; return; }
     if (r.baixaSemCaixa) { baixa.n++; baixa.v+=v; put(cxYM(d)).baixa+=v; return; }
+    if (!confirmado(r)) return;
     const m = put(cxYM(d));
     if (r.grupo === 'venda' || /Venda|INCC/i.test(r.tipo||'')) m.vendas += v; else m.outrasRec += v;
     m.entrada += v;
   });
-  (aportes||[]).forEach(a=>{ const d=parseDate(a.data); if(!d) return;
+  (aportes||[]).forEach(a=>{ const d=parseDate(a.data); if(!d || !confirmado(a)) return;
     const m=put(cxYM(d)); m.aporte+=a.valor; m.entrada+=a.valor; });
-  (rendimentos||[]).forEach(r=>{ const d=parseDate(r.data); if(!d) return;
+  (rendimentos||[]).forEach(r=>{ const d=parseDate(r.data); if(!d || !confirmado(r)) return;
     const v=r.valor||r.valReceb||0; const m=put(cxYM(d)); m.rendimento+=v; m.entrada+=v; });
 
   (desp||[]).forEach(r=>{
     const d = parseDate(r.data); if(!d) return;
     const v = r.valor||0; if(!(v>0)) return;
     if (cxEhTransferencia(r.descOriginal||r.descricao, r.categoria)) { excl.n++; excl.v+=v; put(cxYM(d)).excluido+=v; return; }
+    if (!confirmado(r)) return;
     const m = put(cxYM(d)); const c = _audNorm(r.categoria||'');
     if (/PERMUTA/.test(c)) m.permuta += v;
     else if (/DISTRATO/.test(c)) m.distrato += v;
@@ -3532,12 +3549,12 @@ function caixaSerie(desp, rec, aportes, retiradas, rendimentos){
     else m.outrasDesp += v;
     m.saida += v;
   });
-  (retiradas||[]).forEach(r=>{ const d=parseDate(r.data); if(!d) return;
+  (retiradas||[]).forEach(r=>{ const d=parseDate(r.data); if(!d || !confirmado(r)) return;
     const m=put(cxYM(d)); m.socio+=r.valor; m.saida+=r.valor; });
 
   // preenche os meses sem movimento, para a curva não dar saltos falsos
   const yms = Object.keys(M).map(Number).sort((a,b)=>a-b);
-  if (!yms.length) return { linhas:[], excl, baixa };
+  if (!yms.length) return { linhas:[], excl, baixa, pend };
   const linhas = [];
   let saldo = 0, saldoOp = 0;
   let y = Math.floor(yms[0]/100), mo = yms[0]%100;
@@ -3552,7 +3569,7 @@ function caixaSerie(desp, rec, aportes, retiradas, rendimentos){
     linhas.push(Object.assign({ ym, res, saldo, resOp, saldoOp }, m));
     mo++; if(mo>12){ mo=1; y++; }
   }
-  return { linhas, excl, baixa };
+  return { linhas, excl, baixa, pend };
 }
 
 // Normaliza o nome da conta bancária do ERP para os apelidos que a gestão usa.
@@ -3714,6 +3731,13 @@ function renderCaixa(){
   const queima = saidaMed - entradaMed;
   const cobertura = queima>0 ? atual.saldo/queima : null;
   const totEnt = L.reduce((s,x)=>s+x.entrada,0), totSai = L.reduce((s,x)=>s+x.saida,0);
+  // Caixa médio: média dos saldos de fechamento. É a posição típica da tesouraria,
+  // não o saldo de um dia. Serve para dimensionar reserva e comparar obras.
+  const medSaldo = arr => arr.length ? arr.reduce((s,x)=>s+x.saldo,0)/arr.length : 0;
+  const u12 = fechados.slice(-12);
+  const caixaMedio = medSaldo(fechados.length? fechados : L);
+  const caixaMedio12 = medSaldo(u12.length? u12 : fechados);
+  const entradaMedTot = L.length ? totEnt/L.length : 0, saidaMedTot = L.length ? totSai/L.length : 0;
   const totAporte = L.reduce((s,x)=>s+x.aporte,0), totVendas = L.reduce((s,x)=>s+x.vendas,0);
   const depAporte = totEnt>0 ? totAporte/totEnt*100 : 0;
   const mesesPos = fechados.filter(x=>x.resOp>0).length;
@@ -3725,6 +3749,10 @@ function renderCaixa(){
     Entram: recebimentos de venda, aportes de sócio e rendimento de aplicação. Saem: despesas pagas e retiradas de sócio.
     Ficam fora transferências entre contas e aplicação/resgate, que movem dinheiro entre bolsos da mesma empresa sem alterar o caixa.
     ${S.excl.n? '<strong>'+S.excl.n+' lançamento(s)</strong> ('+fmt(S.excl.v)+') foram excluídos por essa regra.' : ''}
+    ${(S.pend && (S.pend.quitN||S.pend.atrN))? '<br><br><strong>O saldo conta apenas o que está CONCILIADO com o banco.</strong> Ficam de fora '
+      + (S.pend.quitN? S.pend.quitN+' lançamento(s) baixado(s) no sistema e ainda não conciliado(s), efeito líquido '+fmt(S.pend.quitV) : '')
+      + (S.pend.quitN && S.pend.atrN ? ', e ' : '')
+      + (S.pend.atrN? S.pend.atrN+' em atraso, efeito líquido '+fmt(S.pend.atrV) : '') + '.' : ''}
     ${S.baixa.n? '<br><br><strong style="color:#C4A55C">'+S.baixa.n+' parcela(s) finais de contrato distratado, somando '+fmt(S.baixa.v)+', também ficaram fora.</strong> São a baixa do saldo devedor no encerramento do contrato — o sistema exporta como recebido, mas não houve entrada de dinheiro.' : ''}
     O saldo parte de zero na abertura da SPE — é a posição construída pelos próprios lançamentos, não um extrato bancário.</div></div>
 
@@ -3739,6 +3767,12 @@ function renderCaixa(){
       ${k('Dependência de aporte', depAporte.toFixed(1)+'%', 'das entradas vieram dos sócios', depAporte>50?'#BF6B60':depAporte>25?'#C09257':'#6D9E7F','Quanto do dinheiro que entrou veio de aporte em vez de venda. Quanto menor, mais a obra se financia sozinha.')}
       ${k('Meses com caixa operacional positivo', mesesPos+' de '+fechados.length, ((mesesPos/Math.max(1,fechados.length))*100).toFixed(0)+'% dos meses fechados', mesesPos/Math.max(1,fechados.length)>0.5?'#6D9E7F':'#C09257','Caixa operacional exclui aporte e retirada: mede se a operação se paga com o que ela mesma gera.')}
       ${k('Entradas × saídas no total', fmt(totEnt)+' / '+fmt(totSai), 'resultado acumulado '+fmt(totEnt-totSai), (totEnt-totSai)>=0?'#6D9E7F':'#BF6B60')}
+    </div>
+    <div class="kpi-grid" style="margin-top:6px">
+      ${k('Caixa médio mensal', fmt(caixaMedio), 'média dos saldos de fechamento · '+fechados.length+' meses', caixaMedio>=0?'#6C8FB5':'#BF6B60','Média dos saldos de fechamento de todos os meses fechados. É a posição típica da tesouraria — dimensiona reserva e permite comparar obras de tamanhos diferentes.')}
+      ${k('Caixa médio — 12 meses', fmt(caixaMedio12), u12.length+' meses mais recentes', caixaMedio12>=0?'#6D9E7F':'#BF6B60')}
+      ${k('Entrada média por mês', fmt(entradaMedTot), 'sobre '+L.length+' meses de série', '#6D9E7F')}
+      ${k('Saída média por mês', fmt(saidaMedTot), 'sobre '+L.length+' meses de série', '#BF6B60')}
     </div>
 
     ${negativos.length? `<div class="info-box" style="border:1px solid #BF6B6066;background:rgba(191,107,96,.06);margin-top:10px"><span style="color:#BF6B60">⚠</span><div><strong>Caixa ficou negativo em ${negativos.length} mês(es).</strong> ${negativos.slice(0,6).map(x=>cxLabel(x.ym)+' ('+fmt(x.saldo)+')').join(' · ')}${negativos.length>6?' …':''}<br><span style="font-size:11px;color:var(--muted)">Saldo negativo aqui significa que os lançamentos consomem mais do que entrou desde a abertura. Ou houve aporte não registrado, ou a obra operou com recurso de terceiros no período.</span></div></div>`:''}

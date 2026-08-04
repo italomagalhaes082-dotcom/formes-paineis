@@ -290,6 +290,23 @@ async function testEmp(emp, checks){
     ok(m1.saldo===4000,'Caixa: saldo do 1º mês = 5.000 − 1.000');
     ok(m2.saldo===3200,'Caixa: saldo acumula e desconta a retirada (4.000 − 800 = '+m2.saldo+')');
     ok(SCX.excl.n===1 && SCX.excl.v===500,'Caixa: transferência entre contas EXCLUÍDA do saldo');
+    // só o conciliado compõe o caixa
+    const SC=w.caixaSerie(
+      [{data:'10/01/2025',valor:1000,categoria:'Aquisição de Materiais',descricao:'CIMENTO',situacao:'Conciliado'},
+       {data:'11/01/2025',valor:700,categoria:'Aquisição de Materiais',descricao:'TELHA',situacao:'Quitado'}],
+      [{dataComp:'05/01/2025',valReceb:5000,cat:'Vendas',tipo:'Venda',grupo:'venda',desc:'1/10',situacao:'Conciliado'},
+       {dataComp:'06/01/2025',valReceb:900,cat:'Vendas',tipo:'Venda',grupo:'venda',desc:'2/10',situacao:'Atrasado'},
+       {dataComp:'07/01/2025',valReceb:400,cat:'Vendas',tipo:'Venda',grupo:'venda',desc:'3/10',situacao:'Quitado'}],[],[],[]);
+    const fimSC=SC.linhas[SC.linhas.length-1];
+    ok(fimSC.saldo===4000,'Situação: saldo conta só o conciliado (5.000 − 1.000 = '+fimSC.saldo+')');
+    ok(SC.pend.atrN===1 && Math.abs(SC.pend.atrV-900)<1,'Situação: atrasado fica fora e é contabilizado à parte');
+    ok(SC.pend.quitN===2,'Situação: baixado sem conciliação também fica fora ('+SC.pend.quitN+')');
+    const SsemSit=w.caixaSerie([{data:'10/01/2025',valor:1000,categoria:'X',descricao:'Y'}],
+                               [{dataComp:'05/01/2025',valReceb:5000,cat:'Vendas',tipo:'Venda',grupo:'venda',desc:'1/1'}],[],[],[]);
+    ok(SsemSit.linhas[0].saldo===4000,'Situação: fonte sem o campo continua entrando (compatibilidade)');
+    ok(CX.includes('Caixa médio mensal'),'Média: KPI de caixa médio presente');
+    ok(/Caixa médio — 12 meses/.test(CX),'Média: recorte de 12 meses');
+    ok(/Entrada média por mês/.test(CX) && /Saída média por mês/.test(CX),'Média: entrada e saída médias');
     ok(m1.resOp===2000,'Caixa: operacional exclui o aporte (3.000 − 1.000)');
     ok(m2.resOp===0,'Caixa: operacional exclui a retirada');
     // reconhecimento de transferência
