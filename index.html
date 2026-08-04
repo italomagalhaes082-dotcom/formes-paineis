@@ -1371,7 +1371,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v03.08.26-u · caixa comparado</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v03.08.26-v · conciliação por conta</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -1744,8 +1744,8 @@ let _DESPESAS = [];
 function detectCols(allRows, tipo) {
   // fallback: layout ERP clássico
   const fb = tipo === "rec"
-    ? { quem:1, data:3, dataVenc:4, desc:8, origem:9, situ:10, valOrig:12, valReceb:14, valTot:18, obs:27, cat:28, hdr:-1 }
-    : { quem:1, data:3, desc:8, val:18, obs:27, cat:28, hdr:-1 };
+    ? { quem:1, data:3, dataVenc:4, desc:8, origem:9, situ:10, valOrig:12, valReceb:14, valTot:18, conta:24, obs:27, cat:28, hdr:-1 }
+    : { quem:1, data:3, desc:8, val:18, conta:24, obs:27, cat:28, hdr:-1 };
   for (let i = 0; i < Math.min(6, allRows.length); i++) {
     const row = allRows[i];
     const temData = parseDate(normalizeDate(String(row[3]||"").trim())) || parseDate(normalizeDate(String(row[1]||"").trim()));
@@ -1809,7 +1809,8 @@ function parseDespesasRows(allRows) {
         }
       }
       return { fornecedor: fornecedor || "—", data, descricao: normDesc(descRaw),
-               descOriginal: descRaw || "—", valor, categoria, obs, reclassDe };
+               descOriginal: descRaw || "—", valor, categoria, obs, reclassDe,
+               conta: String(r[M.conta!==undefined?M.conta:24] || "").trim() };
     })
     .filter(r => {
       if (!r.valor || r.valor <= 0) return false;
@@ -3060,6 +3061,41 @@ function caixaSerie(desp, rec, aportes, retiradas, rendimentos){
   return { linhas, excl };
 }
 
+// Normaliza o nome da conta bancária do ERP para os apelidos que a gestão usa.
+function cxConta(nome){
+  const s = _audNorm(nome||'');
+  if (!s) return 'Sem conta informada';
+  if (/CORA/.test(s)) return 'Cora';
+  if (/\bAPL\b|APLICAC/.test(s)) return 'Aplicação';
+  if (/OFICIAL|CAIXA \d|3418|\bCEF\b/.test(s)) return 'Caixa (CEF)';
+  return String(nome).trim().slice(0,34);
+}
+// Saldo apurado por conta, a partir dos lançamentos.
+function cxPorConta(desp, rec, aportes, rendimentos){
+  const m = {};
+  const put = c => (m[c] = m[c] || { entrada:0, saida:0, nE:0, nS:0 });
+  (rec||[]).forEach(r=>{ const v=r.valReceb||0; if(!(v>0)) return;
+    const g=put(cxConta(r.conta)); g.entrada+=v; g.nE++; });
+  (aportes||[]).forEach(a=>{ const g=put(cxConta(a.conta)); g.entrada+=a.valor; g.nE++; });
+  (rendimentos||[]).forEach(a=>{ const g=put(cxConta(a.conta)); g.entrada+=(a.valor||0); g.nE++; });
+  (desp||[]).forEach(r=>{ const v=r.valor||0; if(!(v>0)) return;
+    const g=put(cxConta(r.conta)); g.saida+=v; g.nS++; });
+  return Object.entries(m).map(([c,g])=>Object.assign({conta:c, saldo:g.entrada-g.saida}, g))
+                          .sort((a,b)=>b.saldo-a.saldo);
+}
+// Saldos reais informados pela gestão, para conciliar. Ficam salvos no aparelho.
+function cxReaisChave(){ return 'cx_reais_' + SHEET_ID; }
+function cxReais(){ try { return JSON.parse(localStorage.getItem(cxReaisChave())||'{}'); } catch(e){ return {}; } }
+window.cxSetReal = function(conta){
+  const atual = cxReais();
+  const v = prompt('Saldo real da conta "'+conta+'" (deixe vazio para limpar):', atual[conta]!==undefined? atual[conta] : '');
+  if (v === null) return;
+  const m = cxReais();
+  if (String(v).trim()==='') delete m[conta]; else m[conta] = parseVal(v);
+  localStorage.setItem(cxReaisChave(), JSON.stringify(m));
+  renderCaixa();
+};
+
 function renderCaixa(){
   const el = document.getElementById('tab18');
   if (!el) return;
@@ -3110,6 +3146,38 @@ function renderCaixa(){
 
     ${fxCard('Saldo de caixa mês a mês','g_cx_saldo','<div class="legend"><span><i style="background:#6C8FB5"></i>Caixa total</span><span><i style="background:#6D9E7F"></i>Caixa operacional (sem sócio)</span></div>','A linha verde exclui aporte e retirada: quando ela sobe, a obra está gerando caixa por conta própria.')}
     ${fxCard('Entradas e saídas por mês','g_cx_fluxo','<div class="legend"><span><i style="background:#6D9E7F"></i>Entradas</span><span><i style="background:#BF6B60"></i>Saídas</span></div>','Barras lado a lado: onde a vermelha supera a verde, o mês consumiu caixa.')}
+
+    ${(function(){
+      const PC = cxPorConta(_DESPESAS, _RECEITAS, _APORTES, (typeof _RENDIMENTOS!=='undefined'? _RENDIMENTOS:[]));
+      if (!PC.length) return '';
+      const reais = cxReais();
+      const negativas = PC.filter(c=>c.saldo < -1000 && !/Sem conta/.test(c.conta));
+      const temReal = Object.keys(reais).length>0;
+      const somaApur = PC.reduce((s,c)=>s+c.saldo,0);
+      const somaReal = PC.reduce((s,c)=>s+(reais[c.conta]!==undefined? reais[c.conta] : 0),0);
+      return `<div class="section-title" style="margin-top:18px">🔎 Conciliação por conta bancária${hintIcon('O sistema informa a conta de cada lançamento. Somando entradas e saídas por conta chega-se ao saldo que os lançamentos produzem. Comparar com o extrato real revela o que está faltando na exportação.')}</div>
+      ${negativas.length? `<div class="info-box" style="border:1px solid #BF6B6088;background:rgba(191,107,96,.08);margin-bottom:10px"><span style="color:#BF6B60;font-size:16px">⛔</span><div>
+        <strong>${negativas.length===1?'Uma conta fecha':'Contas que fecham'} com saldo negativo pelos lançamentos: ${negativas.map(c=>c.conta+' ('+fmt(c.saldo)+')').join(' · ')}.</strong><br>
+        Conta bancária não fica negativa nessa ordem de grandeza. Isso é prova de que <strong>faltam lançamentos na exportação</strong> — tipicamente as <strong>transferências entre as contas da própria SPE</strong>, que abastecem a conta pagadora e não são exportadas pelo sistema. Enquanto elas faltarem, o saldo por conta e o saldo total não fecham com o extrato.</div></div>`:''}
+      <div class="table-wrap" style="margin-bottom:6px"><table>
+        <thead><tr><th>Conta</th><th style="text-align:right">Entradas</th><th style="text-align:right">Saídas</th><th style="text-align:right">Saldo apurado</th><th style="text-align:right">Saldo real</th><th style="text-align:right">Divergência</th></tr></thead>
+        <tbody>${PC.map(c=>{ const real = reais[c.conta];
+          const div = real!==undefined ? (real - c.saldo) : null;
+          return `<tr${c.saldo<-1000?' style="background:rgba(191,107,96,.07)"':''}>
+            <td style="font-size:11.5px">${c.conta}<div class="kpi-sub">${c.nE} entradas · ${c.nS} saídas</div></td>
+            <td style="text-align:right;color:#6D9E7F">${c.entrada?fmt(c.entrada):'—'}</td>
+            <td style="text-align:right;color:#BF6B60">${c.saida?fmt(c.saida):'—'}</td>
+            <td style="text-align:right;font-weight:700;color:${c.saldo<0?'#BF6B60':'#111'}">${fmt(c.saldo)}</td>
+            <td style="text-align:right;cursor:pointer;color:${real!==undefined?'#6C8FB5':'var(--text-3)'}" onclick="cxSetReal('${c.conta.replace(/'/g,"\\'")}')" title="clique para informar o saldo do extrato">${real!==undefined? fmt(real) : 'informar'}</td>
+            <td style="text-align:right;font-weight:600;color:${div===null?'var(--text-3)':Math.abs(div)<1000?'#6D9E7F':'#C09257'}">${div===null?'—':fmt(div)}</td></tr>`;}).join('')}
+          ${temReal? `<tr style="border-top:2px solid var(--border)"><td style="font-weight:700">Total</td>
+            <td></td><td></td>
+            <td style="text-align:right;font-weight:700">${fmt(somaApur)}</td>
+            <td style="text-align:right;font-weight:700">${fmt(somaReal)}</td>
+            <td style="text-align:right;font-weight:700;color:#C09257">${fmt(somaReal-somaApur)}</td></tr>`:''}
+        </tbody></table></div>
+      <div class="kpi-sub" style="margin-bottom:12px">Clique em <strong>informar</strong> na coluna do saldo real para lançar o extrato de cada conta. A divergência mostra quanto falta de lançamento naquela conta.</div>`;
+    })()}
 
     <div class="section-title" style="margin-top:16px">Composição das entradas e das saídas</div>
     <div class="table-wrap" style="margin-bottom:12px"><table>
@@ -6771,7 +6839,7 @@ function parseReceitasRows(allRows) {
     // Recuperação de custo: subconjunto de "outras" que devolve dinheiro de despesa já paga
     const recupera = (tipo === 'Reembolso') || catU.includes('AQUISICAO DE MATERIA') || catU.includes('AQUISIÇÃO DE MATERIA');
     if (valOrig > 0 || valReceb > 0)
-      receitas.push({ cliente, dataComp, dataVenc, desc, origem, situacao, valOrig, valReceb, casa, tipo, grupo, recupera, cat: catRaw });
+      receitas.push({ cliente, dataComp, dataVenc, desc, origem, situacao, valOrig, valReceb, casa, tipo, grupo, recupera, cat: catRaw, conta: String((r[M.conta!==undefined?M.conta:24])||'').trim() });
   });
   return { receitas, aportes, rendimentos };
 }

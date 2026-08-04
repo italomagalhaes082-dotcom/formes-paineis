@@ -271,6 +271,16 @@ async function testEmp(emp, checks){
     ok(w.cxEhTransferencia('RESGATE DE APLICACAO','Diversos'),'Caixa: resgate de aplicação reconhecido');
     ok(!w.cxEhTransferencia('REEMBOLSO CRISPIM GARCIA','Reembolso'),'Caixa: reembolso NÃO é transferência (é dinheiro que voltou)');
     ok(!w.cxEhTransferencia('CIMENTO CP2','Aquisição de Materiais'),'Caixa: compra comum não é transferência');
+    // conciliação por conta bancária
+    ok(typeof w.cxPorConta==='function' && typeof w.cxConta==='function','Conciliação: funções por conta disponíveis');
+    ok(w.cxConta('14 - BOSSA CORA BANK')==='Cora','Conciliação: conta Cora reconhecida');
+    ok(w.cxConta('11 BOSSA NOVA OFICIAL CAIXA 3418/2567-0')==='Caixa (CEF)','Conciliação: conta Caixa reconhecida');
+    ok(w.cxConta('12 APL BOSSA CAIXA')==='Aplicação','Conciliação: conta de aplicação reconhecida');
+    const PCt=w.cxPorConta([{valor:100,conta:'14 - CORA BANK'},{valor:50,conta:'11 OFICIAL CAIXA 3418'}],
+                           [{valReceb:30,conta:'14 - CORA BANK'}],[],[]);
+    const cora=PCt.find(x=>x.conta==='Cora');
+    ok(cora && cora.saldo===-70,'Conciliação: saldo por conta calculado (Cora -70)');
+    ok(CX.includes('Conciliação por conta bancária'),'Conciliação: seção no painel');
     // aba Receitas
     w.switchTab(16); await new Promise(r=>setTimeout(r,400));
     const REC=t('tab16');
