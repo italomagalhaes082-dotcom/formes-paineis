@@ -1446,6 +1446,17 @@ function extratoVendasDados(){
     (devol[c] = devol[c] || { v:0, n:0, quem:[] });
     devol[c].v += r.valor; devol[c].n++;
     const quem = String(r.fornecedor||'—').trim();
+    // Devolução paga a outra SPE do grupo não é devolução ao comprador: é reembolso
+    // entre obras, porque o distratado havia pago na conta da obra vizinha.
+    if (/^(BOSSA NOVA|JAZZ|LIBERTY|FORMES)/i.test(quem)) {
+      (devol[c] = devol[c] || { v:0, n:0, quem:[] });
+      devol[c].v += r.valor; devol[c].n++;
+      const alvoSPE = Object.keys(distPorPessoa).filter(x=>x.startsWith(c+'|') && distPorPessoa[x].recebido>0)
+                        .sort((a,b)=>distPorPessoa[b].recebido-distPorPessoa[a].recebido)[0];
+      if (alvoSPE) { distPorPessoa[alvoSPE].devolvido += r.valor; distPorPessoa[alvoSPE].marcadoDistrato = true;
+                     distPorPessoa[alvoSPE].viaSPE = (distPorPessoa[alvoSPE].viaSPE||0) + r.valor; }
+      return;
+    }
     if (devol[c].quem.length < 3) devol[c].quem.push(quem);
     // casa a devolução no comprador distratado correspondente
     // Pareamento em três tentativas, da mais forte para a mais frouxa:
@@ -1508,13 +1519,18 @@ function extratoVendasDados(){
       o.ordem = i+1;
       o.retido = o.recebido - o.devolvido;
       // a comissão perdida vem por casa; rateia pelo que cada comprador pagou
-      o.comPerdidas = somaRec>0 ? l.comPerdidas*(o.recebido/somaRec) : (i===0 ? l.comPerdidas : 0);
+      // A comissão perdida da casa é rateada pelo que cada comprador pagou, mas nunca
+      // além do que ficou retido: comissão de venda vigente não é perda de distrato.
+      const bruta = somaRec>0 ? l.comPerdidas*(o.recebido/somaRec) : (i===0 ? l.comPerdidas : 0);
+      o.comPerdidas = Math.min(bruta, Math.max(0, o.retido));
+      o.comExcedente = bruta - o.comPerdidas;
       o.resultado = o.retido - o.comPerdidas;
     });
     // Dois ganhos de naturezas diferentes, mantidos separados:
     //   RESULTADO DO DISTRATO — caixa retido: recebido − devolvido − comissão perdida
     //   GANHO DE REVENDA      — diferença de preço, líquida de custos embutidos
-    const resultadoDistrato = l.distratada - l.devolvido - l.comPerdidas;
+    const resultadoDistrato = ocor.length ? ocor.reduce((s,o)=>s+o.resultado,0)
+                                         : (l.distratada - l.devolvido - l.comPerdidas);
     const ganhoRevLiq = l.ganhoRev - custoRev;
     return { casa:l.casa, nDist: Math.max(l.nDist, ocor.length), ocorrencias: ocor,
       recebidoDistratado:l.distratada, devolvido:l.devolvido,
