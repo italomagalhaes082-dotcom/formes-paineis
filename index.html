@@ -1408,6 +1408,23 @@ function inadimplenciaDados(){
 // A casa 16 foi revendida MOBILIADA: o ganho aparente inclui o mobiliário.
 const REVENDA_CUSTOS = { 16: { valor: 450000, motivo: 'mobiliário incluído' } };
 
+// Preço do contrato de cada comprador, derivado da base comercial: soma do valor
+// ORIGINAL das parcelas daquele cliente naquela casa. Permite comparar o preço da
+// venda anterior com o da revenda sem depender de coluna preenchida à mão.
+function precoContratoPorPessoa(){
+  const com = (window._comercial && window._comercial.receitas) ? window._comercial.receitas : [];
+  const m = {};
+  com.forEach(r=>{
+    if (!(r.grupo === 'venda' || /Venda|INCC/i.test(r.tipo||''))) return;
+    if (r.tipo === 'INCC') return;                     // correção não é preço
+    const c = r.casa || extrairCasa(r.desc); if (!c) return;
+    const k = c + '|' + String(r.cliente||'—').trim();
+    (m[k] = m[k] || { casa:c, cliente:String(r.cliente||'—').trim(), valor:0, n:0 });
+    m[k].valor += (r.valOrig || r.valReceb || 0); m[k].n++;
+  });
+  return m;
+}
+
 function extratoVendasDados(){
   const ex = window._extrato;
   if (!ex) return null;
@@ -1457,6 +1474,16 @@ function extratoVendasDados(){
     (devol[c] = devol[c] || { v:0, n:0, quem:[] });
     devol[c].v += r.valor; devol[c].n++;
     const quem = String(r.fornecedor||'—').trim();
+    // Devolução paga a outra SPE do grupo não é devolução ao comprador: é reembolso
+    // entre obras, porque o distratado havia pago na conta da obra vizinha.
+    if (/^(BOSSA NOVA|JAZZ|LIBERTY|FORMES)/i.test(quem)) {
+      (devol[c] = devol[c] || { v:0, n:0, quem:[] });
+      devol[c].v += r.valor; devol[c].n++;
+      const alvoSPE = Object.keys(distPorPessoa).filter(x=>x.startsWith(c+'|') && distPorPessoa[x].recebido>0)
+                        .sort((a,b)=>distPorPessoa[b].recebido-distPorPessoa[a].recebido)[0];
+      if (alvoSPE) { distPorPessoa[alvoSPE].devolvido += r.valor; distPorPessoa[alvoSPE].marcadoDistrato = true; }
+      return;
+    }
     // Devolução paga a outra SPE do grupo não é devolução ao comprador: é reembolso
     // entre obras, porque o distratado havia pago na conta da obra vizinha.
     if (/^(BOSSA NOVA|JAZZ|LIBERTY|FORMES)/i.test(quem)) {
@@ -1526,8 +1553,11 @@ function extratoVendasDados(){
                        .filter(p=>p.casa===l.casa && (p.devolvido>0 || p.marcadoDistrato))
                        .sort((a,b)=>(a.primeiro||0)-(b.primeiro||0));
     const somaRec = ocor.reduce((s,o)=>s+o.recebido,0);
+    const precos = precoContratoPorPessoa();
     ocor.forEach((o,i)=>{
       o.ordem = i+1;
+      const pk = precos[l.casa + '|' + o.cliente];
+      o.precoContrato = pk ? pk.valor : 0;
       o.retido = o.recebido - o.devolvido;
       // a comissão perdida vem por casa; rateia pelo que cada comprador pagou
       // A comissão perdida da casa é rateada pelo que cada comprador pagou, mas nunca
@@ -1543,6 +1573,10 @@ function extratoVendasDados(){
     const resultadoDistrato = ocor.length ? ocor.reduce((s,o)=>s+o.resultado,0)
                                          : (l.distratada - l.devolvido - l.comPerdidas);
     const ganhoRevLiq = l.ganhoRev - custoRev;
+    // Ganho DERIVADO: preço atual menos o preço do último contrato distratado.
+    const ultimoDist = ocor.length ? ocor[ocor.length-1] : null;
+    const precoAnteriorDer = ultimoDist ? ultimoDist.precoContrato : 0;
+    const ganhoDerivadoCalc = (l.valorVenda && precoAnteriorDer) ? (l.valorVenda - precoAnteriorDer) : null;
     return { casa:l.casa, nDist: Math.max(l.nDist, ocor.length), ocorrencias: ocor,
       recebidoDistratado:l.distratada, devolvido:l.devolvido,
       retido: l.distratada - l.devolvido, comPerdidas:l.comPerdidas, resultadoDistrato,
@@ -2145,7 +2179,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-u · vendas e distratos auditados</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-v · distratos e preços auditados</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
