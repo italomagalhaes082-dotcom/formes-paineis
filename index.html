@@ -1324,9 +1324,17 @@ function saldoDevedorCasas(){
     // 95% dos casos, cobre a maior parte do contrato. Adotamos como corte o maior
     // pagamento que represente pelo menos 30% do valor de venda.
     let corte = null, repasse = null;
-    if (principais.length && valor > 0) {
-      const maior = principais.reduce((a,b)=> b.v > a.v ? b : a, principais[0]);
-      if (maior.v >= valor * 0.30) { corte = maior.d; repasse = maior; }
+    if (principais.length && valor > 0 && dv) {
+      // Só pagamento POSTERIOR ao contrato pode ser repasse. A entrada, paga no ato ou
+      // antes da assinatura, costuma ser o maior valor da série e estava sendo tomada
+      // como financiamento — o corte caía na data da venda e a correção nunca corria.
+      const posteriores = principais.filter(p => p.d > dv);
+      if (posteriores.length) {
+        const maior = posteriores.reduce((a,b)=> b.v > a.v ? b : a, posteriores[0]);
+        // e o repasse tem de vir depois de algum tempo de contrato, não no mês seguinte
+        const meses = (maior.d - dv) / 2629800000;
+        if (maior.v >= valor * 0.30 && meses >= 2) { corte = maior.d; repasse = maior; }
+      }
     }
     let saldo = valor, corrigido = 0, pagoAntesDaVenda = 0;
     if (dv && valor > 0) {
@@ -2291,7 +2299,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-ac · INCC por casa</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-ad · corte do INCC corrigido</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
