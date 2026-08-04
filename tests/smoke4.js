@@ -321,6 +321,14 @@ async function testEmp(emp, checks){
       ok(Math.abs(EVD.totD.retido-(EVD.totD.receb-EVD.totD.devol))<1,'Distratos: retido = recebido − devolvido');
     } else ok(true,'Extrato Vendas: sem extrato neste cenário — aba avisa');
     ok(EV.includes('EXTRATO GERAL'),'Extrato Vendas: declara a fonte exclusiva');
+    if (EVD && EVD.distratos.length) {
+      ok(EVD.distratos.every(d=>Math.abs(d.resultadoDistrato-(d.recebidoDistratado-d.devolvido-d.comPerdidas))<1),'Distratos: resultado = recebido − devolvido − comissão');
+      ok(EVD.distratos.every(d=>Math.abs(d.ganhoRevLiq-(d.ganhoRevBruto-d.custoRev))<1),'Distratos: ganho de revenda líquido de custos embutidos');
+      ok(EVD.distratos.every(d=>Math.abs(d.total-(d.resultadoDistrato+d.ganhoRevLiq))<1),'Distratos: total = resultado + ganho, separados');
+      const cs16=EVD.distratos.find(d=>d.casa===16);
+      if (cs16) ok(cs16.custoRev===450000,'Distratos: mobiliário da CS16 descontado do ganho');
+      else ok(true,'Distratos: CS16 fora do cenário');
+    } else ok(true,'Distratos: sem distratos no cenário');
     ok(/Caixa médio — 12 meses/.test(CX),'Média: recorte de 12 meses');
     ok(/Entrada média por mês/.test(CX) && /Saída média por mês/.test(CX),'Média: entrada e saída médias');
     ok(m1.resOp===2000,'Caixa: operacional exclui o aporte (3.000 − 1.000)');
