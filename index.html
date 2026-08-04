@@ -1318,6 +1318,16 @@ function saldoDevedorCasas(){
     const inccPago = parc.filter(p=>p.tipo==='INCC').reduce((s,p)=>s+(p.valReceb||0),0);
     const pagoPrincipal = principais.reduce((s,p)=>s+p.v,0);
     // simulação mês a mês desde a venda
+    // ═══ DATA DE CORTE DO INCC ═══
+    // Quando o financiamento é liberado, a dívida passa para o banco e a correção do
+    // incorporador para. O repasse é reconhecível: é o MAIOR pagamento da série e, em
+    // 95% dos casos, cobre a maior parte do contrato. Adotamos como corte o maior
+    // pagamento que represente pelo menos 30% do valor de venda.
+    let corte = null, repasse = null;
+    if (principais.length && valor > 0) {
+      const maior = principais.reduce((a,b)=> b.v > a.v ? b : a, principais[0]);
+      if (maior.v >= valor * 0.30) { corte = maior.d; repasse = maior; }
+    }
     let saldo = valor, corrigido = 0, pagoAntesDaVenda = 0;
     if (dv && valor > 0) {
       let y = dv.getFullYear(), m = dv.getMonth()+1;
@@ -1332,7 +1342,9 @@ function saldoDevedorCasas(){
       saldo -= pagoAntesDaVenda;
       saldo -= noMes(y,m);
       let guarda = 0;
-      while ((y < ultimo.ano || (y === ultimo.ano && m < ultimo.mes)) && guarda++ < 400) {
+      const fimY = corte ? corte.getFullYear() : ultimo.ano;
+      const fimM = corte ? corte.getMonth()+1 : ultimo.mes;
+      while ((y < fimY || (y === fimY && m < fimM)) && guarda++ < 400) {
         m++; if (m > 12) { m = 1; y++; }
         if (saldo > 0) { const j = saldo * inccMes(y,m)/100; corrigido += j; saldo += j; }
         saldo -= noMes(y,m);
@@ -1344,6 +1356,7 @@ function saldoDevedorCasas(){
     return { casa:g.casa, cliente: (u && u.cliente) || g.cliente || '—', status:g.status||'',
              dataVenda:g.dataVenda, valor, pagoPrincipal, inccPago,
              saldoNominal, saldoCorrigido, inccDevido, corrigidoTotal: corrigido, pagoAntesDaVenda,
+             dataCorte: corte, repasse: repasse ? repasse.v : 0,
              pct: valor>0 ? pagoPrincipal/valor*100 : 0,
              meses: dv ? Math.max(0, Math.round((hoje-dv)/2629800000)) : null };
   }).sort((a,b)=>b.saldoCorrigido-a.saldoCorrigido);
@@ -1841,7 +1854,7 @@ function renderInadimplencia(){
           <td style="font-weight:600;font-size:11px">CS ${String(l.casa).padStart(2,'0')}</td>
           <td style="font-size:10.5px">${String(l.cliente).slice(0,26)}</td>
           <td style="font-size:9.5px;color:var(--muted)">${l.status}</td>
-          <td style="font-family:'DM Mono',monospace;font-size:9.5px">${l.dataVenda||'—'}</td>
+          <td style="font-family:'DM Mono',monospace;font-size:9.5px">${l.dataVenda||'—'}${l.dataCorte?'<div class="kpi-sub">INCC até '+l.dataCorte.toLocaleDateString('pt-BR')+'</div>':''}</td>
           <td style="text-align:right;font-size:10.5px">${fmt(l.valor)}</td>
           <td style="text-align:right;font-size:10.5px;color:#6D9E7F">${fmt(l.pagoPrincipal)}</td>
           <td style="text-align:right;font-size:10px;color:var(--muted)">${l.pct.toFixed(0)}%</td>
@@ -1851,7 +1864,7 @@ function renderInadimplencia(){
         </tbody></table></div>
       <div class="info-box" style="border:1px solid #C4A55C55;background:rgba(196,165,92,.05);margin-top:6px"><span style="color:#C4A55C">ℹ</span><div>
         <strong>Como o saldo é calculado:</strong> parte do valor de venda na data do contrato, corrige pelo INCC-DI de cada mês e abate os pagamentos de principal no mês em que entraram. O INCC já pago pelo cliente (${fmt(SD.totalInccPago)}) aparece à parte porque quita a correção, não o principal.<br>
-        Índice atualizado até <strong>${mesRef}</strong>; meses ainda não divulgados usam ${INCC_FALLBACK.toFixed(2)}% ao mês. Casas marcadas como quitadas com saldo aparente indicam pagamento não lançado na base de parcelas — vale conferir antes de cobrar.</div></div>`;
+        Índice atualizado até <strong>${mesRef}</strong>; meses ainda não divulgados usam ${INCC_FALLBACK.toFixed(2)}% ao mês. Quando o financiamento é liberado a correção para, porque a dívida passa para o banco — o repasse é reconhecido como o maior pagamento da série que cubra ao menos 30% do contrato, e a data aparece sob a data de venda. Casas marcadas como quitadas com saldo aparente indicam pagamento não lançado na base de parcelas — vale conferir antes de cobrar.</div></div>`;
     })()}
 
     ${D.totalVencido>0 ? `
@@ -2270,7 +2283,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-y · migração de casa</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-z · INCC até o repasse</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
