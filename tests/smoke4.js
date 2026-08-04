@@ -301,6 +301,11 @@ async function testEmp(emp, checks){
     ok(cora && cora.saldo===-70,'Conciliação: saldo por conta calculado (Cora -70)');
     ok(CX.includes('Conciliação por conta bancária'),'Conciliação: seção no painel');
     // ── EXTRATO GERAL: parser e divisão de papéis ──
+    // parseVal precisa entender valor negativo — o extrato traz despesa com sinal
+    ok(w.parseVal('-1.000,00')===-1000,'parseVal: negativo pt-BR (-1.000,00 = '+w.parseVal('-1.000,00')+')');
+    ok(w.parseVal('(2.500,00)')===-2500,'parseVal: parênteses viram negativo');
+    ok(w.parseVal('1.000,00')===1000,'parseVal: positivo inalterado');
+    ok(w.parseVal('-1.744.400,00')===-1744400,'parseVal: negativo com dois separadores de milhar');
     ok(typeof w.parseExtrato==='function','Extrato: parser disponível');
     const hdrX=['Data movimento','Id','Nome do fornecedor/cliente','Rec','Qtd','Descrição','Ag','Tipo','Origem do lançamento','Conta bancária','Forma','Valor (R$)','Saldo conta (R$)','Situação','Valor original (R$)','Juros (R$)','Multa (R$)','Desconto (R$)','Taxas (R$)','Data de competência','Venc','Prev','Obs','NF','Categoria 1','Val','Centro de Custo 1','ValCC'];
     const lin=(data,quem,desc,tipo,conta,valor,situ,cat)=>{const a=new Array(28).fill('');

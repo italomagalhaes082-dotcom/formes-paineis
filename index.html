@@ -888,7 +888,24 @@ const fmt     = v => new Intl.NumberFormat("pt-BR",{style:"currency",currency:"B
 const parseDate = s => { const p=String(s).trim().split("/"); return p.length===3?new Date(+p[2],+p[1]-1,+p[0]):null; };
 
 // parseVal: aceita número puro ou string em formato pt-BR ("110.000,00") ou americano
+// Wrapper ciente de SINAL. O extrato traz despesa com valor negativo ("-1.000,00")
+// e as regras de formato pt-BR abaixo ancoram em ^\d, então o menos fazia a string
+// cair no ramo genérico e "-1.000,00" virava -1. As abas antigas nunca tiveram
+// negativo, por isso o defeito só apareceu agora.
 const parseVal = s => {
+  if (s === null || s === undefined || s === "") return 0;
+  if (typeof s === "number") return s;
+  let raw = String(s).trim();
+  let neg = false;
+  if (/^\(.*\)$/.test(raw)) { neg = true; raw = raw.slice(1, -1).trim(); }   // (1.000,00)
+  raw = raw.replace(/R\$\s*/g, "").trim();
+  if (/^-/.test(raw))      { neg = true; raw = raw.replace(/^-\s*/, ""); }     // -1.000,00
+  else if (/-$/.test(raw)) { neg = true; raw = raw.replace(/\s*-$/, ""); }     // 1.000,00-
+  const abs = _parseValAbs(raw);
+  return neg ? -abs : abs;
+};
+window.parseVal = parseVal;
+const _parseValAbs = s => {
   if(s === null || s === undefined || s === "") return 0;
   // Número puro direto
   if(typeof s === "number") return s;
@@ -1462,7 +1479,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-b · projeção de recebíveis</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-c · valores negativos</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
