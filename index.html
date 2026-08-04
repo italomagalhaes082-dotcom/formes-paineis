@@ -275,6 +275,35 @@
 #tab13 .papel , #tab14 .papel { background:#fff; color:#1a1f24; border-radius:12px; padding:28px 30px; max-width:820px; margin:0 auto; font-family:'Space Grotesk',sans-serif; }
 #tab13 .papel h1 , #tab14 .papel h1 { font-size:22px; margin:0 0 2px; } #tab13 .papel h2 , #tab14 .papel h2 { font-size:14px; margin:20px 0 8px; border-bottom:2px solid #1a1f24; padding-bottom:4px; text-transform:uppercase; letter-spacing:1px; }
 #tab13 .papel , #tab14 .papel { overflow:hidden; }
+/* ── Gráfico de caixa: rolagem horizontal e granularidade ── */
+.cx-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+.cx-topo{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.cx-titulo{font-size:1.0625rem;font-weight:600;letter-spacing:-.02em}
+.cx-gran{display:flex;gap:4px;background:var(--surface-3);border-radius:8px;padding:3px}
+.cx-gran button{background:none;border:0;color:var(--muted);font-family:var(--font);font-size:12px;
+  padding:5px 11px;border-radius:6px;cursor:pointer;white-space:nowrap}
+.cx-gran button.on{background:var(--card);color:var(--text);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.cx-scroll{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;
+  scrollbar-width:thin;padding-bottom:4px}
+.cx-scroll::-webkit-scrollbar{height:7px}
+.cx-scroll::-webkit-scrollbar-thumb{background:var(--hairline-strong);border-radius:4px}
+.cx-dica{font-size:10.5px;color:var(--text-3);margin-top:6px}
+.chart-cx .fxg{stroke:rgba(255,255,255,.07)}
+.chart-cx .fxzero{stroke:rgba(255,255,255,.34);stroke-width:1.4;stroke-dasharray:3 3}
+@media (max-width:680px){
+  .cx-card{padding:11px 9px}
+  .cx-titulo{font-size:.95rem}
+  .cx-gran button{font-size:11px;padding:5px 9px}
+}
+/* impressão: sem rolagem, a série inteira na largura da página */
+@media print{
+  .cx-scroll{overflow:visible !important}
+  .cx-scroll > div{width:100% !important}
+  .chart-cx{width:100% !important;max-height:200px}
+  .chart-cx .fxg{stroke:#e1e7eb}
+  .chart-cx .fxzero{stroke:#9aa4ac}
+}
+
 /* Rendimentos de aplicação — cabe na tela do celular sem rolagem lateral */
 .rend-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
 .rend-tab table{width:100%;table-layout:fixed}
@@ -387,6 +416,12 @@
 /* Sem float: float vazava para o conteúdo seguinte e espremia a página inteira em
    meia largura. O posicionamento lado a lado é feito no clone, e só quando há dois
    cartões irmãos — cartão sozinho ocupa a largura inteira. */
+#audRelOv .papel-auto .cx-card{width:100% !important;float:none !important;display:block !important;clear:both;border-color:#e4eaee !important;padding:10px !important}
+#audRelOv .papel-auto .cx-scroll{overflow:visible !important}
+#audRelOv .papel-auto .cx-scroll > div{width:100% !important}
+#audRelOv .papel-auto .chart-cx{width:100% !important;max-height:210px}
+#audRelOv .papel-auto .chart-cx .fxg{stroke:#e1e7eb}
+#audRelOv .papel-auto .chart-cx .fxzero{stroke:#9aa4ac}
 #audRelOv .papel-auto .fx-card{padding:9px 11px !important;margin-bottom:8px !important;
   box-sizing:border-box;border-radius:8px !important;border-color:#e4eaee !important}
 /* Tudo que não é cartão de gráfico limpa o float. Sem isso o conteúdo seguinte
@@ -1803,7 +1838,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-i · INCC corrigido</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-k · caixa mensal navegável</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -3555,6 +3590,110 @@ window.cxSetReal = function(conta){
   renderCaixa();
 };
 
+// ═══════════════════════════════════════════════════════════════════
+// GRÁFICO DEDICADO DE CAIXA
+// O motor genérico assume valores positivos: escala do zero ao máximo. Saldo de
+// caixa vai a negativo, e ali a curva saía do quadro. Este desenha a escala real
+// (mínimo ao máximo), marca a linha do zero, pinta a área acima e abaixo dela com
+// cores distintas e destaca pico e vale. Largura mínima por ponto para o eixo do
+// tempo ficar legível — o container rola na horizontal quando não cabe.
+// ═══════════════════════════════════════════════════════════════════
+function fxCaixaSerie(alvo, cfg){
+  if (!alvo) return;
+  const L = cfg.labels||[], S = cfg.series||[];
+  if (!L.length || !S.length) { alvo.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:18px 0">Sem dados no período.</div>'; return; }
+  const larguraCont = alvo.parentElement ? alvo.parentElement.clientWidth : 700;
+  const pxPonto = cfg.pxPonto || 34;
+  const W = Math.max(larguraCont - 2, L.length * pxPonto);
+  const H = cfg.altura || 250;
+  const P = { l:62, r:14, t:16, b:34 };
+  alvo.style.width = W + 'px';
+  const todos = S.reduce((a,s)=>a.concat(s.values), []);
+  let max = Math.max.apply(null, todos), min = Math.min.apply(null, todos);
+  if (max === min) { max = max + 1; min = min - 1; }
+  const folga = (max - min) * 0.12;
+  max += folga; min -= folga;
+  if (min > 0) min = 0;                       // o zero sempre visível
+  const x = i => P.l + i*(W-P.l-P.r)/Math.max(L.length-1,1);
+  const y = v => H - P.b - ((v-min)/(max-min))*(H-P.t-P.b);
+  const y0 = y(0);
+  let g = '';
+  // grade e eixo de valores
+  for (let t=0; t<=4; t++){
+    const v = min + (max-min)*t/4, yy = y(v);
+    g += '<line x1="'+P.l+'" x2="'+(W-P.r)+'" y1="'+yy.toFixed(1)+'" y2="'+yy.toFixed(1)+'" class="fxg"/>'
+       + '<text x="'+(P.l-8)+'" y="'+(yy+4).toFixed(1)+'" text-anchor="end" class="ax">'+fxK(v)+'</text>';
+  }
+  // linha do zero, destacada
+  if (min < 0) g += '<line x1="'+P.l+'" x2="'+(W-P.r)+'" y1="'+y0.toFixed(1)+'" y2="'+y0.toFixed(1)+'" class="fxzero"/>';
+  // eixo do tempo: rótulo a cada N, conforme o espaço real
+  const passo = Math.max(1, Math.ceil(L.length / Math.max(4, Math.floor((W-P.l-P.r)/58))));
+  L.forEach((l,i)=>{
+    // o último rótulo só entra se não colidir com o anterior
+    const ehUltimo = i === L.length-1;
+    const marcado = i % passo === 0;
+    if (!marcado && !(ehUltimo && (L.length-1) % passo > passo*0.6)) return;
+    if (marcado && ehUltimo === false || ehUltimo) {}
+    g += '<text x="'+x(i).toFixed(1)+'" y="'+(H-10)+'" text-anchor="'+(ehUltimo?'end':'middle')+'" class="ax">'+fxEsc(l)+'</text>';
+  });
+  // séries
+  S.forEach((s,si)=>{
+    const pts = s.values.map((v,i)=>[x(i), y(v)]);
+    const d = pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+    if (s.area !== false && si === 0) {
+      // área positiva e negativa com cores próprias
+      const area = d + ' L'+pts[pts.length-1][0].toFixed(1)+' '+y0.toFixed(1)+' L'+pts[0][0].toFixed(1)+' '+y0.toFixed(1)+' Z';
+      const cid = 'cxclip'+si+Math.floor(Math.random()*99999);
+      g += '<defs>'
+         + '<clipPath id="'+cid+'p"><rect x="0" y="0" width="'+W+'" height="'+y0.toFixed(1)+'"/></clipPath>'
+         + '<clipPath id="'+cid+'n"><rect x="0" y="'+y0.toFixed(1)+'" width="'+W+'" height="'+(H-y0).toFixed(1)+'"/></clipPath>'
+         + '</defs>'
+         + '<path d="'+area+'" fill="rgba(109,158,127,.20)" clip-path="url(#'+cid+'p)"/>'
+         + '<path d="'+area+'" fill="rgba(191,107,96,.22)" clip-path="url(#'+cid+'n)"/>';
+    }
+    g += '<path d="'+d+'" fill="none" stroke="'+(s.color||'#6C8FB5')+'" stroke-width="'+(s.largura||2.2)+'"'
+       + (s.tracejada ? ' stroke-dasharray="5 4"' : '') + ' stroke-linejoin="round" stroke-linecap="round"/>';
+  });
+  // pico e vale da série principal
+  if (cfg.marcos !== false && S[0]) {
+    const v0 = S[0].values;
+    const iMax = v0.indexOf(Math.max.apply(null, v0)), iMin = v0.indexOf(Math.min.apply(null, v0));
+    [[iMax,'#6C8FB5','pico'],[iMin, v0[iMin]<0?'#BF6B60':'#8E7FA8','menor']].forEach(([i,c,rot])=>{
+      if (i < 0) return;
+      const px = x(i), py = y(v0[i]);
+      const anc = px > W-110 ? 'end' : 'start', dx = anc==='end' ? -7 : 7;
+      g += '<circle cx="'+px.toFixed(1)+'" cy="'+py.toFixed(1)+'" r="3.4" fill="'+c+'"/>'
+         + '<text x="'+(px+dx).toFixed(1)+'" y="'+(py-8).toFixed(1)+'" text-anchor="'+anc+'" class="ax" style="font-weight:600;fill:'+c+'">'+rot+' '+fxK(v0[i])+'</text>';
+    });
+  }
+  alvo.innerHTML = '<svg class="chart chart-cx" viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" preserveAspectRatio="none" role="img" aria-label="'+fxEsc(cfg.alt||'saldo de caixa')+'">'+g+'</svg>';
+  // abre já no fim da série, que é o que interessa
+  if (cfg.rolarAoFim !== false && alvo.parentElement) {
+    requestAnimationFrame(()=>{ alvo.parentElement.scrollLeft = alvo.parentElement.scrollWidth; });
+  }
+}
+
+// Agrupa a série mensal em trimestre ou ano, para caber a visão do período inteiro.
+let _cxGran = 'mes';
+window.cxGran = function(g){ _cxGran = g; renderCaixa();
+  const el=document.getElementById('tab18'); if(el) el.scrollIntoView({block:'start'}); };
+function cxAgrupar(linhas, gran){
+  if (gran === 'mes') return linhas.map(l=>({ rot: cxLabel(l.ym), saldo:l.saldo, saldoOp:l.saldoOp,
+                                              entrada:l.entrada, saida:l.saida }));
+  const tam = gran === 'ano' ? 12 : 3;
+  const out = [], chave = l => gran==='ano' ? Math.floor(l.ym/100)
+                                            : Math.floor(l.ym/100)+'-T'+Math.ceil((l.ym%100)/3);
+  let atual = null;
+  linhas.forEach(l=>{
+    const k = chave(l);
+    if (!atual || atual.k !== k) { atual = { k, rot: gran==='ano'? String(k) : String(k).replace('-',' '),
+      entrada:0, saida:0, saldo:l.saldo, saldoOp:l.saldoOp }; out.push(atual); }
+    atual.entrada += l.entrada; atual.saida += l.saida;
+    atual.saldo = l.saldo; atual.saldoOp = l.saldoOp;   // saldo é posição: vale o último do grupo
+  });
+  return out;
+}
+
 function renderCaixa(){
   const el = document.getElementById('tab18');
   if (!el) return;
@@ -3604,8 +3743,22 @@ function renderCaixa(){
 
     ${negativos.length? `<div class="info-box" style="border:1px solid #BF6B6066;background:rgba(191,107,96,.06);margin-top:10px"><span style="color:#BF6B60">⚠</span><div><strong>Caixa ficou negativo em ${negativos.length} mês(es).</strong> ${negativos.slice(0,6).map(x=>cxLabel(x.ym)+' ('+fmt(x.saldo)+')').join(' · ')}${negativos.length>6?' …':''}<br><span style="font-size:11px;color:var(--muted)">Saldo negativo aqui significa que os lançamentos consomem mais do que entrou desde a abertura. Ou houve aporte não registrado, ou a obra operou com recurso de terceiros no período.</span></div></div>`:''}
 
-    ${fxCard('Saldo de caixa mês a mês','g_cx_saldo','<div class="legend"><span><i style="background:#6C8FB5"></i>Caixa total</span><span><i style="background:#6D9E7F"></i>Caixa operacional (sem sócio)</span></div>','A linha verde exclui aporte e retirada: quando ela sobe, a obra está gerando caixa por conta própria.')}
-    ${fxCard('Entradas e saídas por mês','g_cx_fluxo','<div class="legend"><span><i style="background:#6D9E7F"></i>Entradas</span><span><i style="background:#BF6B60"></i>Saídas</span></div>','Barras lado a lado: onde a vermelha supera a verde, o mês consumiu caixa.')}
+    <div class="cx-card">
+      <div class="cx-topo">
+        <div class="cx-titulo">Saldo de caixa ao longo do tempo${hintIcon('A linha azul é o caixa total; a verde tracejada exclui aporte e retirada de sócio, mostrando se a obra se paga sozinha. Área verde acima do zero, vermelha abaixo. Arraste o gráfico para percorrer o período.')}</div>
+        <div class="cx-gran no-print">
+          ${['mes','tri','ano'].map(g=>`<button onclick="cxGran('${g}')" class="${_cxGran===g?'on':''}">${g==='mes'?'Mês':g==='tri'?'Trimestre':'Ano'}</button>`).join('')}
+        </div>
+      </div>
+      <div class="legend"><span><i style="background:#6C8FB5"></i>Caixa total</span><span><i style="background:#6D9E7F"></i>Operacional, sem sócio</span></div>
+      <div class="cx-scroll"><div id="g_cx_saldo"></div></div>
+      <div class="cx-dica no-print">${_cxGran==='mes'? L.length+' meses · arraste para o lado para percorrer, ou troque para trimestre e ano para ver tudo de uma vez' : 'visão agrupada — volte para Mês para o detalhe'}</div>
+    </div>
+    <div class="cx-card">
+      <div class="cx-titulo" style="margin-bottom:8px">Entradas e saídas por ${_cxGran==='mes'?'mês':_cxGran==='tri'?'trimestre':'ano'}${hintIcon('Onde a barra vermelha supera a verde, o período consumiu caixa.')}</div>
+      <div class="legend"><span><i style="background:#6D9E7F"></i>Entradas</span><span><i style="background:#BF6B60"></i>Saídas</span></div>
+      <div class="cx-scroll"><div id="g_cx_fluxo"></div></div>
+    </div>
 
     ${(function(){
       const PC = cxPorConta(_DESPESAS, _RECEITAS, _APORTES, (typeof _RENDIMENTOS!=='undefined'? _RENDIMENTOS:[]));
@@ -3672,13 +3825,23 @@ function renderCaixa(){
         <td style="text-align:right;color:var(--muted)" class="col-op">${fmt(x.saldoOp)}</td></tr>`).join('')}
       </tbody></table></div>`;
 
-  const labs = L.map(x=>cxLabel(x.ym));
-  const passo = Math.max(1, Math.ceil(L.length/9));
-  fxLinhas(document.getElementById('g_cx_saldo'), { labels: labs, cada: passo,
-    series:[ {values:L.map(x=>x.saldo), color:'#6C8FB5', area:'rgba(108,143,181,.14)'},
-             {values:L.map(x=>x.saldoOp), color:'#6D9E7F'} ], alt:'saldo de caixa mês a mês' });
-  fxBarras(document.getElementById('g_cx_fluxo'), { grupos: labs, cada: passo,
-    series:[ {values:L.map(x=>x.entrada), color:'#6D9E7F'}, {values:L.map(x=>x.saida), color:'#BF6B60'} ], alt:'entradas e saídas por mês' });
+  const G = cxAgrupar(L, _cxGran);
+  const labs = G.map(x=>x.rot);
+  const pxPonto = _cxGran==='mes' ? 34 : _cxGran==='tri' ? 52 : 70;
+  fxCaixaSerie(document.getElementById('g_cx_saldo'), {
+    labels: labs, pxPonto, altura: 250,
+    series:[ { values:G.map(x=>x.saldo),   color:'#6C8FB5', largura:2.4 },
+             { values:G.map(x=>x.saldoOp), color:'#6D9E7F', largura:1.8, tracejada:true, area:false } ],
+    alt:'saldo de caixa por '+_cxGran });
+  const alvoF = document.getElementById('g_cx_fluxo');
+  if (alvoF) {
+    const Wf = Math.max((alvoF.parentElement?alvoF.parentElement.clientWidth:700)-2, G.length*pxPonto);
+    alvoF.style.width = Wf+'px';
+    fxBarras(alvoF, { grupos: labs, cada: Math.max(1, Math.ceil(G.length/10)),
+      series:[ {values:G.map(x=>x.entrada), color:'#6D9E7F'}, {values:G.map(x=>x.saida), color:'#BF6B60'} ],
+      alt:'entradas e saídas' });
+    if (alvoF.parentElement) requestAnimationFrame(()=>{ alvoF.parentElement.scrollLeft = alvoF.parentElement.scrollWidth; });
+  }
 }
 
 // ═══════════ 🚜 TERRAPLANAGEM, ARRIMO E MÁQUINAS — exclusivo Bossa Nova ═══════════

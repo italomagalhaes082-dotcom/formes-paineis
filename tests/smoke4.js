@@ -255,6 +255,28 @@ async function testEmp(emp, checks){
     ok(CX.includes('Movimento mês a mês'),'Caixa: tabela mês a mês');
     ok(CX.includes('Composição das entradas'),'Caixa: composição de entradas e saídas');
     ok(!!w.document.querySelector('#tab18 svg.chart'),'Caixa: gráficos renderizados');
+    // gráfico dedicado: escala com negativos, rolagem e granularidade
+    ok(typeof w.fxCaixaSerie==='function','Gráfico caixa: motor dedicado disponível');
+    ok(CX.includes('cx-scroll'),'Gráfico caixa: container com rolagem horizontal');
+    ok(CX.includes('cx-gran'),'Gráfico caixa: seletor de granularidade');
+    ok(/Mês/.test(CX) && /Trimestre/.test(CX) && /Ano/.test(CX),'Gráfico caixa: três granularidades');
+    ok(typeof w.cxAgrupar==='function','Gráfico caixa: agrupador disponível');
+    const linhasT=[{ym:202501,saldo:100,saldoOp:50,entrada:10,saida:5},{ym:202502,saldo:200,saldoOp:60,entrada:20,saida:8},
+                   {ym:202503,saldo:300,saldoOp:70,entrada:30,saida:9},{ym:202504,saldo:400,saldoOp:80,entrada:40,saida:11}];
+    const tri=w.cxAgrupar(linhasT,'tri');
+    ok(tri.length===2,'Agrupamento: 4 meses viram 2 trimestres');
+    ok(tri[0].entrada===60 && tri[0].saida===22,'Agrupamento: entradas e saídas somam no trimestre');
+    ok(tri[0].saldo===300,'Agrupamento: saldo é posição, vale o último mês do grupo');
+    const ano=w.cxAgrupar(linhasT,'ano');
+    ok(ano.length===1 && ano[0].saldo===400,'Agrupamento: ano fecha com o último saldo');
+    ok(w.cxAgrupar(linhasT,'mes').length===4,'Agrupamento: mensal preserva todos os meses');
+    // negativos precisam caber na escala
+    const alvoT=w.document.createElement('div');
+    const wrap=w.document.createElement('div'); wrap.appendChild(alvoT); w.document.body.appendChild(wrap);
+    w.fxCaixaSerie(alvoT,{labels:['a','b','c'],series:[{values:[100,-50,30],color:'#6C8FB5'}],altura:200,rolarAoFim:false});
+    const svgT=alvoT.querySelector('svg');
+    ok(!!svgT,'Gráfico caixa: renderiza com valores negativos');
+    ok(/fxzero/.test(alvoT.innerHTML),'Gráfico caixa: linha do zero desenhada quando há negativo');
     // a matemática, com dados sintéticos controlados
     const dSint=[{data:'10/01/2025',valor:1000,categoria:'Aquisição de Materiais',descricao:'CIMENTO'},
                  {data:'10/02/2025',valor:500,categoria:'Diversos',descricao:'TRANSFERENCIA ENTRE CONTAS'}];
