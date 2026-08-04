@@ -710,6 +710,7 @@
       <button class="tab" id="tabBtnTerra" onclick="switchTab(17)" style="display:none">🚜 Terraplanagem</button>
       <button class="tab" onclick="switchTab(18)">🏦 Evolução de Caixa</button>
       <button class="tab" onclick="switchTab(19)">📮 Inadimplência</button>
+      <button class="tab" onclick="switchTab(20)">🧾 Extrato Vendas</button>
     </div>
   </div>
   <div class="content">
@@ -733,6 +734,7 @@
     <div class="tab-content" id="tab17"></div>
     <div class="tab-content" id="tab18"></div>
     <div class="tab-content" id="tab19"></div>
+    <div class="tab-content" id="tab20"></div>
   </div>
 </div>
 
@@ -1363,6 +1365,185 @@ function inadimplenciaDados(){
            totalParcelas, pctAberto, baseSemAberto };
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// EXTRATO VENDAS — a venda de cada casa vista pelo DINHEIRO que entrou
+// Fonte exclusiva: EXTRATO GERAL. Enquanto a base de parcelas mostra o que o
+// contrato previa (e traz a quitação contábil dos distratos como se fosse
+// recebimento), o extrato mostra o que de fato passou pela conta. Valor de venda,
+// status e data vêm da apuração curada, que o extrato não tem.
+// ═══════════════════════════════════════════════════════════════════
+function extratoVendasDados(){
+  const ex = window._extrato;
+  if (!ex) return null;
+  const gv = (typeof _GV !== 'undefined' && _GV && _GV.length) ? _GV : [];
+  const porCasaGV = {}; gv.forEach(g=>porCasaGV[g.casa]=g);
+
+  // ── recebimentos por casa, separados por natureza ──
+  const casas = {};
+  const zero = c => (casas[c] = casas[c] || { casa:c, venda:0, distratada:0, incc:0, person:0, outros:0,
+                                              total:0, n:0, clientes:{}, primeiro:null, ultimo:null });
+  ex.receitas.forEach(r=>{
+    if (!/CONCILIADO/i.test(r.situacao||'') && r.situacao) return;   // só dinheiro confirmado
+    const c = extrairCasa(r.desc); if (!c) return;
+    const g = zero(c); const v = r.valReceb||0;
+    if (r.tipo === 'Venda') g.venda += v;
+    else if (r.tipo === 'VendaDistratada') g.distratada += v;
+    else if (r.tipo === 'INCC') g.incc += v;
+    else if (r.tipo === 'Personalizacao') g.person += v;
+    else g.outros += v;
+    g.total += v; g.n++;
+    const cli = String(r.cliente||'—').trim();
+    g.clientes[cli] = (g.clientes[cli]||0) + v;
+    const d = parseDate(r.dataComp);
+    if (d) { if (!g.primeiro || d < g.primeiro) g.primeiro = d; if (!g.ultimo || d > g.ultimo) g.ultimo = d; }
+  });
+  // ── devoluções de distrato por casa ──
+  const devol = {};
+  ex.despesas.forEach(r=>{
+    if (!/CONCILIADO/i.test(r.situacao||'') && r.situacao) return;
+    const d = _audNorm(r.descOriginal||r.descricao||''), cat = _audNorm(r.categoria||'');
+    if (!/DISTRAT|PRE SINAL|PRÉ SINAL/.test(d) && !/DISTRATO/.test(cat)) return;
+    const c = extrairCasa(r.descOriginal||r.descricao); if (!c) return;
+    (devol[c] = devol[c] || { v:0, n:0, quem:[] });
+    devol[c].v += r.valor; devol[c].n++;
+    if (devol[c].quem.length < 3) devol[c].quem.push(String(r.fornecedor||'—').trim());
+  });
+
+  // ── linha por casa: as 66 ──
+  const nCasas = (gv.length || CFG.nCasas || 0);
+  const listaCasas = gv.length ? gv.map(g=>g.casa) : Object.keys(casas).map(Number);
+  const linhas = listaCasas.sort((a,b)=>a-b).map(c=>{
+    const g = casas[c] || zero(c);
+    const info = porCasaGV[c] || {};
+    const dv = devol[c] || { v:0, n:0, quem:[] };
+    const valorVenda = info.valor || 0;
+    const disponivel = /DISPON/i.test(info.status||'');
+    const clientes = Object.entries(g.clientes).sort((a,b)=>b[1]-a[1]);
+    const principal = clientes.length ? clientes[0][0] : (info.cliente || '—');
+    // caixa líquido da unidade: tudo que entrou menos o que voltou ao distratado
+    const liquido = g.total - dv.v;
+    const saldoContrato = disponivel ? 0 : Math.max(0, valorVenda - g.venda);
+    return { casa:c, status:info.status||'—', dataVenda:info.dataVenda||'', valorVenda,
+             cliente: info.cliente || principal, nClientes: clientes.length,
+             venda:g.venda, distratada:g.distratada, incc:g.incc, person:g.person, outros:g.outros,
+             totalRecebido:g.total, nLanc:g.n,
+             devolvido:dv.v, nDevol:dv.n, liquido,
+             saldoContrato, disponivel,
+             pct: valorVenda>0 ? g.venda/valorVenda*100 : 0,
+             primeiro:g.primeiro, ultimo:g.ultimo,
+             nDist: info.nDist||0, ganhoRev: info.ganhoRev||0, comPerdidas: info.comPerdidas||0 };
+  });
+
+  // ── distratos: crédito, devolução e ganho na revenda ──
+  const distratos = linhas.filter(l=>l.nDist>0 || l.distratada>0 || l.devolvido>0).map(l=>({
+    casa:l.casa, nDist:l.nDist,
+    recebidoDistratado: l.distratada,
+    devolvido: l.devolvido,
+    retido: l.distratada - l.devolvido,
+    comPerdidas: l.comPerdidas,
+    ganhoRev: l.ganhoRev,
+    resultado: (l.distratada - l.devolvido) + l.ganhoRev - l.comPerdidas,
+    quemDevolveu: (devol[l.casa]||{quem:[]}).quem.join(', ') || '—',
+    statusAtual: l.status, valorAtual: l.valorVenda
+  })).sort((a,b)=>b.resultado-a.resultado);
+
+  const T = f => linhas.reduce((s,l)=>s+(l[f]||0), 0);
+  const TD = f => distratos.reduce((s,d)=>s+(d[f]||0), 0);
+  return { linhas, distratos, nCasas,
+    tot: { valorVenda:T('valorVenda'), venda:T('venda'), distratada:T('distratada'), incc:T('incc'),
+           person:T('person'), outros:T('outros'), totalRecebido:T('totalRecebido'),
+           devolvido:T('devolvido'), liquido:T('liquido'), saldoContrato:T('saldoContrato') },
+    totD: { receb:TD('recebidoDistratado'), devol:TD('devolvido'), retido:TD('retido'),
+            comPerdidas:TD('comPerdidas'), ganhoRev:TD('ganhoRev'), resultado:TD('resultado'),
+            n:distratos.reduce((s,d)=>s+d.nDist,0) } };
+}
+
+function renderExtratoVendas(){
+  const el = document.getElementById('tab20'); if (!el) return;
+  const D = extratoVendasDados();
+  if (!D) { el.innerHTML = '<div class="info-box" style="border:1px solid #C4A55C66"><span>ℹ</span><div>Esta aba lê exclusivamente a aba <strong>EXTRATO GERAL</strong> da planilha, que ainda não foi encontrada neste empreendimento. Assim que ela existir, a tabela é montada sozinha.</div></div>'; return; }
+  const k=(l,v,s,c,h)=>`<div class="kpi" style="border-top:2px solid ${c}"><div class="kpi-label">${l}${h?hintIcon(h):''}</div><div class="kpi-value" style="color:${c}">${v}</div>${s?`<div class="kpi-sub">${s}</div>`:''}</div>`;
+  const dt = d => d ? d.toLocaleDateString('pt-BR') : '—';
+  const vendidas = D.linhas.filter(l=>!l.disponivel);
+
+  el.innerHTML = `
+    <div class="info-box" style="border:1px solid #6C8FB540;margin-bottom:12px"><span>🧾</span><div><strong>A venda de cada casa pelo dinheiro que entrou.</strong>
+    Fonte exclusiva: aba <strong>EXTRATO GERAL</strong>, apenas lançamentos conciliados com o banco. A base de parcelas mostra o que o contrato previa e traz a quitação contábil dos distratos como se fosse recebimento; aqui só entra o que passou pela conta. Valor de venda, data e status vêm da apuração curada, que o extrato não tem.</div></div>
+
+    <div class="kpi-grid">
+      ${k('VGV das '+D.nCasas+' casas', fmt(D.tot.valorVenda), vendidas.length+' vendidas · '+(D.nCasas-vendidas.length)+' em estoque', '#6C8FB5')}
+      ${k('Recebido de venda', fmt(D.tot.venda), (D.tot.valorVenda>0? (D.tot.venda/D.tot.valorVenda*100).toFixed(1):'0')+'% do VGV · dinheiro em conta', '#6D9E7F')}
+      ${k('Saldo de contrato', fmt(D.tot.saldoContrato), 'a receber das casas vendidas', '#C09257')}
+      ${k('Caixa líquido das unidades', fmt(D.tot.liquido), 'tudo que entrou menos devoluções de distrato', '#8E7FA8','Soma de venda, distratos anteriores, INCC e personalização, menos o que foi devolvido a comprador distratado. É o dinheiro que a unidade gerou até hoje.')}
+    </div>
+
+    <div class="section-title" style="margin-top:16px">Vendas por casa — recebimento por natureza${hintIcon('Venda é o principal do contrato vigente. Distratado é o que entrou de compradores anteriores e ficou. INCC é correção monetária. Personalização é adicional contratado à parte.')}</div>
+    <div class="table-wrap" style="max-height:none"><table>
+      <thead><tr>
+        <th>Casa</th><th>Cliente</th><th>Status</th><th>Venda</th>
+        <th style="text-align:right">Valor</th><th style="text-align:right">Recebido venda</th><th style="text-align:right">%</th>
+        <th style="text-align:right">Distratado</th><th style="text-align:right">INCC</th><th style="text-align:right">Person.</th>
+        <th style="text-align:right">Devolvido</th><th style="text-align:right">Líquido</th><th style="text-align:right">Saldo</th>
+      </tr></thead>
+      <tbody>${D.linhas.map(l=>`<tr${l.disponivel?' style="opacity:.6"':''}>
+        <td style="font-weight:600;font-size:11px">CS ${String(l.casa).padStart(2,'0')}</td>
+        <td style="font-size:10px">${String(l.cliente||'—').slice(0,22)}</td>
+        <td style="font-size:9.5px;color:var(--muted)">${l.status}</td>
+        <td style="font-family:'DM Mono',monospace;font-size:9.5px">${l.dataVenda||'—'}</td>
+        <td style="text-align:right;font-size:10px">${l.valorVenda?fmt(l.valorVenda):'—'}</td>
+        <td style="text-align:right;font-size:10px;color:#6D9E7F">${l.venda?fmt(l.venda):'—'}</td>
+        <td style="text-align:right;font-size:9.5px;color:${l.pct>=99?'#6D9E7F':l.pct<25&&!l.disponivel?'#BF6B60':'var(--muted)'}">${l.disponivel?'—':l.pct.toFixed(0)+'%'}</td>
+        <td style="text-align:right;font-size:10px;color:${l.distratada?'#C4A55C':'var(--text-3)'}">${l.distratada?fmt(l.distratada):'—'}</td>
+        <td style="text-align:right;font-size:10px">${l.incc?fmt(l.incc):'—'}</td>
+        <td style="text-align:right;font-size:10px">${l.person?fmt(l.person):'—'}</td>
+        <td style="text-align:right;font-size:10px;color:${l.devolvido?'#BF6B60':'var(--text-3)'}">${l.devolvido?'−'+fmt(l.devolvido):'—'}</td>
+        <td style="text-align:right;font-size:10px;font-weight:600">${l.liquido?fmt(l.liquido):'—'}</td>
+        <td style="text-align:right;font-weight:700;color:${l.saldoContrato>1000?'#BF6B60':'var(--text-3)'}">${l.saldoContrato>1?fmt(l.saldoContrato):'—'}</td></tr>`).join('')}
+        <tr style="border-top:2px solid var(--border);font-weight:700">
+          <td colspan="4">Total — ${D.nCasas} casas</td>
+          <td style="text-align:right">${fmt(D.tot.valorVenda)}</td>
+          <td style="text-align:right;color:#6D9E7F">${fmt(D.tot.venda)}</td>
+          <td style="text-align:right">${(D.tot.venda/Math.max(1,D.tot.valorVenda)*100).toFixed(0)}%</td>
+          <td style="text-align:right;color:#C4A55C">${fmt(D.tot.distratada)}</td>
+          <td style="text-align:right">${fmt(D.tot.incc)}</td>
+          <td style="text-align:right">${fmt(D.tot.person)}</td>
+          <td style="text-align:right;color:#BF6B60">−${fmt(D.tot.devolvido)}</td>
+          <td style="text-align:right">${fmt(D.tot.liquido)}</td>
+          <td style="text-align:right;color:#BF6B60">${fmt(D.tot.saldoContrato)}</td></tr>
+      </tbody></table></div>
+
+    <div class="section-title" style="margin-top:18px">Distratos — crédito retido e ganho na revenda${hintIcon('Recebido do distratado é o que o comprador anterior pagou. Devolvido é o que voltou a ele. A diferença é a retenção contratual. O ganho de revenda é a diferença de preço na nova venda. O resultado soma retenção e ganho e desconta a comissão perdida.')}</div>
+    <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+      ${k('Recebido de distratados', fmt(D.totD.receb), D.totD.n+' distratos em '+D.distratos.length+' casas', '#C4A55C')}
+      ${k('Devolvido', fmt(D.totD.devol), (D.totD.receb>0? (D.totD.devol/D.totD.receb*100).toFixed(0):'0')+'% do que foi recebido', '#BF6B60')}
+      ${k('Retido em contrato', fmt(D.totD.retido), 'multa e retenção que ficaram no caixa', '#6D9E7F')}
+      ${k('Resultado dos distratos', fmt(D.totD.resultado), 'retido + ganho de revenda − comissão perdida', D.totD.resultado>=0?'#6D9E7F':'#BF6B60')}
+    </div>
+    <div class="table-wrap" style="max-height:none;margin-top:8px"><table>
+      <thead><tr><th>Casa</th><th style="text-align:right">Distratos</th><th style="text-align:right">Recebido do distratado</th><th style="text-align:right">Devolvido</th><th style="text-align:right">Retido</th><th style="text-align:right">Comissão perdida</th><th style="text-align:right">Ganho na revenda</th><th style="text-align:right">Resultado</th><th>Situação hoje</th></tr></thead>
+      <tbody>${D.distratos.map(d=>`<tr>
+        <td style="font-weight:600;font-size:11px">CS ${String(d.casa).padStart(2,'0')}</td>
+        <td style="text-align:right;font-size:10px">${d.nDist||'—'}</td>
+        <td style="text-align:right;font-size:10px;color:#C4A55C">${d.recebidoDistratado?fmt(d.recebidoDistratado):'—'}</td>
+        <td style="text-align:right;font-size:10px;color:#BF6B60">${d.devolvido?'−'+fmt(d.devolvido):'—'}</td>
+        <td style="text-align:right;font-size:10px;font-weight:600;color:${d.retido>=0?'#6D9E7F':'#BF6B60'}">${fmt(d.retido)}</td>
+        <td style="text-align:right;font-size:10px;color:${d.comPerdidas?'#BF6B60':'var(--text-3)'}">${d.comPerdidas?'−'+fmt(d.comPerdidas):'—'}</td>
+        <td style="text-align:right;font-size:10px;color:${d.ganhoRev>0?'#6D9E7F':'var(--text-3)'}">${d.ganhoRev?fmt(d.ganhoRev):'—'}</td>
+        <td style="text-align:right;font-weight:700;color:${d.resultado>=0?'#6D9E7F':'#BF6B60'}">${fmt(d.resultado)}</td>
+        <td style="font-size:9.5px;color:var(--muted)">${d.statusAtual}${d.valorAtual? ' · '+fmt(d.valorAtual):''}</td></tr>`).join('')}
+        <tr style="border-top:2px solid var(--border);font-weight:700">
+          <td>Total</td><td style="text-align:right">${D.totD.n}</td>
+          <td style="text-align:right;color:#C4A55C">${fmt(D.totD.receb)}</td>
+          <td style="text-align:right;color:#BF6B60">−${fmt(D.totD.devol)}</td>
+          <td style="text-align:right;color:#6D9E7F">${fmt(D.totD.retido)}</td>
+          <td style="text-align:right;color:#BF6B60">−${fmt(D.totD.comPerdidas)}</td>
+          <td style="text-align:right;color:#6D9E7F">${fmt(D.totD.ganhoRev)}</td>
+          <td style="text-align:right;color:${D.totD.resultado>=0?'#6D9E7F':'#BF6B60'}">${fmt(D.totD.resultado)}</td>
+          <td></td></tr>
+      </tbody></table></div>
+    <div class="kpi-sub" style="margin-top:6px">Recebido do distratado e devolvido vêm do extrato, conciliados com o banco. Comissão perdida e ganho de revenda vêm da apuração curada de vendas.</div>`;
+}
+
 function renderInadimplencia(){
   const el = document.getElementById('tab19'); if (!el) return;
   const D = inadimplenciaDados();
@@ -1838,7 +2019,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-l · caixa conciliado e média</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-m · extrato de vendas</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -3814,7 +3995,7 @@ function renderCaixa(){
             <td style="font-size:11.5px">${c.conta}<div class="kpi-sub">${c.nE} entradas · ${c.nS} saídas</div></td>
             <td style="text-align:right;color:#6D9E7F">${c.entrada?fmt(c.entrada):'—'}</td>
             <td style="text-align:right;color:#BF6B60">${c.saida?fmt(c.saida):'—'}</td>
-            <td style="text-align:right;font-weight:700;color:${c.saldo<0?'#BF6B60':'#111'}">${fmt(c.saldo)}</td>
+            <td style="text-align:right;font-weight:700;color:${c.saldo<0?'#BF6B60':'var(--text)'}">${fmt(c.saldo)}</td>
             <td style="text-align:right;cursor:pointer;color:${real!==undefined?'#6C8FB5':'var(--text-3)'}" onclick="cxSetReal('${c.conta.replace(/'/g,"\\'")}')" title="clique para informar o saldo do extrato">${real!==undefined? fmt(real) : 'informar'}</td>
             <td style="text-align:right;font-weight:600;color:${div===null?'var(--text-3)':Math.abs(div)<1000?'#6D9E7F':'#C09257'}">${div===null?'—':fmt(div)}</td></tr>`;}).join('')}
           ${temReal? `<tr style="border-top:2px solid var(--border)"><td style="font-weight:700">Total</td>
@@ -3855,8 +4036,8 @@ function renderCaixa(){
         <td style="text-align:right;color:#6D9E7F">${x.entrada?fmt(x.entrada):'—'}</td>
         <td style="text-align:right;color:#BF6B60">${x.saida?fmt(x.saida):'—'}</td>
         <td style="text-align:right;color:${x.res>=0?'#6D9E7F':'#BF6B60'}">${fmt(x.res)}</td>
-        <td style="text-align:right;font-weight:700;color:${x.saldo>=0?'#111':'#BF6B60'}">${fmt(x.saldo)}</td>
-        <td style="text-align:right;color:var(--muted)" class="col-op">${fmt(x.saldoOp)}</td></tr>`).join('')}
+        <td style="text-align:right;font-weight:700;color:${x.saldo>=0?'var(--text)':'#BF6B60'}">${fmt(x.saldo)}</td>
+        <td style="text-align:right;color:var(--text-2,#c9d1d9)" class="col-op">${fmt(x.saldoOp)}</td></tr>`).join('')}
       </tbody></table></div>`;
 
   const G = cxAgrupar(L, _cxGran);
@@ -4233,7 +4414,7 @@ const REL_TITULOS = {
   4:'Fluxo de Caixa e Aplicacoes', 5:'Despesas', 6:'Resultado Final', 7:'Gestao de Vendas',
   8:'Consolidado das Obras', 9:'Auditoria', 10:'Fornecedores', 11:'Sociedade',
   12:'Analise Comparativa', 13:'Relatorio Gerencial', 14:'Alimentacao de Obra',
-  15:'Indicadores Financeiros', 16:'Receitas', 17:'Terraplanagem e Arrimo', 18:'Evolucao de Caixa', 19:'Inadimplencia e Cobranca'
+  15:'Indicadores Financeiros', 16:'Receitas', 17:'Terraplanagem e Arrimo', 18:'Evolucao de Caixa', 19:'Inadimplencia e Cobranca', 20:'Extrato de Vendas por Casa'
 };
 function relTituloDoc(idx){
   const base = REL_TITULOS[idx] || relNomeAba(idx);
@@ -6968,6 +7149,7 @@ function switchTab(i) {
   else if(i===17) renderTerraplanagem();
   else if(i===18) renderCaixa();
   else if(i===19) renderInadimplencia();
+  else if(i===20) renderExtratoVendas();
   else setTimeout(()=>buildCharts(i),80);
 }
 

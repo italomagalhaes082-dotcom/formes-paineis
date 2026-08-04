@@ -305,6 +305,22 @@ async function testEmp(emp, checks){
                                [{dataComp:'05/01/2025',valReceb:5000,cat:'Vendas',tipo:'Venda',grupo:'venda',desc:'1/1'}],[],[],[]);
     ok(SsemSit.linhas[0].saldo===4000,'Situação: fonte sem o campo continua entrando (compatibilidade)');
     ok(CX.includes('Caixa médio mensal'),'Média: KPI de caixa médio presente');
+    // legibilidade: a tabela de tela não pode usar a cor do papel
+    ok(!/color:#111"?>\$\{fmt\(x\.saldo\)/.test(CX) && !CX.includes('color:#111">'),'Legibilidade: saldo não usa cor de papel no tema escuro');
+    // aba Extrato Vendas
+    w.switchTab(20); await new Promise(r=>setTimeout(r,600));
+    const EV=t('tab20');
+    ok(EV.length>200,'Extrato Vendas: aba renderiza');
+    ok(typeof w.extratoVendasDados==='function','Extrato Vendas: motor disponível');
+    const EVD=w.extratoVendasDados();
+    if (EVD) {
+      ok(EVD.linhas.length>0,'Extrato Vendas: tabela por casa montada ('+EVD.linhas.length+')');
+      ok(EVD.linhas.every(l=>l.liquido === l.totalRecebido - l.devolvido),'Extrato Vendas: líquido = recebido − devolvido');
+      ok(EVD.linhas.every(l=>l.saldoContrato>=0),'Extrato Vendas: saldo de contrato nunca negativo');
+      ok(EVD.distratos.every(d=>Math.abs(d.resultado-((d.retido)+d.ganhoRev-d.comPerdidas))<1),'Distratos: resultado = retido + ganho − comissão perdida');
+      ok(Math.abs(EVD.totD.retido-(EVD.totD.receb-EVD.totD.devol))<1,'Distratos: retido = recebido − devolvido');
+    } else ok(true,'Extrato Vendas: sem extrato neste cenário — aba avisa');
+    ok(EV.includes('EXTRATO GERAL'),'Extrato Vendas: declara a fonte exclusiva');
     ok(/Caixa médio — 12 meses/.test(CX),'Média: recorte de 12 meses');
     ok(/Entrada média por mês/.test(CX) && /Saída média por mês/.test(CX),'Média: entrada e saída médias');
     ok(m1.resOp===2000,'Caixa: operacional exclui o aporte (3.000 − 1.000)');
