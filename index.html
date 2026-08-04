@@ -1407,10 +1407,19 @@ function extratoVendasDados(){
   const casas = {};
   const zero = c => (casas[c] = casas[c] || { casa:c, venda:0, distratada:0, incc:0, person:0, outros:0,
                                               total:0, n:0, clientes:{}, primeiro:null, ultimo:null });
+  const distPorPessoa = {};   // casa|cliente → recebido do distratado
   ex.receitas.forEach(r=>{
     if (!/CONCILIADO/i.test(r.situacao||'') && r.situacao) return;   // só dinheiro confirmado
     const c = extrairCasa(r.desc); if (!c) return;
     const g = zero(c); const v = r.valReceb||0;
+    if (r.tipo === 'VendaDistratada') {
+      const kk = c + '|' + String(r.cliente||'—').trim();
+      const p = (distPorPessoa[kk] = distPorPessoa[kk] || { casa:c, cliente:String(r.cliente||'—').trim(),
+                                                            recebido:0, devolvido:0, primeiro:null, ultimo:null });
+      p.recebido += v;
+      const dd = parseDate(r.dataComp);
+      if (dd) { if (!p.primeiro || dd < p.primeiro) p.primeiro = dd; if (!p.ultimo || dd > p.ultimo) p.ultimo = dd; }
+    }
     if (r.tipo === 'Venda') g.venda += v;
     else if (r.tipo === 'VendaDistratada') g.distratada += v;
     else if (r.tipo === 'INCC') g.incc += v;
@@ -1431,7 +1440,15 @@ function extratoVendasDados(){
     const c = extrairCasa(r.descOriginal||r.descricao); if (!c) return;
     (devol[c] = devol[c] || { v:0, n:0, quem:[] });
     devol[c].v += r.valor; devol[c].n++;
-    if (devol[c].quem.length < 3) devol[c].quem.push(String(r.fornecedor||'—').trim());
+    const quem = String(r.fornecedor||'—').trim();
+    if (devol[c].quem.length < 3) devol[c].quem.push(quem);
+    // casa a devolução no comprador distratado correspondente
+    const kk = c + '|' + quem;
+    if (distPorPessoa[kk]) distPorPessoa[kk].devolvido += r.valor;
+    else { const alt = Object.keys(distPorPessoa).find(x=>x.startsWith(c+'|') &&
+             _audNorm(x.split('|')[1]).slice(0,14) === _audNorm(quem).slice(0,14));
+           if (alt) distPorPessoa[alt].devolvido += r.valor;
+           else distPorPessoa[kk] = { casa:c, cliente:quem, recebido:0, devolvido:r.valor, primeiro:null, ultimo:null }; }
   });
 
   // ── linha por casa: as 66 ──
@@ -1463,12 +1480,25 @@ function extratoVendasDados(){
   const distratos = linhas.filter(l=>l.nDist>0 || l.distratada>0 || l.devolvido>0).map(l=>{
     const cst = REVENDA_CUSTOS[l.casa] || null;
     const custoRev = cst ? cst.valor : 0;
+    // Cada comprador distratado da casa vira uma OCORRÊNCIA própria. Uma casa com dois
+    // distratos aparece com duas linhas, uma sob a outra.
+    const ocor = Object.values(distPorPessoa).filter(p=>p.casa===l.casa)
+                       .sort((a,b)=>(a.primeiro||0)-(b.primeiro||0));
+    const somaRec = ocor.reduce((s,o)=>s+o.recebido,0);
+    ocor.forEach((o,i)=>{
+      o.ordem = i+1;
+      o.retido = o.recebido - o.devolvido;
+      // a comissão perdida vem por casa; rateia pelo que cada comprador pagou
+      o.comPerdidas = somaRec>0 ? l.comPerdidas*(o.recebido/somaRec) : (i===0 ? l.comPerdidas : 0);
+      o.resultado = o.retido - o.comPerdidas;
+    });
     // Dois ganhos de naturezas diferentes, mantidos separados:
     //   RESULTADO DO DISTRATO — caixa retido: recebido − devolvido − comissão perdida
     //   GANHO DE REVENDA      — diferença de preço, líquida de custos embutidos
     const resultadoDistrato = l.distratada - l.devolvido - l.comPerdidas;
     const ganhoRevLiq = l.ganhoRev - custoRev;
-    return { casa:l.casa, nDist:l.nDist, recebidoDistratado:l.distratada, devolvido:l.devolvido,
+    return { casa:l.casa, nDist: Math.max(l.nDist, ocor.length), ocorrencias: ocor,
+      recebidoDistratado:l.distratada, devolvido:l.devolvido,
       retido: l.distratada - l.devolvido, comPerdidas:l.comPerdidas, resultadoDistrato,
       ganhoRevBruto:l.ganhoRev, custoRev, custoMotivo: cst?cst.motivo:'', ganhoRevLiq,
       total: resultadoDistrato + ganhoRevLiq,
@@ -1549,18 +1579,31 @@ function renderExtratoVendas(){
       ${k('Distratos ocorridos', String(D.totD.n), 'em '+D.distratos.length+' casas · '+(D.totD.receb>0? (D.totD.devol/D.totD.receb*100).toFixed(0):'0')+'% devolvido', '#C4A55C')}
     </div>
     <div class="table-wrap" style="max-height:none;margin-top:8px"><table>
-      <thead><tr><th style="width:16%">Casa</th><th class="num" style="width:6%">Nº</th><th class="num" style="width:14%">Recebido</th><th class="num" style="width:13%">Devolvido</th><th class="num" style="width:12%">Comissão</th><th class="num" style="width:13%">Result. distrato</th><th class="num" style="width:13%">Ganho revenda</th><th class="num" style="width:13%">Total</th></tr></thead>
-      <tbody>${D.distratos.map(d=>`<tr>
-        <td style="font-weight:600">CS ${String(d.casa).padStart(2,'0')}${d.custoRev?'<div class="kpi-sub">'+d.custoMotivo+'</div>':''}</td>
-        <td class="num">${d.nDist||'—'}</td>
-        <td class="num" style="color:#C4A55C">${d.recebidoDistratado?fmt(d.recebidoDistratado):'—'}</td>
-        <td class="num" style="color:#BF6B60">${d.devolvido?'−'+fmt(d.devolvido):'—'}</td>
-        <td class="num" style="color:${d.comPerdidas?'#BF6B60':'var(--text-3)'}">${d.comPerdidas?'−'+fmt(d.comPerdidas):'—'}</td>
-        <td class="num" style="font-weight:600;color:${d.resultadoDistrato>=0?'#6D9E7F':'#BF6B60'}">${fmt(d.resultadoDistrato)}</td>
-        <td class="num" style="color:${d.ganhoRevLiq>0?'#6D9E7F':d.ganhoRevLiq<0?'#BF6B60':'var(--text-3)'}">${d.ganhoRevLiq?fmt(d.ganhoRevLiq):'—'}${d.custoRev?'<div class="kpi-sub">bruto '+fmt(d.ganhoRevBruto)+'</div>':''}</td>
-        <td class="num" style="font-weight:700;color:${d.total>=0?'#6D9E7F':'#BF6B60'}">${fmt(d.total)}</td></tr>`).join('')}
+      <thead><tr>
+        <th style="width:8%">Casa</th><th style="width:5%">Nº</th><th style="width:19%">Comprador distratado</th>
+        <th class="num" style="width:11%">Recebido</th><th class="num" style="width:11%">Devolvido</th>
+        <th class="num" style="width:10%">Comissão</th><th class="num" style="width:12%">Result. distrato</th>
+        <th class="num" style="width:12%">Ganho revenda</th><th class="num" style="width:12%">Total da casa</th>
+      </tr></thead>
+      <tbody>${D.distratos.map(d=>{
+        const oc = d.ocorrencias && d.ocorrencias.length ? d.ocorrencias
+                 : [{ ordem:1, cliente:'—', recebido:d.recebidoDistratado, devolvido:d.devolvido,
+                      comPerdidas:d.comPerdidas, resultado:d.resultadoDistrato }];
+        const n = oc.length;
+        return oc.map((o,i)=>`<tr${i?'':' style="border-top:1px solid var(--hairline-strong)"'}>
+          ${i===0? `<td rowspan="${n}" style="font-weight:600;vertical-align:top">CS ${String(d.casa).padStart(2,'0')}${d.custoMotivo?'<div class="kpi-sub">'+d.custoMotivo+'</div>':''}</td>` : ''}
+          <td style="color:var(--muted);font-size:10px">${o.ordem}º</td>
+          <td style="font-size:10px">${String(o.cliente||'—').slice(0,26)}</td>
+          <td class="num" style="color:#C4A55C">${o.recebido?fmt(o.recebido):'—'}</td>
+          <td class="num" style="color:#BF6B60">${o.devolvido?'−'+fmt(o.devolvido):'—'}</td>
+          <td class="num" style="color:${o.comPerdidas>0.5?'#BF6B60':'var(--text-3)'}">${o.comPerdidas>0.5?'−'+fmt(o.comPerdidas):'—'}</td>
+          <td class="num" style="font-weight:600;color:${o.resultado>=0?'#6D9E7F':'#BF6B60'}">${fmt(o.resultado)}</td>
+          ${i===0? `<td rowspan="${n}" class="num" style="vertical-align:top;color:${d.ganhoRevLiq>0?'#6D9E7F':d.ganhoRevLiq<0?'#BF6B60':'var(--text-3)'}">${d.ganhoRevLiq?fmt(d.ganhoRevLiq):'—'}${d.custoRev?'<div class="kpi-sub">bruto '+fmt(d.ganhoRevBruto)+'</div>':''}</td>
+          <td rowspan="${n}" class="num" style="vertical-align:top;font-weight:700;color:${d.total>=0?'#6D9E7F':'#BF6B60'}">${fmt(d.total)}</td>` : ''}
+        </tr>`).join('');
+      }).join('')}
         <tr style="border-top:2px solid var(--border);font-weight:700">
-          <td>Total</td><td class="num">${D.totD.n}</td>
+          <td colspan="3">Total — ${D.totD.n} distratos em ${D.distratos.length} casas</td>
           <td class="num" style="color:#C4A55C">${fmt(D.totD.receb)}</td>
           <td class="num" style="color:#BF6B60">−${fmt(D.totD.devol)}</td>
           <td class="num" style="color:#BF6B60">−${fmt(D.totD.comPerdidas)}</td>

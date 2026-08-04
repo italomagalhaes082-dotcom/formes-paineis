@@ -325,6 +325,10 @@ async function testEmp(emp, checks){
       ok(EVD.distratos.every(d=>Math.abs(d.resultadoDistrato-(d.recebidoDistratado-d.devolvido-d.comPerdidas))<1),'Distratos: resultado = recebido − devolvido − comissão');
       ok(EVD.distratos.every(d=>Math.abs(d.ganhoRevLiq-(d.ganhoRevBruto-d.custoRev))<1),'Distratos: ganho de revenda líquido de custos embutidos');
       ok(EVD.distratos.every(d=>Math.abs(d.total-(d.resultadoDistrato+d.ganhoRevLiq))<1),'Distratos: total = resultado + ganho, separados');
+      ok(EVD.distratos.every(d=>Array.isArray(d.ocorrencias)),'Distratos: ocorrências detalhadas por comprador');
+      ok(EVD.distratos.every(d=>!d.ocorrencias.length || Math.abs(d.ocorrencias.reduce((s,o)=>s+o.recebido,0)-d.recebidoDistratado)<1),'Distratos: soma das ocorrências bate com o total da casa');
+      ok(EVD.distratos.every(d=>!d.ocorrencias.length || Math.abs(d.ocorrencias.reduce((s,o)=>s+o.comPerdidas,0)-d.comPerdidas)<1),'Distratos: comissão rateada entre as ocorrências');
+      ok(EVD.distratos.every(d=>d.ocorrencias.every((o,i)=>o.ordem===i+1)),'Distratos: ocorrências numeradas em ordem cronológica');
       const cs16=EVD.distratos.find(d=>d.casa===16);
       if (cs16) ok(cs16.custoRev===450000,'Distratos: mobiliário da CS16 descontado do ganho');
       else ok(true,'Distratos: CS16 fora do cenário');
