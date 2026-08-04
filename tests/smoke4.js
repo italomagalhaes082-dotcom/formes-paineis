@@ -19,6 +19,10 @@ recL.push(rec('ALVES MENDES CONSTRUÇÕES','10/01/2022','AFAC - ALVES MENDES',0,
 recL.push(rec('Cliente A','10/03/2024','1/2 - CASA 01 - LIBERTY',200000,200000,'Vendas'));
 recL.push(rec('Cliente A','10/06/2024','2/2 - CASA 01 - LIBERTY',200000,200000,'Vendas'));
 recL.push(rec('Cliente A','10/06/2024','INCC CASA 01',0,20000,'INCC / IGPM'));
+// contrato distratado: parcelas reais + parcela final de baixa (sem caixa)
+recL.push(rec('Cliente B','10/01/2024','1/3 - DISTRATO CASA 05 - LIBERTY',50000,50000,'Vendas'));
+recL.push(rec('Cliente B','10/02/2024','2/3 - DISTRATO CASA 05 - LIBERTY',50000,50000,'Vendas'));
+recL.push(rec('Cliente B','10/03/2024','3/3 - DISTRATO CASA 05 - LIBERTY',400000,400000,'Vendas'));
 // antes descartados pela regra do 'Lançamento Financeiro' sem casa — agora entram como OUTRAS
 recL.push(rec('CERAMICA NORTE','12/07/2024','BONIFICACAO TIJOLOS - LIBERTY',0,5210,'Bonificações','Lançamento financeiro'));
 recL.push(rec('FORNECEDOR X','15/08/2024','REEMBOLSO CHAVE MAGNETICA',0,3290,'Reembolso','Lançamento financeiro'));
@@ -271,6 +275,21 @@ async function testEmp(emp, checks){
     ok(w.cxEhTransferencia('RESGATE DE APLICACAO','Diversos'),'Caixa: resgate de aplicação reconhecido');
     ok(!w.cxEhTransferencia('REEMBOLSO CRISPIM GARCIA','Reembolso'),'Caixa: reembolso NÃO é transferência (é dinheiro que voltou)');
     ok(!w.cxEhTransferencia('CIMENTO CP2','Aquisição de Materiais'),'Caixa: compra comum não é transferência');
+    // baixa de distrato: parcela final não é caixa
+    // o painel declara quanto saiu por baixa de distrato
+    ok(/parcela\(s\) finais de contrato distratado/.test(CX),'Baixa: painel declara a exclusão');
+    ok(/400\.000/.test(CX),'Baixa: valor da parcela final (400.000) reconhecido e excluído');
+    // e a Auditoria lista o achado
+    w.switchTab(9); await new Promise(r=>setTimeout(r,700));
+    const AUD9=t('tab9');
+    ok(/Baixa de distrato exportada como receita/.test(AUD9),'Baixa: card na Auditoria');
+    w.switchTab(18); await new Promise(r=>setTimeout(r,400));
+    const SB=w.caixaSerie([],[{dataComp:'10/03/2024',valReceb:400000,desc:'3/3 - DISTRATO CASA 05',baixaSemCaixa:true,grupo:'venda',tipo:'Venda'},
+                              {dataComp:'10/01/2024',valReceb:50000,desc:'1/3 - DISTRATO CASA 05',grupo:'venda',tipo:'Venda'}],[],[],[]);
+    ok(SB.baixa.n===1 && SB.baixa.v===400000,'Baixa: excluída do caixa e contabilizada à parte');
+    const fim=SB.linhas[SB.linhas.length-1];
+    ok(fim.saldo===50000,'Baixa: saldo conta só o dinheiro real (50.000, não 450.000)');
+    ok(CX.includes('baixa do saldo devedor') || t('tab18').includes('contrato distratado'),'Baixa: painel explica a exclusão');
     // conciliação por conta bancária
     ok(typeof w.cxPorConta==='function' && typeof w.cxConta==='function','Conciliação: funções por conta disponíveis');
     ok(w.cxConta('14 - BOSSA CORA BANK')==='Cora','Conciliação: conta Cora reconhecida');

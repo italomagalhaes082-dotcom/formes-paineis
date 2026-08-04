@@ -1371,7 +1371,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v03.08.26-v · conciliação por conta</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v03.08.26-w · baixa de distrato fora do caixa</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -3008,14 +3008,16 @@ function caixaSerie(desp, rec, aportes, retiradas, rendimentos){
   const M = {};   // ym → {vendas, outras, aporte, rendimento, obra, socio, admin...}
   const zero = () => ({ vendas:0, outrasRec:0, aporte:0, rendimento:0,
                         obra:0, comercial:0, tributo:0, socio:0, permuta:0, distrato:0, outrasDesp:0,
-                        entrada:0, saida:0, excluido:0 });
+                        entrada:0, saida:0, excluido:0, baixa:0 });
   const put = (ym) => (M[ym] = M[ym] || zero());
   const excl = { n:0, v:0 };
+  const baixa = { n:0, v:0 };
 
   (rec||[]).forEach(r=>{
     const d = parseDate(r.dataComp||r.data); if(!d) return;
     const v = r.valReceb||0; if(!(v>0)) return;
     if (cxEhTransferencia(r.desc, r.cat)) { excl.n++; excl.v+=v; put(cxYM(d)).excluido+=v; return; }
+    if (r.baixaSemCaixa) { baixa.n++; baixa.v+=v; put(cxYM(d)).baixa+=v; return; }
     const m = put(cxYM(d));
     if (r.grupo === 'venda' || /Venda|INCC/i.test(r.tipo||'')) m.vendas += v; else m.outrasRec += v;
     m.entrada += v;
@@ -3043,7 +3045,7 @@ function caixaSerie(desp, rec, aportes, retiradas, rendimentos){
 
   // preenche os meses sem movimento, para a curva não dar saltos falsos
   const yms = Object.keys(M).map(Number).sort((a,b)=>a-b);
-  if (!yms.length) return { linhas:[], excl };
+  if (!yms.length) return { linhas:[], excl, baixa };
   const linhas = [];
   let saldo = 0, saldoOp = 0;
   let y = Math.floor(yms[0]/100), mo = yms[0]%100;
@@ -3058,7 +3060,7 @@ function caixaSerie(desp, rec, aportes, retiradas, rendimentos){
     linhas.push(Object.assign({ ym, res, saldo, resOp, saldoOp }, m));
     mo++; if(mo>12){ mo=1; y++; }
   }
-  return { linhas, excl };
+  return { linhas, excl, baixa };
 }
 
 // Normaliza o nome da conta bancária do ERP para os apelidos que a gestão usa.
@@ -3127,6 +3129,7 @@ function renderCaixa(){
     Entram: recebimentos de venda, aportes de sócio e rendimento de aplicação. Saem: despesas pagas e retiradas de sócio.
     Ficam fora transferências entre contas e aplicação/resgate, que movem dinheiro entre bolsos da mesma empresa sem alterar o caixa.
     ${S.excl.n? '<strong>'+S.excl.n+' lançamento(s)</strong> ('+fmt(S.excl.v)+') foram excluídos por essa regra.' : ''}
+    ${S.baixa.n? '<br><br><strong style="color:#C4A55C">'+S.baixa.n+' parcela(s) finais de contrato distratado, somando '+fmt(S.baixa.v)+', também ficaram fora.</strong> São a baixa do saldo devedor no encerramento do contrato — o sistema exporta como recebido, mas não houve entrada de dinheiro.' : ''}
     O saldo parte de zero na abertura da SPE — é a posição construída pelos próprios lançamentos, não um extrato bancário.</div></div>
 
     <div class="kpi-grid">
@@ -4977,6 +4980,9 @@ const AUD_CONTEXTO = [
  { re:/fim de semana|termos sensíveis/i, agrupar:'quem',
    impacto:'Pagamento fora do dia útil ou com descritivo evasivo não é irregularidade por si só, mas é onde erros e desvios costumam se esconder, porque escapam do fluxo normal de conferência e aprovação.',
    acao:['Confirme o comprovante de cada pagamento listado.','Verifique quem autorizou e se seguiu o fluxo de aprovação.','Detalhe o descritivo para que o lançamento seja compreensível sem consulta.'] },
+ { re:/Baixa de distrato/i, agrupar:'nenhum',
+   impacto:'Estas parcelas nunca foram dinheiro. Somadas, são R$ 27,3 milhões nas três obras — receita que o sistema exporta como recebida porque o contrato foi encerrado, não porque o cliente pagou. Enquanto contarem como receita, o caixa aparece milhões acima do extrato, o VGV recebido fica inflado, e a TIR, o ROI e a análise de vendas herdam o mesmo erro. Foi o que fez o painel mostrar R$ 15,9 milhões de caixa no Bossa contra R$ 1,72 milhão reais.',
+   acao:['Confirme com o financeiro que a parcela final do contrato distratado é baixa de encerramento, sem pagamento.','Na planilha, zere o valor recebido dessas parcelas ou marque-as com situação própria, para que a exportação pare de trazê-las como recebidas.','Registre à parte quanto de fato foi retido de cada distratado — esse é o valor que realmente entrou.','Confira se há contratos encerrados sem a palavra distrato no descritivo, que teriam o mesmo efeito e não são capturados pela regra.'] },
  { re:/Sentinela de carga/i, agrupar:'nenhum',
    impacto:'Este é o achado mais grave que o painel pode emitir, porque ele não aponta um erro nos números — ele avisa que os números NÃO EXISTEM em quantidade suficiente. Quando uma aba da planilha está filtrada, o Google devolve apenas as linhas visíveis e nenhum erro é gerado: o painel recebe um arquivo válido e incompleto, e todo cálculo derivado dele fica menor que a realidade. Custo de obra, receita, VGV, resultado, TIR e todas as comparações entre obras ficam errados na mesma proporção, sem nada na tela indicando isso. Foi exatamente o que aconteceu no Bossa Nova, onde a aba de receitas trouxe 69 linhas em vez de 1.849.',
    acao:['NÃO use nenhum número desta obra para decisão enquanto o aviso estiver ativo.','Abra a planilha e vá à aba apontada.','Remova qualquer filtro ativo — inclusive filtros de exibição salvos por outra pessoa.','Aguarde alguns minutos: o Google mantém a exportação em cache e a correção não aparece na hora.','Clique em ↻ Atualizar no painel e confirme que o aviso sumiu e que o volume voltou ao normal.'] },
@@ -5472,6 +5478,19 @@ async function runAuditoria(progressCb) {
       pergunta:"Se a parcela 5/13 existe e a 4/13 não, ou o recebimento não foi lançado (receita subestimada e inadimplência invisível) ou foi lançado sem o padrão n/m. Localizar as parcelas faltantes de cada contrato.",
       total: falhas.length, itens: falhas.slice(0, 500).map(f=>_audItem("CS "+String(f.casa).padStart(2,"0")+" · "+(f.cliente||"—"), "faltam: "+f.faltam.slice(0, 500).join(", ")+" de "+f.total, f.tem.size+" lançadas", "#C4A55C")) });
   }
+  // Q0b. BAIXAS DE DISTRATO — receita sem caixa
+  { const bx = (typeof _RECEITAS!=='undefined'? _RECEITAS : []).filter(r=>r.baixaSemCaixa && (r.valReceb||0)>0);
+    if (bx.length) { const vB = bx.reduce((s,r)=>s+r.valReceb,0);
+      alerts.push({ sev:"alta", icon:"🧾",
+        titulo:"Baixa de distrato exportada como receita recebida",
+        resumo: bx.length+" parcela(s) finais de contrato distratado somando "+fmt(vB)+" — sem entrada de dinheiro",
+        pergunta:"Quando um contrato é distratado, o sistema quita o saldo devedor para encerrá-lo e exporta a parcela final como \u201Crecebida\u201D. Não houve caixa. O painel já exclui essas parcelas do saldo de caixa e do recebido; esta lista existe para conferência e para orientar a correção na origem.",
+        total: bx.length,
+        itens: bx.sort((a,b)=>b.valReceb-a.valReceb).slice(0,500).map(r=>_audItem(
+          r.cliente, r.dataComp+" · "+r.desc+" · quitação de encerramento, sem entrada em conta",
+          fmt(r.valReceb), "#C4A55C")) });
+    } }
+
   // Q0-. SENTINELA DE CARGA — volume das abas contra a carga anterior
   { let avs=[]; try { avs = cargaAvaliar(); } catch(e) {}
     if (avs.length) alerts.push({ sev:"alta", icon:"🛡️",
@@ -6838,8 +6857,14 @@ function parseReceitasRows(allRows) {
     const grupo = GRUPO_VENDA.includes(tipo) ? 'venda' : 'outras';
     // Recuperação de custo: subconjunto de "outras" que devolve dinheiro de despesa já paga
     const recupera = (tipo === 'Reembolso') || catU.includes('AQUISICAO DE MATERIA') || catU.includes('AQUISIÇÃO DE MATERIA');
+    // Parcela FINAL de contrato distratado ("N/N - DISTRATO CASA X"): o sistema quita o
+    // saldo devedor para encerrar o contrato e exporta como "recebido", mas NÃO houve
+    // entrada de dinheiro. Confirmado pela direção em 03/08. Marcada aqui para sair do
+    // caixa e do recebido, com rastro na Auditoria.
+    const _mParc = String(desc||'').match(/^\s*(\d+)\s*\/\s*(\d+)\s*-/);
+    const baixaSemCaixa = !!_mParc && _mParc[1] === _mParc[2] && /DISTRAT/i.test(desc||'');
     if (valOrig > 0 || valReceb > 0)
-      receitas.push({ cliente, dataComp, dataVenc, desc, origem, situacao, valOrig, valReceb, casa, tipo, grupo, recupera, cat: catRaw, conta: String((r[M.conta!==undefined?M.conta:24])||'').trim() });
+      receitas.push({ cliente, dataComp, dataVenc, desc, origem, situacao, valOrig, valReceb, casa, tipo, grupo, recupera, baixaSemCaixa, cat: catRaw, conta: String((r[M.conta!==undefined?M.conta:24])||'').trim() });
   });
   return { receitas, aportes, rendimentos };
 }
