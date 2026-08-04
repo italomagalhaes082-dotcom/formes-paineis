@@ -1201,6 +1201,85 @@ function contratosComerciais(){
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// INCC-DI (FGV) — série mensal real, para corrigir o saldo devedor
+// Fonte: FGV, via brasilindicadores. Atualizar aqui quando sair mês novo.
+// ═══════════════════════════════════════════════════════════════════
+const INCC_MENSAL = {
+  2022: [0.71,0.38,0.86,0.95,2.28,2.14,0.86,0.09,0.09,0.12,0.36,0.09],
+  2023: [0.46,0.05,0.30,0.14,0.59,0.71,0.10,0.17,0.34,0.20,0.07,0.31],
+  2024: [0.27,0.13,0.28,0.52,0.86,0.71,0.72,0.70,0.58,0.68,0.40,0.50],
+  2025: [0.83,0.40,0.39,0.52,0.58,0.69,0.91,0.52,0.17,0.30,0.27,0.21],
+  2026: [0.72,0.28,0.54,1.00,0.88,0.78]
+};
+const INCC_FALLBACK = 0.55;   // média mensal recente, para meses ainda não divulgados
+function inccMes(ano, mes){   // mes 1..12
+  const a = INCC_MENSAL[ano];
+  if (a && a[mes-1] !== undefined && a[mes-1] !== null) return a[mes-1];
+  return INCC_FALLBACK;
+}
+function inccUltimoMes(){
+  const anos = Object.keys(INCC_MENSAL).map(Number).sort((a,b)=>b-a);
+  const a = anos[0];
+  return { ano:a, mes: INCC_MENSAL[a].length };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SALDO DEVEDOR POR CASA, corrigido pelo INCC mês a mês
+// O contrato de imóvel na planta corrige o SALDO todo mês pelo INCC e abate os
+// pagamentos. Simular assim, e não aplicar um índice único no fim, é o que
+// reproduz o que o cliente realmente deve.
+// ═══════════════════════════════════════════════════════════════════
+function saldoDevedorCasas(){
+  const gv = (typeof _GV !== 'undefined' && _GV && _GV.length) ? _GV : null;
+  if (!gv) return null;
+  const C = contratosComerciais();
+  const porCasa = {}; C.todos.forEach(u=>porCasa[u.casa]=u);
+  const hoje = new Date();
+  const ultimo = inccUltimoMes();
+  const linhas = gv.filter(g=>!/DISPON/i.test(g.status||'')).map(g=>{
+    const u = porCasa[g.casa];
+    const valor = g.valor || 0;
+    const dv = parseDate(g.dataVenda);
+    // pagamentos do contrato vigente: só PRINCIPAL (INCC pago é correção, não amortiza o
+    // principal contratado — ele quita a própria correção)
+    const parc = u ? u.parcelas : [];
+    const principais = parc.filter(p=>p.tipo==='Venda' && (p.valReceb||0)>0)
+                           .map(p=>({ d:parseDate(p.dataComp), v:p.valReceb }))
+                           .filter(p=>p.d).sort((a,b)=>a.d-b.d);
+    const inccPago = parc.filter(p=>p.tipo==='INCC').reduce((s,p)=>s+(p.valReceb||0),0);
+    const pagoPrincipal = principais.reduce((s,p)=>s+p.v,0);
+    // simulação mês a mês desde a venda
+    let saldo = valor, corrigido = 0;
+    if (dv && valor > 0) {
+      let y = dv.getFullYear(), m = dv.getMonth()+1;
+      // abate o que foi pago no próprio mês da venda
+      const noMes = (yy,mm) => principais.filter(p=>p.d.getFullYear()===yy && p.d.getMonth()+1===mm)
+                                          .reduce((s,p)=>s+p.v,0);
+      saldo -= noMes(y,m);
+      let guarda = 0;
+      while ((y < ultimo.ano || (y === ultimo.ano && m < ultimo.mes)) && guarda++ < 300) {
+        m++; if (m > 12) { m = 1; y++; }
+        if (saldo > 0) { const j = saldo * inccMes(y,m)/100; corrigido += j; saldo += j; }
+        saldo -= noMes(y,m);
+      }
+    }
+    const saldoNominal = Math.max(0, valor - pagoPrincipal);
+    const saldoCorrigido = Math.max(0, saldo);
+    const inccDevido = Math.max(0, saldoCorrigido - saldoNominal);
+    return { casa:g.casa, cliente: (u && u.cliente) || g.cliente || '—', status:g.status||'',
+             dataVenda:g.dataVenda, valor, pagoPrincipal, inccPago,
+             saldoNominal, saldoCorrigido, inccDevido, corrigidoTotal: corrigido,
+             pct: valor>0 ? pagoPrincipal/valor*100 : 0,
+             meses: dv ? Math.max(0, Math.round((hoje-dv)/2629800000)) : null };
+  }).sort((a,b)=>b.saldoCorrigido-a.saldoCorrigido);
+  const tot = f => linhas.reduce((s,l)=>s+l[f],0);
+  return { linhas, ultimo,
+    totalVGV: tot('valor'), totalPago: tot('pagoPrincipal'), totalInccPago: tot('inccPago'),
+    totalNominal: tot('saldoNominal'), totalCorrigido: tot('saldoCorrigido'), totalIncc: tot('inccDevido'),
+    comSaldo: linhas.filter(l=>l.saldoCorrigido>1000).length };
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // INADIMPLÊNCIA — parcelas vencidas e não quitadas, de contratos ATIVOS
 // ═══════════════════════════════════════════════════════════════════
 function inadimplenciaDados(){
@@ -1263,6 +1342,44 @@ function renderInadimplencia(){
       ${k('Contratos ativos', String(D.C.ativos.length), D.C.casasAtivas.size+' casa(s) com contrato vigente', '#6D9E7F')}
       ${k('Estoque a vender', D.C.nEstoque+' casa(s)', D.C.nEstoque? fmt(D.C.estoqueVGV)+(D.C.curado? ' · casas '+D.C.curado.casasDisponiveis.join(', ') : ' · ticket '+fmt(D.C.ticketMedio)) : 'obra 100% vendida', D.C.nEstoque?'#C09257':'#6D9E7F','Casas sem contrato vigente. Quando existe a apuração curada de vendas, ela é a autoridade sobre o status e sobre o preço de cada unidade. Não são recebível: são venda a realizar.')}
     </div>
+
+    ${(function(){
+      const SD = saldoDevedorCasas();
+      if (!SD || !SD.linhas.length) return '';
+      const mesRef = MESES[SD.ultimo.mes-1]+'/'+SD.ultimo.ano;
+      return `<div class="section-title" style="margin-top:18px">🏠 Saldo devedor por casa — corrigido pelo INCC${hintIcon('Simulação mês a mês desde a data da venda: o saldo é corrigido pelo INCC-DI de cada mês e os pagamentos são abatidos no mês em que ocorreram. É assim que o contrato de imóvel na planta funciona — aplicar um índice único no fim daria número errado.')}</div>
+      <div class="kpi-grid">
+        <div class="kpi" style="border-top:2px solid #6C8FB5"><div class="kpi-label">VGV vendido</div>
+          <div class="kpi-value" style="color:#6C8FB5">${fmt(SD.totalVGV)}</div>
+          <div class="kpi-sub">${SD.linhas.length} casas com contrato</div></div>
+        <div class="kpi" style="border-top:2px solid #6D9E7F"><div class="kpi-label">Principal recebido</div>
+          <div class="kpi-value" style="color:#6D9E7F">${fmt(SD.totalPago)}</div>
+          <div class="kpi-sub">${(SD.totalPago/Math.max(1,SD.totalVGV)*100).toFixed(1)}% do VGV · INCC já pago ${fmt(SD.totalInccPago)}</div></div>
+        <div class="kpi" style="border-top:2px solid #C09257"><div class="kpi-label">Saldo devedor nominal</div>
+          <div class="kpi-value" style="color:#C09257">${fmt(SD.totalNominal)}</div>
+          <div class="kpi-sub">${SD.comSaldo} casa(s) com saldo</div></div>
+        <div class="kpi" style="border-top:2px solid #BF6B60"><div class="kpi-label">Saldo corrigido pelo INCC</div>
+          <div class="kpi-value" style="color:#BF6B60">${fmt(SD.totalCorrigido)}</div>
+          <div class="kpi-sub">+${fmt(SD.totalIncc)} de correção · índice até ${mesRef}</div></div>
+      </div>
+      <div class="table-wrap" style="margin-top:8px"><table>
+        <thead><tr><th>Casa</th><th>Cliente</th><th>Status</th><th>Venda</th><th style="text-align:right">Valor</th><th style="text-align:right">Pago</th><th style="text-align:right">%</th><th style="text-align:right">Saldo nominal</th><th style="text-align:right">INCC</th><th style="text-align:right">Saldo corrigido</th></tr></thead>
+        <tbody>${SD.linhas.map(l=>`<tr${l.saldoCorrigido>1000?'':' style="opacity:.55"'}>
+          <td style="font-weight:600;font-size:11px">CS ${String(l.casa).padStart(2,'0')}</td>
+          <td style="font-size:10.5px">${String(l.cliente).slice(0,26)}</td>
+          <td style="font-size:9.5px;color:var(--muted)">${l.status}</td>
+          <td style="font-family:'DM Mono',monospace;font-size:9.5px">${l.dataVenda||'—'}</td>
+          <td style="text-align:right;font-size:10.5px">${fmt(l.valor)}</td>
+          <td style="text-align:right;font-size:10.5px;color:#6D9E7F">${fmt(l.pagoPrincipal)}</td>
+          <td style="text-align:right;font-size:10px;color:var(--muted)">${l.pct.toFixed(0)}%</td>
+          <td style="text-align:right;font-size:10.5px">${l.saldoNominal>1?fmt(l.saldoNominal):'—'}</td>
+          <td style="text-align:right;font-size:10px;color:#C09257">${l.inccDevido>1?fmt(l.inccDevido):'—'}</td>
+          <td style="text-align:right;font-weight:700;color:${l.saldoCorrigido>1000?'#BF6B60':'var(--text-3)'}">${l.saldoCorrigido>1?fmt(l.saldoCorrigido):'quitada'}</td></tr>`).join('')}
+        </tbody></table></div>
+      <div class="info-box" style="border:1px solid #C4A55C55;background:rgba(196,165,92,.05);margin-top:6px"><span style="color:#C4A55C">ℹ</span><div>
+        <strong>Como o saldo é calculado:</strong> parte do valor de venda na data do contrato, corrige pelo INCC-DI de cada mês e abate os pagamentos de principal no mês em que entraram. O INCC já pago pelo cliente (${fmt(SD.totalInccPago)}) aparece à parte porque quita a correção, não o principal.<br>
+        Índice atualizado até <strong>${mesRef}</strong>; meses ainda não divulgados usam ${INCC_FALLBACK.toFixed(2)}% ao mês. Casas marcadas como quitadas com saldo aparente indicam pagamento não lançado na base de parcelas — vale conferir antes de cobrar.</div></div>`;
+    })()}
 
     ${D.totalVencido>0 ? `
     <div class="section-title" style="margin-top:16px">Idade da dívida${hintIcon('Quanto mais velha a parcela, menor a chance de recuperação espontânea. Acima de 90 dias, a cobrança normalmente já exige notificação formal.')}</div>
@@ -1676,7 +1793,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-f · estoque pela curadoria</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-g · saldo devedor com INCC</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">

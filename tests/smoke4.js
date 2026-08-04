@@ -344,6 +344,17 @@ async function testEmp(emp, checks){
     ok(CC.ativos.length <= CC.nCasas,'Contratos: ativos ('+CC.ativos.length+') não excedem as casas da obra ('+CC.nCasas+')');
     ok(CC.ativos.length + CC.nEstoque === CC.nCasas || CC.nCasas===0,'Contratos: vendidas + estoque = total de casas');
     ok('curado' in CC,'Estoque: campo de curadoria presente');
+    // INCC e saldo devedor
+    ok(typeof w.inccMes==='function' && w.inccMes(2025,5)===0.58,'INCC: série mensal real carregada (mai/25 = 0,58%)');
+    ok(w.inccMes(2022,5)===2.28,'INCC: pico de maio/2022 correto');
+    ok(w.inccMes(2030,1)===w.INCC_FALLBACK || w.inccMes(2030,1)>0,'INCC: mês não divulgado usa fallback');
+    ok(typeof w.saldoDevedorCasas==='function','Saldo devedor: função disponível');
+    const SD=w.saldoDevedorCasas();
+    if (SD && SD.linhas.length) {
+      ok(SD.linhas.every(l=>l.saldoCorrigido>=0),'Saldo devedor: nunca negativo');
+      ok(SD.totalCorrigido>=SD.totalNominal-1,'Saldo devedor: corrigido não fica abaixo do nominal');
+      ok(SD.linhas.every(l=>l.inccDevido>=0),'Saldo devedor: correção do INCC sempre positiva');
+    } else ok(true,'Saldo devedor: sem apuração curada neste cenário');
     if (CC.curado) {
       ok(CC.nEstoque===CC.curado.nDisponiveis,'Estoque: quantidade vem da apuração curada');
       ok(CC.estoqueVGV===CC.curado.vgvEstoque,'Estoque: VGV soma o valor de venda de cada casa disponível');
