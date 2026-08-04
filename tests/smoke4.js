@@ -243,6 +243,34 @@ async function testEmp(emp, checks){
     ok(t('tab3').includes('28/12/2024') && t('tab3').includes('16/03/2026'),'Retiradas com dia>12 presentes no histórico');
     w.switchTab(0); await new Promise(r=>setTimeout(r,100));
     ok(t('tab0').includes('Rendimentos de Aplicações'),'KPI Rendimentos na aba Geral');
+    // ── Evolução de Caixa ──
+    w.switchTab(18); await new Promise(r=>setTimeout(r,500));
+    const CX=t('tab18');
+    ok(CX.includes('Evolução de caixa'),'Caixa: painel renderiza');
+    ok(CX.includes('Caixa hoje') && CX.includes('Cobertura de caixa'),'Caixa: KPIs de posição e fôlego');
+    ok(CX.includes('Movimento mês a mês'),'Caixa: tabela mês a mês');
+    ok(CX.includes('Composição das entradas'),'Caixa: composição de entradas e saídas');
+    ok(!!w.document.querySelector('#tab18 svg.chart'),'Caixa: gráficos renderizados');
+    // a matemática, com dados sintéticos controlados
+    const dSint=[{data:'10/01/2025',valor:1000,categoria:'Aquisição de Materiais',descricao:'CIMENTO'},
+                 {data:'10/02/2025',valor:500,categoria:'Diversos',descricao:'TRANSFERENCIA ENTRE CONTAS'}];
+    const rSint=[{dataComp:'05/01/2025',valReceb:3000,cat:'Vendas',tipo:'Venda',grupo:'venda',desc:'1/10 CASA 01'}];
+    const aSint=[{data:'20/01/2025',valor:2000}];
+    const tSint=[{data:'15/02/2025',valor:800}];
+    const SCX=w.caixaSerie(dSint,rSint,aSint,tSint,[]);
+    ok(SCX.linhas.length===2,'Caixa: série mensal construída ('+SCX.linhas.length+' meses)');
+    const m1=SCX.linhas[0], m2=SCX.linhas[1];
+    ok(m1.entrada===5000 && m1.saida===1000,'Caixa: entradas e saídas do mês somadas certo');
+    ok(m1.saldo===4000,'Caixa: saldo do 1º mês = 5.000 − 1.000');
+    ok(m2.saldo===3200,'Caixa: saldo acumula e desconta a retirada (4.000 − 800 = '+m2.saldo+')');
+    ok(SCX.excl.n===1 && SCX.excl.v===500,'Caixa: transferência entre contas EXCLUÍDA do saldo');
+    ok(m1.resOp===2000,'Caixa: operacional exclui o aporte (3.000 − 1.000)');
+    ok(m2.resOp===0,'Caixa: operacional exclui a retirada');
+    // reconhecimento de transferência
+    ok(w.cxEhTransferencia('TRANSFERENCIA ENTRE CONTAS','Diversos'),'Caixa: transferência entre contas reconhecida');
+    ok(w.cxEhTransferencia('RESGATE DE APLICACAO','Diversos'),'Caixa: resgate de aplicação reconhecido');
+    ok(!w.cxEhTransferencia('REEMBOLSO CRISPIM GARCIA','Reembolso'),'Caixa: reembolso NÃO é transferência (é dinheiro que voltou)');
+    ok(!w.cxEhTransferencia('CIMENTO CP2','Aquisição de Materiais'),'Caixa: compra comum não é transferência');
     // aba Receitas
     w.switchTab(16); await new Promise(r=>setTimeout(r,400));
     const REC=t('tab16');

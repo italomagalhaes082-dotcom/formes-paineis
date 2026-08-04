@@ -673,6 +673,7 @@
       <button class="tab" onclick="switchTab(15)">📐 Indicadores Financeiros</button>
       <button class="tab" onclick="switchTab(16)">💵 Receitas</button>
       <button class="tab" id="tabBtnTerra" onclick="switchTab(17)" style="display:none">🚜 Terraplanagem</button>
+      <button class="tab" onclick="switchTab(18)">🏦 Evolução de Caixa</button>
     </div>
   </div>
   <div class="content">
@@ -694,6 +695,7 @@
     <div class="tab-content" id="tab15"></div>
     <div class="tab-content" id="tab16"></div>
     <div class="tab-content" id="tab17"></div>
+    <div class="tab-content" id="tab18"></div>
   </div>
 </div>
 
@@ -1369,7 +1371,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v03.08.26-s · botão no cabeçalho</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v03.08.26-u · caixa comparado</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -2396,6 +2398,40 @@ function volPaint(fornKey){
         </tbody></table></div>`;
     })()}
 
+    ${(function(){
+      const comCaixa = R.filter(r=>r.caixa && r.caixa.length);
+      if (comCaixa.length < 2) return '';
+      const todos = [...new Set(comCaixa.flatMap(r=>r.caixa.map(x=>x.ym)))].sort((a,b)=>a-b);
+      const serie = r => { const m={}; r.caixa.forEach(x=>m[x.ym]=x.saldo);
+        let ult=0; return todos.map(ym=>{ if(m[ym]!==undefined) ult=m[ym]; return ult; }); };
+      const linha = r => ({ obra:r.nome, cor:r.cor, atual:r.caixa[r.caixa.length-1].saldo,
+        pico:Math.max(...r.caixa.map(x=>x.saldo)), vale:Math.min(...r.caixa.map(x=>x.saldo)),
+        neg:r.caixa.filter(x=>x.saldo<0).length,
+        entrada:r.caixa.reduce((s,x)=>s+x.entrada,0), saida:r.caixa.reduce((s,x)=>s+x.saida,0),
+        aporte:r.caixa.reduce((s,x)=>s+x.aporte,0) });
+      const dados = comCaixa.map(linha);
+      const somaAtual = dados.reduce((s,d)=>s+d.atual,0);
+      return `
+      <div class="section-title" style="margin-top:18px">🏦 Evolução de caixa — as três obras${hintIcon('Saldo acumulado de cada SPE: recebimentos, aportes e rendimentos menos despesas e retiradas. Comparar as curvas mostra qual obra se sustenta sozinha e qual depende de capital do sócio.')}</div>
+      <div class="kpi" style="border-top:2px solid #6C8FB5;margin-bottom:10px">
+        <div class="kpi-label">Caixa somado do grupo</div>
+        <div class="kpi-value" style="color:${somaAtual>=0?'#6D9E7F':'#BF6B60'};font-size:1.7rem">${fmt(somaAtual)}</div>
+        <div class="kpi-sub">${dados.map(d=>d.obra.split(' ')[0]+' '+fmt(d.atual)).join(' · ')}</div></div>
+      ${fxCard('Saldo de caixa das três obras','g_cx_comp','<div class="legend">'+comCaixa.map(r=>'<span><i style="background:'+r.cor+'"></i>'+r.nome.split(' ')[0]+'</span>').join('')+'</div>','Cada linha é o saldo acumulado de uma SPE ao longo do tempo.')}
+      <div class="table-wrap" style="clear:both;margin-bottom:12px"><table>
+        <thead><tr><th>Obra</th><th style="text-align:right">Caixa hoje</th><th style="text-align:right">Pico</th><th style="text-align:right">Menor</th><th style="text-align:right">Meses negativos</th><th style="text-align:right">Entradas</th><th style="text-align:right">Saídas</th><th style="text-align:right">Dependência de aporte</th></tr></thead>
+        <tbody>${dados.map(d=>`<tr>
+          <td style="font-size:11.5px"><span style="color:${d.cor}">●</span> ${d.obra}</td>
+          <td style="text-align:right;font-weight:700;color:${d.atual>=0?'#6D9E7F':'#BF6B60'}">${fmt(d.atual)}</td>
+          <td style="text-align:right">${fmt(d.pico)}</td>
+          <td style="text-align:right;color:${d.vale<0?'#BF6B60':'inherit'}">${fmt(d.vale)}</td>
+          <td style="text-align:right;color:${d.neg?'#BF6B60':'var(--muted)'}">${d.neg||'—'}</td>
+          <td style="text-align:right">${fmt(d.entrada)}</td>
+          <td style="text-align:right">${fmt(d.saida)}</td>
+          <td style="text-align:right;color:${(d.aporte/Math.max(1,d.entrada))>0.5?'#BF6B60':'var(--muted)'}">${(d.aporte/Math.max(1,d.entrada)*100).toFixed(1)}%</td></tr>`).join('')}
+        </tbody></table></div>`;
+    })()}
+
     <div class="section-title">🏪 Fornecedores — clique para filtrar tudo acima</div>
     <input id="fornConsolBusca" placeholder="🔍 buscar fornecedor..." oninput="window.fornConsolFiltra(this.value)"
       style="width:100%;background:var(--card);border:1px solid var(--border);border-radius:8px;color:#e6edf3;padding:9px 12px;font-family:'DM Mono',monospace;font-size:12px;margin-bottom:10px">
@@ -2948,6 +2984,175 @@ function renderReceitas() {
     {labels:s.labels, series:[{values:s.values, color:'#6D9E7F', area:'rgba(109,158,127,.13)'}], alt:'recebimento mensal'});
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// 🏦 EVOLUÇÃO DE CAIXA
+// Regra do que é caixa: só movimento que de fato entrou ou saiu da conta.
+// ENTRA  → receitas recebidas, aportes de sócio, rendimento de aplicação
+// SAI    → despesas pagas, retiradas de sócio
+// FORA   → transferência entre contas, aplicação e resgate (movem dinheiro
+//          entre bolsos da mesma empresa, não alteram o caixa consolidado)
+// Nota apurada nos dados: reembolso aparece nos dois lados com o mesmo valor,
+// mas em DATAS DIFERENTES — é o dinheiro que saiu e voltou dias depois. São
+// dois movimentos reais de caixa e ambos entram.
+// ═══════════════════════════════════════════════════════════════════
+const CX_TRANSFERENCIA = /TRANSFER[EÊ]NCIA ENTRE CONTAS|TRANSF\.? ENTRE CONTAS|ENTRE CONTAS|MOVIMENTA[CÇ][AÃ]O INTERNA|APLICA[CÇ][AÃ]O FINANCEIRA|RESGATE DE APLICA|APLICA[CÇ][AÃ]O AUTOM|SALDO INICIAL/i;
+function cxEhTransferencia(txt, cat){
+  return CX_TRANSFERENCIA.test(String(txt||'')) || CX_TRANSFERENCIA.test(String(cat||''));
+}
+function cxYM(d){ return d.getFullYear()*100 + (d.getMonth()+1); }
+function cxLabel(ym){ return MESES[(ym%100)-1] + '/' + String(Math.floor(ym/100)).slice(2); }
+
+// Constrói a série mensal de caixa de um empreendimento.
+function caixaSerie(desp, rec, aportes, retiradas, rendimentos){
+  const M = {};   // ym → {vendas, outras, aporte, rendimento, obra, socio, admin...}
+  const zero = () => ({ vendas:0, outrasRec:0, aporte:0, rendimento:0,
+                        obra:0, comercial:0, tributo:0, socio:0, permuta:0, distrato:0, outrasDesp:0,
+                        entrada:0, saida:0, excluido:0 });
+  const put = (ym) => (M[ym] = M[ym] || zero());
+  const excl = { n:0, v:0 };
+
+  (rec||[]).forEach(r=>{
+    const d = parseDate(r.dataComp||r.data); if(!d) return;
+    const v = r.valReceb||0; if(!(v>0)) return;
+    if (cxEhTransferencia(r.desc, r.cat)) { excl.n++; excl.v+=v; put(cxYM(d)).excluido+=v; return; }
+    const m = put(cxYM(d));
+    if (r.grupo === 'venda' || /Venda|INCC/i.test(r.tipo||'')) m.vendas += v; else m.outrasRec += v;
+    m.entrada += v;
+  });
+  (aportes||[]).forEach(a=>{ const d=parseDate(a.data); if(!d) return;
+    const m=put(cxYM(d)); m.aporte+=a.valor; m.entrada+=a.valor; });
+  (rendimentos||[]).forEach(r=>{ const d=parseDate(r.data); if(!d) return;
+    const v=r.valor||r.valReceb||0; const m=put(cxYM(d)); m.rendimento+=v; m.entrada+=v; });
+
+  (desp||[]).forEach(r=>{
+    const d = parseDate(r.data); if(!d) return;
+    const v = r.valor||0; if(!(v>0)) return;
+    if (cxEhTransferencia(r.descOriginal||r.descricao, r.categoria)) { excl.n++; excl.v+=v; put(cxYM(d)).excluido+=v; return; }
+    const m = put(cxYM(d)); const c = _audNorm(r.categoria||'');
+    if (/PERMUTA/.test(c)) m.permuta += v;
+    else if (/DISTRATO/.test(c)) m.distrato += v;
+    else if (/COMISS|MARKETING/.test(c)) m.comercial += v;
+    else if (/IMPOSTO|TRIBUT|TAXA|TARIFA|CARTOR/.test(c)) m.tributo += v;
+    else if (isCustoObra(r.categoria||'')) m.obra += v;
+    else m.outrasDesp += v;
+    m.saida += v;
+  });
+  (retiradas||[]).forEach(r=>{ const d=parseDate(r.data); if(!d) return;
+    const m=put(cxYM(d)); m.socio+=r.valor; m.saida+=r.valor; });
+
+  // preenche os meses sem movimento, para a curva não dar saltos falsos
+  const yms = Object.keys(M).map(Number).sort((a,b)=>a-b);
+  if (!yms.length) return { linhas:[], excl };
+  const linhas = [];
+  let saldo = 0, saldoOp = 0;
+  let y = Math.floor(yms[0]/100), mo = yms[0]%100;
+  const fim = yms[yms.length-1];
+  while (y*100+mo <= fim){
+    const ym = y*100+mo;
+    const m = M[ym] || zero();
+    const res = m.entrada - m.saida;
+    // caixa operacional: sem aporte e sem retirada de sócio — mostra se a obra se paga
+    const resOp = (m.entrada - m.aporte) - (m.saida - m.socio);
+    saldo += res; saldoOp += resOp;
+    linhas.push(Object.assign({ ym, res, saldo, resOp, saldoOp }, m));
+    mo++; if(mo>12){ mo=1; y++; }
+  }
+  return { linhas, excl };
+}
+
+function renderCaixa(){
+  const el = document.getElementById('tab18');
+  if (!el) return;
+  const S = caixaSerie(_DESPESAS, _RECEITAS, _APORTES, _RETIRADAS,
+                       (typeof _RENDIMENTOS!=='undefined'? _RENDIMENTOS : []));
+  const L = S.linhas;
+  if (!L.length){ el.innerHTML = '<div class="info-box">Sem movimento de caixa carregado.</div>'; return; }
+
+  const hoje = new Date(), ymH = cxYM(hoje);
+  const fechados = L.filter(x=>x.ym < ymH);
+  const atual = L[L.length-1];
+  const pico = L.reduce((a,b)=> b.saldo>a.saldo? b:a, L[0]);
+  const vale = L.reduce((a,b)=> b.saldo<a.saldo? b:a, L[0]);
+  const negativos = L.filter(x=>x.saldo < 0);
+  const u6 = fechados.slice(-6);
+  const entradaMed = u6.length? u6.reduce((s,x)=>s+x.entrada,0)/u6.length : 0;
+  const saidaMed   = u6.length? u6.reduce((s,x)=>s+x.saida,0)/u6.length : 0;
+  const queima = saidaMed - entradaMed;
+  const cobertura = queima>0 ? atual.saldo/queima : null;
+  const totEnt = L.reduce((s,x)=>s+x.entrada,0), totSai = L.reduce((s,x)=>s+x.saida,0);
+  const totAporte = L.reduce((s,x)=>s+x.aporte,0), totVendas = L.reduce((s,x)=>s+x.vendas,0);
+  const depAporte = totEnt>0 ? totAporte/totEnt*100 : 0;
+  const mesesPos = fechados.filter(x=>x.resOp>0).length;
+
+  const k=(l,v,s,c,h)=>`<div class="kpi" style="border-top:2px solid ${c}"><div class="kpi-label">${l}${h?hintIcon(h):''}</div><div class="kpi-value" style="color:${c}">${v}</div>${s?`<div class="kpi-sub">${s}</div>`:''}</div>`;
+
+  el.innerHTML = `
+    <div class="info-box" style="border:1px solid #6C8FB540;margin-bottom:12px"><span>🏦</span><div><strong>Evolução de caixa de ${CFG.nome}.</strong>
+    Entram: recebimentos de venda, aportes de sócio e rendimento de aplicação. Saem: despesas pagas e retiradas de sócio.
+    Ficam fora transferências entre contas e aplicação/resgate, que movem dinheiro entre bolsos da mesma empresa sem alterar o caixa.
+    ${S.excl.n? '<strong>'+S.excl.n+' lançamento(s)</strong> ('+fmt(S.excl.v)+') foram excluídos por essa regra.' : ''}
+    O saldo parte de zero na abertura da SPE — é a posição construída pelos próprios lançamentos, não um extrato bancário.</div></div>
+
+    <div class="kpi-grid">
+      ${k('Caixa hoje', fmt(atual.saldo), cxLabel(atual.ym)+' · '+(atual.saldo>=0?'positivo':'NEGATIVO'), atual.saldo>=0?'#6D9E7F':'#BF6B60')}
+      ${k('Pico de caixa', fmt(pico.saldo), cxLabel(pico.ym), '#6C8FB5')}
+      ${k('Menor caixa', fmt(vale.saldo), cxLabel(vale.ym)+(negativos.length? ' · '+negativos.length+' mês(es) negativo(s)':''), vale.saldo<0?'#BF6B60':'#8E7FA8')}
+      ${k('Queima líquida', queima>0? fmt(queima)+'/mês' : 'gera caixa', queima>0? 'média dos 6 meses fechados' : 'entradas superam saídas', queima>0?'#C09257':'#6D9E7F','Saída média menos entrada média nos últimos seis meses fechados. Positivo significa que o caixa encolhe todo mês.')}
+    </div>
+    <div class="kpi-grid" style="margin-top:6px">
+      ${k('Cobertura de caixa', cobertura===null? '—' : (cobertura>=99? '> 8 anos' : cobertura.toFixed(1)+' meses'), cobertura===null? 'não há queima' : 'quanto o saldo aguenta no ritmo atual', cobertura!==null&&cobertura<3?'#BF6B60':cobertura!==null&&cobertura<6?'#C09257':'#6D9E7F','Saldo atual dividido pela queima média. Abaixo de três meses é zona de atenção: qualquer atraso de recebimento vira aperto.')}
+      ${k('Dependência de aporte', depAporte.toFixed(1)+'%', 'das entradas vieram dos sócios', depAporte>50?'#BF6B60':depAporte>25?'#C09257':'#6D9E7F','Quanto do dinheiro que entrou veio de aporte em vez de venda. Quanto menor, mais a obra se financia sozinha.')}
+      ${k('Meses com caixa operacional positivo', mesesPos+' de '+fechados.length, ((mesesPos/Math.max(1,fechados.length))*100).toFixed(0)+'% dos meses fechados', mesesPos/Math.max(1,fechados.length)>0.5?'#6D9E7F':'#C09257','Caixa operacional exclui aporte e retirada: mede se a operação se paga com o que ela mesma gera.')}
+      ${k('Entradas × saídas no total', fmt(totEnt)+' / '+fmt(totSai), 'resultado acumulado '+fmt(totEnt-totSai), (totEnt-totSai)>=0?'#6D9E7F':'#BF6B60')}
+    </div>
+
+    ${negativos.length? `<div class="info-box" style="border:1px solid #BF6B6066;background:rgba(191,107,96,.06);margin-top:10px"><span style="color:#BF6B60">⚠</span><div><strong>Caixa ficou negativo em ${negativos.length} mês(es).</strong> ${negativos.slice(0,6).map(x=>cxLabel(x.ym)+' ('+fmt(x.saldo)+')').join(' · ')}${negativos.length>6?' …':''}<br><span style="font-size:11px;color:var(--muted)">Saldo negativo aqui significa que os lançamentos consomem mais do que entrou desde a abertura. Ou houve aporte não registrado, ou a obra operou com recurso de terceiros no período.</span></div></div>`:''}
+
+    ${fxCard('Saldo de caixa mês a mês','g_cx_saldo','<div class="legend"><span><i style="background:#6C8FB5"></i>Caixa total</span><span><i style="background:#6D9E7F"></i>Caixa operacional (sem sócio)</span></div>','A linha verde exclui aporte e retirada: quando ela sobe, a obra está gerando caixa por conta própria.')}
+    ${fxCard('Entradas e saídas por mês','g_cx_fluxo','<div class="legend"><span><i style="background:#6D9E7F"></i>Entradas</span><span><i style="background:#BF6B60"></i>Saídas</span></div>','Barras lado a lado: onde a vermelha supera a verde, o mês consumiu caixa.')}
+
+    <div class="section-title" style="margin-top:16px">Composição das entradas e das saídas</div>
+    <div class="table-wrap" style="margin-bottom:12px"><table>
+      <thead><tr><th>Natureza</th><th style="text-align:right">Total</th><th style="text-align:right">% do lado</th><th>Leitura</th></tr></thead>
+      <tbody>
+        <tr style="background:var(--surface-3)"><td colspan="4" style="font-weight:600;color:#6D9E7F;font-size:11px">ENTRADAS — ${fmt(totEnt)}</td></tr>
+        <tr><td style="padding-left:16px">Recebimento de vendas</td><td style="text-align:right;font-weight:600">${fmt(totVendas)}</td><td style="text-align:right">${(totVendas/Math.max(1,totEnt)*100).toFixed(1)}%</td><td class="kpi-sub">dinheiro do cliente</td></tr>
+        <tr><td style="padding-left:16px">Aporte de sócios</td><td style="text-align:right;font-weight:600">${fmt(totAporte)}</td><td style="text-align:right">${depAporte.toFixed(1)}%</td><td class="kpi-sub">capital próprio injetado</td></tr>
+        <tr><td style="padding-left:16px">Rendimento de aplicações</td><td style="text-align:right;font-weight:600">${fmt(L.reduce((s,x)=>s+x.rendimento,0))}</td><td style="text-align:right">${(L.reduce((s,x)=>s+x.rendimento,0)/Math.max(1,totEnt)*100).toFixed(1)}%</td><td class="kpi-sub">ganho do caixa parado</td></tr>
+        <tr><td style="padding-left:16px">Outras receitas</td><td style="text-align:right;font-weight:600">${fmt(L.reduce((s,x)=>s+x.outrasRec,0))}</td><td style="text-align:right">${(L.reduce((s,x)=>s+x.outrasRec,0)/Math.max(1,totEnt)*100).toFixed(1)}%</td><td class="kpi-sub">reembolso, bonificação, rateio</td></tr>
+        <tr style="background:var(--surface-3)"><td colspan="4" style="font-weight:600;color:#BF6B60;font-size:11px">SAÍDAS — ${fmt(totSai)}</td></tr>
+        ${[['obra','Custo de obra','materiais, mão de obra, alimentação'],
+           ['permuta','Permuta','pagamento ao permutante'],
+           ['comercial','Comercial','comissão de corretor e marketing'],
+           ['tributo','Tributos e taxas','impostos, cartório, tarifas'],
+           ['distrato','Distratos','devolução a cliente'],
+           ['socio','Retirada de sócios','capital devolvido'],
+           ['outrasDesp','Demais saídas','administrativo e outros']]
+          .map(([campo,rot,obs])=>{ const v=L.reduce((s,x)=>s+x[campo],0); if(!(v>0)) return '';
+            return `<tr><td style="padding-left:16px">${rot}</td><td style="text-align:right;font-weight:600">${fmt(v)}</td><td style="text-align:right">${(v/Math.max(1,totSai)*100).toFixed(1)}%</td><td class="kpi-sub">${obs}</td></tr>`;}).join('')}
+      </tbody></table></div>
+
+    <div class="section-title">Movimento mês a mês${hintIcon('Saldo acumulado é a soma de tudo que entrou menos tudo que saiu até aquele mês. A coluna operacional exclui aporte e retirada de sócio.')}</div>
+    <div class="table-wrap" style="max-height:none"><table>
+      <thead><tr><th>Mês</th><th style="text-align:right">Entradas</th><th style="text-align:right">Saídas</th><th style="text-align:right">Resultado</th><th style="text-align:right">Saldo</th><th style="text-align:right" class="col-op">Saldo operacional</th></tr></thead>
+      <tbody>${L.slice().reverse().map(x=>`<tr${x.saldo<0?' style="background:rgba(191,107,96,.07)"':''}>
+        <td style="font-family:'DM Mono',monospace;font-size:10.5px">${cxLabel(x.ym)}</td>
+        <td style="text-align:right;color:#6D9E7F">${x.entrada?fmt(x.entrada):'—'}</td>
+        <td style="text-align:right;color:#BF6B60">${x.saida?fmt(x.saida):'—'}</td>
+        <td style="text-align:right;color:${x.res>=0?'#6D9E7F':'#BF6B60'}">${fmt(x.res)}</td>
+        <td style="text-align:right;font-weight:700;color:${x.saldo>=0?'#111':'#BF6B60'}">${fmt(x.saldo)}</td>
+        <td style="text-align:right;color:var(--muted)" class="col-op">${fmt(x.saldoOp)}</td></tr>`).join('')}
+      </tbody></table></div>`;
+
+  const labs = L.map(x=>cxLabel(x.ym));
+  const passo = Math.max(1, Math.ceil(L.length/9));
+  fxLinhas(document.getElementById('g_cx_saldo'), { labels: labs, cada: passo,
+    series:[ {values:L.map(x=>x.saldo), color:'#6C8FB5', area:'rgba(108,143,181,.14)'},
+             {values:L.map(x=>x.saldoOp), color:'#6D9E7F'} ], alt:'saldo de caixa mês a mês' });
+  fxBarras(document.getElementById('g_cx_fluxo'), { grupos: labs, cada: passo,
+    series:[ {values:L.map(x=>x.entrada), color:'#6D9E7F'}, {values:L.map(x=>x.saida), color:'#BF6B60'} ], alt:'entradas e saídas por mês' });
+}
+
 // ═══════════ 🚜 TERRAPLANAGEM, ARRIMO E MÁQUINAS — exclusivo Bossa Nova ═══════════
 // Escopo declarado: movimento de terra e operação de máquinas. Areia e brita NÃO entram
 // (são material de construção, não terraplanagem) — foi o erro que a primeira leitura cometeu.
@@ -3303,7 +3508,7 @@ const REL_TITULOS = {
   4:'Fluxo de Caixa e Aplicacoes', 5:'Despesas', 6:'Resultado Final', 7:'Gestao de Vendas',
   8:'Consolidado das Obras', 9:'Auditoria', 10:'Fornecedores', 11:'Sociedade',
   12:'Analise Comparativa', 13:'Relatorio Gerencial', 14:'Alimentacao de Obra',
-  15:'Indicadores Financeiros', 16:'Receitas', 17:'Terraplanagem e Arrimo'
+  15:'Indicadores Financeiros', 16:'Receitas', 17:'Terraplanagem e Arrimo', 18:'Evolucao de Caixa'
 };
 function relTituloDoc(idx){
   const base = REL_TITULOS[idx] || relNomeAba(idx);
@@ -4505,6 +4710,8 @@ async function renderConsolidado(force) {
       const desp = parseDespesasRows(rowsD);
       // tributos sobre a aplicação (IRRF e IOF) pagos por esta SPE
       const rendTrib = rendApuracao(desp, outRec.rendimentos).tributos;
+      // série de caixa desta SPE, para o comparativo das três obras
+      const caixa = caixaSerie(desp, outRec.receitas, outRec.aportes, ret, outRec.rendimentos).linhas;
       const porMes = {}, porAno = {}, porForn = {}, porCat = {};
       desp.forEach(r => {
         const d = parseDate(r.data); if (!d) return;
@@ -4524,7 +4731,7 @@ async function renderConsolidado(force) {
         F.meses[ym] = (F.meses[ym]||0) + r.valor;
         if ((new Date()-d) < 366*86400000) F.u12 += r.valor;
       });
-      return { key:k, nome:c.nome, cor:c.cor, tAp, tRet, exposto:tAp-tRet, nAp:ap.length, nRet:ret.length, cdi, rend, rendTrib, porMes, porAno, porForn, porCat, tDesp: desp.reduce((s,r)=>s+r.valor,0) };
+      return { key:k, nome:c.nome, cor:c.cor, tAp, tRet, exposto:tAp-tRet, nAp:ap.length, nRet:ret.length, cdi, rend, rendTrib, caixa, porMes, porAno, porForn, porCat, tDesp: desp.reduce((s,r)=>s+r.valor,0) };
     }));
     window._consolData = results;
     paintConsolidado(results);
@@ -5924,6 +6131,7 @@ function switchTab(i) {
   else if(i===15) renderIndicadores();
   else if(i===16) renderReceitas();
   else if(i===17) renderTerraplanagem();
+  else if(i===18) renderCaixa();
   else setTimeout(()=>buildCharts(i),80);
 }
 
@@ -7554,6 +7762,17 @@ document.getElementById('drillModal').addEventListener('click', function(e) {
     const itens = R.map(r=>({nome:r.nome, valor:r.tDesp||0, cor:r.cor}));
     injetar('tab8', fxCard('Despesa total por empreendimento','g_cons_obras','','Comparativo direto do volume financeiro das três obras.'),
       function(){ fxBarrasH(document.getElementById('g_cons_obras'), itens); });
+    // as três curvas de caixa
+    const alvoCx = document.getElementById('g_cx_comp');
+    if (alvoCx) {
+      const comC = R.filter(r=>r.caixa && r.caixa.length);
+      const todos = [...new Set(comC.flatMap(r=>r.caixa.map(x=>x.ym)))].sort((a,b)=>a-b);
+      if (todos.length) fxLinhas(alvoCx, {
+        labels: todos.map(cxLabel), cada: Math.max(1, Math.ceil(todos.length/9)),
+        series: comC.map(r=>{ const m={}; r.caixa.forEach(x=>m[x.ym]=x.saldo); let u=0;
+          return { values: todos.map(ym=>{ if(m[ym]!==undefined) u=m[ym]; return u; }), color:r.cor }; }),
+        alt:'saldo de caixa das três obras' });
+    }
   });
 
   // 🍛 Alimentação — série mensal comparada das três obras
