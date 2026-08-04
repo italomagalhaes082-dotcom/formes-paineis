@@ -1567,6 +1567,10 @@ function extratoVendasDados(){
     const disponivel = /DISPON/i.test(info.status||'');
     const nomeDono = donoDe[c] || '';
     const doDono = nomeDono ? porCliente[nomeDono] : null;
+    // o titular vigente traz consigo o que pagou em qualquer casa
+    const vendaDono  = doDono ? doDono.venda  : (casas[c]||{venda:0}).venda;
+    const inccDono   = doDono ? doDono.incc   : (casas[c]||{incc:0}).incc;
+    const personDono = doDono ? doDono.person : (casas[c]||{person:0}).person;
     const clientes = Object.entries(g.clientes).sort((a,b)=>b[1]-a[1]);
     const principal = clientes.length ? clientes[0][0] : (info.cliente || '—');
     // caixa líquido da unidade: tudo que entrou menos o que voltou ao distratado
@@ -1574,10 +1578,6 @@ function extratoVendasDados(){
     // da unidade: ele vive na apuração de distratos, onde o que interessa é o lucro.
     const liquido = (doDono ? doDono.total : g.total) - 0;
     const saldoContrato = disponivel ? 0 : Math.max(0, valorVenda - vendaDono);
-    // o titular vigente traz consigo o que pagou em qualquer casa
-    const vendaDono  = doDono ? doDono.venda  : g.venda;
-    const inccDono   = doDono ? doDono.incc   : g.incc;
-    const personDono = doDono ? doDono.person : g.person;
     return { casa:c, status:info.status||'—', dataVenda:info.dataVenda||'', valorVenda,
              migrou: !!(doDono && Math.abs(doDono.venda - g.venda) > 1000),
              cliente: info.cliente || principal, nClientes: clientes.length,
@@ -2283,7 +2283,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-aa · aba ativa por ID</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-ab · ordem de declaração</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
