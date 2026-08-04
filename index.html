@@ -674,6 +674,7 @@
       <button class="tab" onclick="switchTab(16)">💵 Receitas</button>
       <button class="tab" id="tabBtnTerra" onclick="switchTab(17)" style="display:none">🚜 Terraplanagem</button>
       <button class="tab" onclick="switchTab(18)">🏦 Evolução de Caixa</button>
+      <button class="tab" onclick="switchTab(19)">📮 Inadimplência</button>
     </div>
   </div>
   <div class="content">
@@ -696,6 +697,7 @@
     <div class="tab-content" id="tab16"></div>
     <div class="tab-content" id="tab17"></div>
     <div class="tab-content" id="tab18"></div>
+    <div class="tab-content" id="tab19"></div>
   </div>
 </div>
 
@@ -1117,6 +1119,154 @@ function cargaGravarBaseline(){
   } catch(e) {}
 }
 // Deixa explícito de onde vêm os números — e o que muda quando o extrato entra.
+// ═══════════════════════════════════════════════════════════════════
+// CONTRATOS COMERCIAIS — a base de parcelas vista por contrato, não por lançamento
+// Uma casa pode ter vários contratos ao longo do tempo: vendida, distratada, revendida.
+// Somar todos superestima o contratado e cria um "a receber" que nunca vai entrar,
+// porque o saldo de um contrato encerrado não é cobrável de ninguém.
+// ═══════════════════════════════════════════════════════════════════
+function contratosComerciais(){
+  const com = (window._comercial && window._comercial.receitas) ? window._comercial.receitas
+            : (typeof _RECEITAS!=='undefined' ? _RECEITAS : []);
+  const venda = r => r.grupo === 'venda' || /Venda|INCC/i.test(r.tipo||'');
+  const mapa = {};
+  com.filter(venda).forEach(r=>{
+    const casa = r.casa || extrairCasa(r.desc) || '—';
+    const k = casa + '|' + String(r.cliente||'—').trim();
+    const g = (mapa[k] = mapa[k] || { casa, cliente:String(r.cliente||'—').trim(),
+      orig:0, receb:0, parcelas:[], distratado:false, ultima:null });
+    g.orig += (r.valOrig || 0);
+    g.receb += (r.valReceb || 0);
+    if (/DISTRAT/i.test(r.desc||'')) g.distratado = true;
+    const d = parseDate(r.dataComp); if (d && (!g.ultima || d > g.ultima)) g.ultima = d;
+    g.parcelas.push(r);
+  });
+  const todos = Object.values(mapa).map(c=>Object.assign(c,{ saldo: Math.max(0, c.orig - c.receb) }));
+  const ativos = todos.filter(c=>!c.distratado);
+  const encerrados = todos.filter(c=>c.distratado);
+  // casas com contrato ativo × casas da obra = estoque
+  const casasAtivas = new Set(ativos.map(c=>c.casa).filter(x=>x && x!=='—'));
+  const nCasas = CFG.nCasas || 0;
+  const ticketMedio = ativos.length ? ativos.reduce((s,c)=>s+c.orig,0)/ativos.length : 0;
+  const nEstoque = Math.max(0, nCasas - casasAtivas.size);
+  return { todos, ativos, encerrados, casasAtivas, nCasas, nEstoque, ticketMedio,
+           estoqueVGV: nEstoque * ticketMedio };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// INADIMPLÊNCIA — parcelas vencidas e não quitadas, de contratos ATIVOS
+// ═══════════════════════════════════════════════════════════════════
+function inadimplenciaDados(){
+  const C = contratosComerciais();
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const abertas = [];
+  C.ativos.forEach(c=>{
+    c.parcelas.forEach(p=>{
+      const falta = (p.valOrig||0) - (p.valReceb||0);
+      if (falta <= 1) return;
+      const dv = parseDate(p.dataVenc);
+      const dias = dv ? Math.floor((hoje - dv)/86400000) : null;
+      abertas.push({ casa:c.casa, cliente:c.cliente, desc:p.desc, venc:p.dataVenc,
+                     orig:p.valOrig||0, pago:p.valReceb||0, falta, dias,
+                     situacao:p.situacao||'', vencida: dias !== null && dias > 0 });
+    });
+  });
+  const vencidas = abertas.filter(a=>a.vencida).sort((a,b)=>b.falta-a.falta);
+  const aVencer  = abertas.filter(a=>!a.vencida).sort((a,b)=>parseDate(a.venc)-parseDate(b.venc));
+  const faixa = (min,max) => vencidas.filter(a=>a.dias>=min && (max===null || a.dias<=max));
+  const faixas = [
+    { rot:'1 a 30 dias',    itens:faixa(1,30),   cor:'#C4A55C' },
+    { rot:'31 a 60 dias',   itens:faixa(31,60),  cor:'#C09257' },
+    { rot:'61 a 90 dias',   itens:faixa(61,90),  cor:'#BF6B60' },
+    { rot:'mais de 90 dias',itens:faixa(91,null),cor:'#A8392C' },
+  ].map(f=>Object.assign(f,{ v: f.itens.reduce((s,x)=>s+x.falta,0) }));
+  // por cliente, para a régua de cobrança
+  const porCli = {};
+  vencidas.forEach(a=>{ const k=a.cliente+'|'+a.casa;
+    const g=(porCli[k]=porCli[k]||{cliente:a.cliente, casa:a.casa, v:0, n:0, pior:0});
+    g.v+=a.falta; g.n++; if(a.dias>g.pior) g.pior=a.dias; });
+  const clientes = Object.values(porCli).sort((a,b)=>b.v-a.v);
+  const totalVencido = vencidas.reduce((s,a)=>s+a.falta,0);
+  const totalAVencer = aVencer.reduce((s,a)=>s+a.falta,0);
+  // a base exporta parcela em aberto? se quase tudo vem quitado, ela não exporta
+  const totalParcelas = C.ativos.reduce((s,c)=>s+c.parcelas.length,0);
+  const pctAberto = totalParcelas ? abertas.length/totalParcelas*100 : 0;
+  const baseSemAberto = abertas.length < 5 || pctAberto < 1;
+  return { C, abertas, vencidas, aVencer, faixas, clientes, totalVencido, totalAVencer,
+           totalParcelas, pctAberto, baseSemAberto };
+}
+
+function renderInadimplencia(){
+  const el = document.getElementById('tab19'); if (!el) return;
+  const D = inadimplenciaDados();
+  const k=(l,v,s,c,h)=>`<div class="kpi" style="border-top:2px solid ${c}"><div class="kpi-label">${l}${h?hintIcon(h):''}</div><div class="kpi-value" style="color:${c}">${v}</div>${s?`<div class="kpi-sub">${s}</div>`:''}</div>`;
+
+  el.innerHTML = `
+    ${D.baseSemAberto ? `<div class="info-box" style="border:1px solid #BF6B6088;background:rgba(191,107,96,.08);margin-bottom:12px"><span style="color:#BF6B60;font-size:18px">⛔</span><div>
+      <strong>A exportação de receitas não traz as parcelas em aberto.</strong> Das ${D.totalParcelas.toLocaleString('pt-BR')} parcelas de contratos ativos nesta planilha, ${D.abertas.length} estão com saldo — ${D.pctAberto.toFixed(2)}%. Todo o resto vem marcado como quitado.<br><br>
+      Uma carteira de ${D.C.ativos.length} contratos ativos não tem como ter quase nada a receber: o que falta na planilha são <strong>as parcelas a vencer e as vencidas em aberto</strong>. Sem elas, esta aba não consegue montar a régua de cobrança.<br><br>
+      <strong>O que pedir ao sistema:</strong> exportar as receitas <em>sem filtrar por situação</em> — incluindo as parcelas <em>Em aberto</em>, <em>A vencer</em> e <em>Vencidas</em>. Assim que vierem, esta aba passa a funcionar sozinha, sem nenhuma mudança.</div></div>` : ''}
+
+    <div class="info-box" style="border:1px solid #6C8FB540;margin-bottom:12px"><span>📮</span><div><strong>Inadimplência de ${CFG.nome}.</strong>
+    Considera apenas <strong>contratos ativos</strong>: ${D.C.ativos.length} de ${D.C.todos.length}. Os ${D.C.encerrados.length} contratos distratados ficam de fora — o saldo de um contrato encerrado não é cobrável de ninguém, e somá-lo criaria um valor a receber que nunca entra.</div></div>
+
+    <div class="kpi-grid">
+      ${k('Vencido e não pago', fmt(D.totalVencido), D.vencidas.length+' parcela(s) · '+D.clientes.length+' cliente(s)', D.totalVencido>0?'#BF6B60':'#6D9E7F')}
+      ${k('A vencer', fmt(D.totalAVencer), D.aVencer.length+' parcela(s) de contratos ativos', '#6C8FB5')}
+      ${k('Contratos ativos', String(D.C.ativos.length), D.C.casasAtivas.size+' casa(s) com contrato vigente', '#6D9E7F')}
+      ${k('Estoque a vender', D.C.nEstoque+' casa(s)', D.C.nEstoque? 'VGV estimado '+fmt(D.C.estoqueVGV)+' · ticket médio '+fmt(D.C.ticketMedio) : 'obra 100% vendida', D.C.nEstoque?'#C09257':'#6D9E7F','Casas do empreendimento sem contrato ativo — inclui as que voltaram ao estoque após distrato. Não são recebível: são venda a realizar.')}
+    </div>
+
+    ${D.totalVencido>0 ? `
+    <div class="section-title" style="margin-top:16px">Idade da dívida${hintIcon('Quanto mais velha a parcela, menor a chance de recuperação espontânea. Acima de 90 dias, a cobrança normalmente já exige notificação formal.')}</div>
+    <div class="table-wrap" style="margin-bottom:12px"><table>
+      <thead><tr><th>Faixa</th><th style="text-align:right">Valor</th><th style="text-align:right">%</th><th style="text-align:right">Parcelas</th><th>Ação sugerida</th></tr></thead>
+      <tbody>${D.faixas.map(f=>f.itens.length?`<tr>
+        <td style="font-size:11.5px"><span style="color:${f.cor}">●</span> ${f.rot}</td>
+        <td style="text-align:right;font-weight:700;color:${f.cor}">${fmt(f.v)}</td>
+        <td style="text-align:right;color:var(--muted);font-size:10.5px">${(f.v/D.totalVencido*100).toFixed(1)}%</td>
+        <td style="text-align:right;color:var(--muted);font-size:10.5px">${f.itens.length}</td>
+        <td class="kpi-sub">${f.rot.startsWith('1 a')?'contato amigável, lembrete de vencimento':f.rot.startsWith('31')?'contato formal e proposta de acordo':f.rot.startsWith('61')?'notificação por escrito com prazo':'notificação extrajudicial e avaliação de distrato'}</td></tr>`:'').join('')}
+      </tbody></table></div>
+
+    <div class="section-title">Régua de cobrança — por cliente${hintIcon('Ordenado do maior valor para o menor: a cobrança rende mais começando pelo topo.')}</div>
+    <div class="table-wrap"><table>
+      <thead><tr><th style="width:5%">✓</th><th>Cliente</th><th>Casa</th><th style="text-align:right">Vencido</th><th style="text-align:right">Parcelas</th><th style="text-align:right">Atraso máximo</th></tr></thead>
+      <tbody>${D.clientes.map(c=>`<tr>
+        <td style="text-align:center;color:var(--text-3)">☐</td>
+        <td style="font-size:11.5px">${c.cliente}</td>
+        <td style="font-size:11px;color:var(--muted)">${c.casa}</td>
+        <td style="text-align:right;font-weight:700;color:#BF6B60">${fmt(c.v)}</td>
+        <td style="text-align:right;color:var(--muted);font-size:10.5px">${c.n}</td>
+        <td style="text-align:right;color:${c.pior>90?'#A8392C':c.pior>60?'#BF6B60':'#C4A55C'};font-size:11px">${c.pior} dias</td></tr>`).join('')}
+      </tbody></table></div>
+
+    <div class="section-title" style="margin-top:16px">Parcelas vencidas — detalhe</div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Vencimento</th><th>Cliente</th><th>Parcela</th><th style="text-align:right">Valor</th><th style="text-align:right">Pago</th><th style="text-align:right">Falta</th><th style="text-align:right">Atraso</th></tr></thead>
+      <tbody>${D.vencidas.slice(0,300).map(a=>`<tr>
+        <td style="font-family:'DM Mono',monospace;font-size:10.5px">${a.venc||'—'}</td>
+        <td style="font-size:11px">${a.cliente}</td>
+        <td style="font-size:10.5px;color:var(--muted)">${a.desc}</td>
+        <td style="text-align:right;font-size:10.5px">${fmt(a.orig)}</td>
+        <td style="text-align:right;font-size:10.5px;color:#6D9E7F">${a.pago?fmt(a.pago):'—'}</td>
+        <td style="text-align:right;font-weight:700;color:#BF6B60">${fmt(a.falta)}</td>
+        <td style="text-align:right;font-size:10.5px">${a.dias} d</td></tr>`).join('')}
+      </tbody></table></div>` : `
+    <div class="info-box" style="border:1px solid #6D9E7F55;background:rgba(109,158,127,.06)"><span style="color:#6D9E7F">✓</span><div>
+      <strong>Nenhuma parcela vencida em aberto nos dados disponíveis.</strong> ${D.baseSemAberto? 'Como o aviso acima explica, isso reflete a exportação e não a realidade da carteira.' : 'A carteira está em dia.'}</div></div>`}
+
+    ${D.aVencer.length? `<div class="section-title" style="margin-top:16px">Próximas parcelas a vencer</div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Vencimento</th><th>Cliente</th><th>Parcela</th><th style="text-align:right">Valor</th></tr></thead>
+      <tbody>${D.aVencer.slice(0,60).map(a=>`<tr>
+        <td style="font-family:'DM Mono',monospace;font-size:10.5px">${a.venc||'—'}</td>
+        <td style="font-size:11px">${a.cliente}</td>
+        <td style="font-size:10.5px;color:var(--muted)">${a.desc}</td>
+        <td style="text-align:right;font-weight:600">${fmt(a.falta)}</td></tr>`).join('')}
+      </tbody></table></div>`:''}`;
+}
+
 // ═══ Projeção de recebíveis, refeita sobre o caixa real ═══
 // Antes, "recebido" vinha da base de parcelas e trazia junto a quitação contábil dos
 // distratos — o recebido aparecia maior e, por consequência, o A RECEBER aparecia
@@ -1124,41 +1274,40 @@ function cargaGravarBaseline(){
 // cronograma continuam vindo da base comercial. A diferença entre os dois é a
 // projeção honesta do que ainda entra.
 function projecaoRecebiveis(){
-  const com = (window._comercial && window._comercial.receitas) ? window._comercial.receitas
-            : (typeof _RECEITAS!=='undefined' ? _RECEITAS : []);
-  const ex  = window._extrato;
+  const C = contratosComerciais();
+  const ex = window._extrato;
+  // Contratado considera SÓ contratos ativos. Somar contratos distratados criaria um
+  // "a receber" que nunca entra — o saldo de um contrato encerrado não é cobrável.
+  const contratado   = C.ativos.reduce((s,c)=>s+c.orig,0);
+  const contratoTodos= C.todos.reduce((s,c)=>s+c.orig,0);
+  const recebidoBase = C.ativos.reduce((s,c)=>s+c.receb,0);
+  const aReceber     = C.ativos.reduce((s,c)=>s+c.saldo,0);
+  const saldoEncerrados = C.encerrados.reduce((s,c)=>s+c.saldo,0);
+  // caixa de venda efetivamente entrado, quando o extrato está disponível
   const soVenda = r => r.grupo === 'venda' || /Venda|INCC/i.test(r.tipo||'');
-  // contratado: tudo que a base comercial registra como devido pelo cliente
-  const contratado = com.filter(soVenda).reduce((s,r)=>s+(r.valOrig||r.valReceb||0),0);
-  // recebido de verdade
-  const recebidoCaixa = ex
-    ? ex.receitas.filter(soVenda).reduce((s,r)=>s+(r.valReceb||0),0)
-    : com.filter(r=>soVenda(r) && !r.baixaSemCaixa).reduce((s,r)=>s+(r.valReceb||0),0);
-  // o que a base comercial dizia ter recebido, para medir a distorção antiga
-  const recebidoBase = com.filter(soVenda).reduce((s,r)=>s+(r.valReceb||0),0);
-  const baixas = com.filter(r=>r.baixaSemCaixa).reduce((s,r)=>s+(r.valReceb||0),0);
-  const aReceber = Math.max(0, contratado - recebidoCaixa);
-  // vencidas e não recebidas
+  const recebidoCaixa = ex ? ex.receitas.filter(soVenda).reduce((s,r)=>s+(r.valReceb||0),0) : recebidoBase;
+  // vencido em aberto
   const hoje = new Date();
-  const vencidas = com.filter(r=>{
-    if (!soVenda(r)) return false;
-    const dv = parseDate(r.dataVenc); if (!dv || dv > hoje) return false;
-    return (r.valOrig||0) > (r.valReceb||0) + 1;
-  });
-  const vencidoAberto = vencidas.reduce((s,r)=>s+((r.valOrig||0)-(r.valReceb||0)),0);
-  // ritmo dos últimos 6 meses fechados, para estimar o prazo de entrada
+  let vencidoAberto = 0, nVencidas = 0;
+  C.ativos.forEach(c=>c.parcelas.forEach(p=>{
+    const falta=(p.valOrig||0)-(p.valReceb||0); if(falta<=1) return;
+    const dv=parseDate(p.dataVenc); if(dv && dv<=hoje){ vencidoAberto+=falta; nVencidas++; }
+  }));
+  // ritmo de entrada, para estimar prazo
   const porMes = {};
-  (ex? ex.receitas : com).filter(soVenda).forEach(r=>{ const d=parseDate(r.dataComp||r.data); if(!d) return;
-    porMes[d.getFullYear()*100+(d.getMonth()+1)] = (porMes[d.getFullYear()*100+(d.getMonth()+1)]||0) + (r.valReceb||0); });
+  (ex? ex.receitas : []).filter(soVenda).forEach(r=>{ const d=parseDate(r.dataComp||r.data); if(!d) return;
+    porMes[d.getFullYear()*100+(d.getMonth()+1)] = (porMes[d.getFullYear()*100+(d.getMonth()+1)]||0)+(r.valReceb||0); });
   const meses = Object.keys(porMes).map(Number).sort((a,b)=>a-b);
   const ymH = hoje.getFullYear()*100+(hoje.getMonth()+1);
   const u6 = meses.filter(m=>m<ymH).slice(-6);
   const ritmo = u6.length ? u6.reduce((s,m)=>s+porMes[m],0)/u6.length : 0;
-  const mesesParaZerar = ritmo>0 ? aReceber/ritmo : null;
-  return { contratado, recebidoCaixa, recebidoBase, baixas, aReceber, vencidoAberto,
-           nVencidas: vencidas.length, ritmo, mesesParaZerar,
-           pctRecebido: contratado>0 ? recebidoCaixa/contratado*100 : 0,
-           distorcaoAntiga: recebidoBase - recebidoCaixa };
+  return { contratado, contratoTodos, recebidoBase, recebidoCaixa, aReceber, saldoEncerrados,
+           vencidoAberto, nVencidas, ritmo,
+           mesesParaZerar: ritmo>0 ? aReceber/ritmo : null,
+           pctRecebido: contratado>0 ? recebidoBase/contratado*100 : 0,
+           nEstoque: C.nEstoque, estoqueVGV: C.estoqueVGV, ticketMedio: C.ticketMedio,
+           nAtivos: C.ativos.length, nEncerrados: C.encerrados.length,
+           aRealizar: aReceber + C.estoqueVGV };
 }
 window.projecaoRecebiveis = projecaoRecebiveis;
 
@@ -1479,7 +1628,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-c · valores negativos</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-d · inadimplência e estoque</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -3034,25 +3183,26 @@ function renderReceitas() {
     ${(function(){
       let P; try { P = projecaoRecebiveis(); } catch(e) { return ''; }
       if (!P || !(P.contratado>0)) return '';
-      return `<div class="section-title" style="margin-top:16px">📈 Projeção de recebíveis${hintIcon('Contratado vem da base de parcelas; recebido vem do extrato, que é dinheiro de verdade. A diferença é o que ainda entra. Antes do extrato, a quitação contábil dos distratos inflava o recebido e escondia parte do que há a receber.')}</div>
+      return `<div class="section-title" style="margin-top:16px">📈 Receita a realizar${hintIcon('Separa o que é RECEBÍVEL — saldo de contratos ativos, que já tem cliente e cobrança — do que é ESTOQUE, casas ainda não vendidas. As duas coisas entram no caixa futuro, mas por caminhos diferentes: uma se cobra, a outra se vende.')}</div>
       <div class="kpi-grid">
-        <div class="kpi" style="border-top:2px solid #6C8FB5"><div class="kpi-label">Contratado</div>
+        <div class="kpi" style="border-top:2px solid #6C8FB5"><div class="kpi-label">Contratado (ativos)</div>
           <div class="kpi-value" style="color:#6C8FB5">${fmt(P.contratado)}</div>
-          <div class="kpi-sub">valor devido pelos clientes</div></div>
-        <div class="kpi" style="border-top:2px solid #6D9E7F"><div class="kpi-label">Recebido de fato</div>
-          <div class="kpi-value" style="color:#6D9E7F">${fmt(P.recebidoCaixa)}</div>
-          <div class="kpi-sub">${P.pctRecebido.toFixed(1)}% do contratado${window._extrato?' · fonte: extrato':''}</div></div>
-        <div class="kpi" style="border-top:2px solid #C09257"><div class="kpi-label">Ainda a receber</div>
+          <div class="kpi-sub">${P.nAtivos} contratos vigentes${P.nEncerrados? ' · '+P.nEncerrados+' distratados fora':''}</div></div>
+        <div class="kpi" style="border-top:2px solid #6D9E7F"><div class="kpi-label">Recebido</div>
+          <div class="kpi-value" style="color:#6D9E7F">${fmt(P.recebidoBase)}</div>
+          <div class="kpi-sub">${P.pctRecebido.toFixed(1)}% do contratado ativo</div></div>
+        <div class="kpi" style="border-top:2px solid #C09257"><div class="kpi-label">A receber (cobrança)</div>
           <div class="kpi-value" style="color:#C09257">${fmt(P.aReceber)}</div>
-          <div class="kpi-sub">${P.mesesParaZerar!==null? 'ritmo atual: '+P.mesesParaZerar.toFixed(1)+' meses' : 'sem ritmo apurado'}</div></div>
-        <div class="kpi" style="border-top:2px solid ${P.vencidoAberto>0?'#BF6B60':'#8E7FA8'}"><div class="kpi-label">Vencido em aberto</div>
-          <div class="kpi-value" style="color:${P.vencidoAberto>0?'#BF6B60':'#8E7FA8'}">${fmt(P.vencidoAberto)}</div>
-          <div class="kpi-sub">${P.nVencidas} parcela(s) vencida(s)</div></div>
+          <div class="kpi-sub">${P.vencidoAberto>0? fmt(P.vencidoAberto)+' já vencido' : 'nada vencido'}</div></div>
+        <div class="kpi" style="border-top:2px solid #8E7FA8"><div class="kpi-label">Estoque a vender</div>
+          <div class="kpi-value" style="color:#8E7FA8">${fmt(P.estoqueVGV)}</div>
+          <div class="kpi-sub">${P.nEstoque} casa(s) sem contrato · ticket ${fmt(P.ticketMedio)}</div></div>
       </div>
-      ${P.distorcaoAntiga>1000? `<div class="info-box" style="border:1px solid #C4A55C55;background:rgba(196,165,92,.05);margin-top:8px"><span style="color:#C4A55C">ℹ</span><div>
-        <strong>A base de parcelas registra ${fmt(P.recebidoBase)} de recebimento — ${fmt(P.distorcaoAntiga)} a mais que o dinheiro que entrou.</strong>
-        A diferença é a quitação contábil de contratos encerrados${P.baixas>1000? ' ('+fmt(P.baixas)+' identificados como baixa de distrato)':''}: fecha o contrato no sistema, mas não entra em conta.
-        Enquanto essa quitação era contada como recebida, o <em>a receber</em> aparecia menor do que é de verdade.</div></div>`:''}
+      <div class="info-box" style="border:1px solid #6C8FB544;margin-top:8px"><span>📊</span><div>
+        <strong>Receita ainda a realizar: ${fmt(P.aRealizar)}</strong> — ${fmt(P.aReceber)} de cobrança em contratos vigentes mais ${fmt(P.estoqueVGV)} de estoque a vender.
+        ${P.saldoEncerrados>1000? '<br><br>Ficam de fora '+fmt(P.saldoEncerrados)+' de saldo em '+P.nEncerrados+' contratos distratados: não são cobráveis de ninguém, e as casas correspondentes já estão contadas no estoque.' : ''}
+        ${P.contratoTodos>P.contratado+1000? '<br><br><span style="font-size:11px;color:var(--muted)">Somando todos os contratos que já existiram, inclusive os encerrados, o contratado apareceria como '+fmt(P.contratoTodos)+' — '+fmt(P.contratoTodos-P.contratado)+' a mais. É a mesma casa vendida duas vezes.</span>' : ''}
+      </div>
       ${(function(){
       const R2=_RECEITAS||[];
       if(!R2.length) return '';
@@ -3710,7 +3860,7 @@ const REL_TITULOS = {
   4:'Fluxo de Caixa e Aplicacoes', 5:'Despesas', 6:'Resultado Final', 7:'Gestao de Vendas',
   8:'Consolidado das Obras', 9:'Auditoria', 10:'Fornecedores', 11:'Sociedade',
   12:'Analise Comparativa', 13:'Relatorio Gerencial', 14:'Alimentacao de Obra',
-  15:'Indicadores Financeiros', 16:'Receitas', 17:'Terraplanagem e Arrimo', 18:'Evolucao de Caixa'
+  15:'Indicadores Financeiros', 16:'Receitas', 17:'Terraplanagem e Arrimo', 18:'Evolucao de Caixa', 19:'Inadimplencia e Cobranca'
 };
 function relTituloDoc(idx){
   const base = REL_TITULOS[idx] || relNomeAba(idx);
@@ -6444,6 +6594,7 @@ function switchTab(i) {
   else if(i===16) renderReceitas();
   else if(i===17) renderTerraplanagem();
   else if(i===18) renderCaixa();
+  else if(i===19) renderInadimplencia();
   else setTimeout(()=>buildCharts(i),80);
 }
 

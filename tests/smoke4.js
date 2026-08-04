@@ -332,7 +332,27 @@ async function testEmp(emp, checks){
     ok(PR && PR.contratado>0,'Projeção: contratado apurado');
     ok(PR && PR.aReceber === Math.max(0, PR.contratado-PR.recebidoCaixa),'Projeção: a receber = contratado menos recebido de fato');
     w.switchTab(16); await new Promise(r=>setTimeout(r,400));
-    ok(t('tab16').includes('Projeção de recebíveis'),'Projeção: seção na aba Receitas');
+    ok(t('tab16').includes('Receita a realizar'),'Projeção: seção de receita a realizar na aba Receitas');
+    ok(typeof w.contratosComerciais==='function','Contratos: agrupamento por contrato disponível');
+    const CC=w.contratosComerciais();
+    ok(CC.todos.length>0,'Contratos: carteira montada ('+CC.todos.length+')');
+    ok(CC.ativos.length + CC.encerrados.length === CC.todos.length,'Contratos: ativos e encerrados somam o total');
+    ok(CC.encerrados.every(c=>c.distratado),'Contratos: encerrados são os distratados');
+    ok(PR.contratado <= PR.contratoTodos,'Projeção: contratado ativo não excede o total de contratos');
+    ok(PR.aRealizar === PR.aReceber + PR.estoqueVGV,'Projeção: a realizar = cobrança + estoque');
+    ok(typeof PR.nEstoque === 'number','Projeção: estoque de casas sem contrato contabilizado ('+PR.nEstoque+')');
+    // painel de inadimplência
+    w.switchTab(19); await new Promise(r=>setTimeout(r,500));
+    const IN=t('tab19');
+    ok(IN.includes('Inadimplência'),'Inadimplência: painel renderiza');
+    ok(IN.includes('Estoque a vender'),'Inadimplência: estoque separado do recebível');
+    ok(typeof w.inadimplenciaDados==='function','Inadimplência: dados disponíveis');
+    const ID=w.inadimplenciaDados();
+    ok(ID.vencidas.every(a=>a.dias>0),'Inadimplência: só entra parcela efetivamente vencida');
+    ok(ID.faixas.length===4,'Inadimplência: quatro faixas de idade da dívida');
+    const somaFaixas=ID.faixas.reduce((s,f)=>s+f.v,0);
+    ok(Math.abs(somaFaixas-ID.totalVencido)<1,'Inadimplência: faixas somam o total vencido');
+    ok(ID.C.encerrados.length===0 || ID.vencidas.every(a=>ID.C.ativos.some(c=>c.cliente===a.cliente)),'Inadimplência: contratos distratados ficam fora da cobrança');
     // aba Receitas
     w.switchTab(16); await new Promise(r=>setTimeout(r,400));
     const REC=t('tab16');
