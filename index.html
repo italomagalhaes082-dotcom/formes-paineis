@@ -1518,6 +1518,31 @@ function extratoVendasDados(){
     }
   });
 
+  // ═══ MIGRAÇÃO DE CASA VIA ADITIVO ═══
+  // Cliente que troca de unidade leva o que já pagou. O dinheiro fica lançado com a
+  // descrição da casa ANTIGA, mas pertence ao contrato da casa NOVA. Por isso o
+  // recebimento do titular vigente é somado pelo NOME dele em todas as casas, não só
+  // na que aparece no descritivo. Casos conhecidos: Miguel 40→10, Helano 39→29,
+  // Lucas 17→39, Tereza 13→31, e Marcelo vindo do Bossa.
+  const porCliente = {};
+  ex.receitas.forEach(r=>{
+    if (!/CONCILIADO/i.test(r.situacao||'') && r.situacao) return;
+    const nome = _audNorm(r.cliente||'').split(/\s+/).slice(0,3).join(' ');
+    if (!nome) return;
+    const g = (porCliente[nome] = porCliente[nome] || { venda:0, incc:0, person:0, outros:0, total:0, n:0, itens:[] });
+    const v = r.valReceb||0;
+    if (r.tipo === 'INCC') g.incc += v;
+    else if (r.tipo === 'Personalizacao') g.person += v;
+    else if (r.tipo === 'Venda' || r.tipo === 'VendaDistratada') g.venda += v;
+    else g.outros += v;
+    g.total += v; g.n++; g.itens.push(r);
+  });
+  // Titular vigente de cada casa, pela apuração curada — quem é dono hoje não é distratado
+  const donoDe = {}, donosAtuais = new Set();
+  gv.forEach(g=>{ if (/DISPON/i.test(g.status||'')) return;
+    const nome = _audNorm(g.cliente||'').split(/\s+/).slice(0,3).join(' ');
+    if (nome) { donoDe[g.casa] = nome; donosAtuais.add(nome); } });
+
   // ── linha por casa: as 66 ──
   const nCasas = (gv.length || CFG.nCasas || 0);
   const listaCasas = gv.length ? gv.map(g=>g.casa) : Object.keys(casas).map(Number);
@@ -1527,18 +1552,27 @@ function extratoVendasDados(){
     const dv = devol[c] || { v:0, n:0, quem:[] };
     const valorVenda = info.valor || 0;
     const disponivel = /DISPON/i.test(info.status||'');
+    const nomeDono = donoDe[c] || '';
+    const doDono = nomeDono ? porCliente[nomeDono] : null;
     const clientes = Object.entries(g.clientes).sort((a,b)=>b[1]-a[1]);
     const principal = clientes.length ? clientes[0][0] : (info.cliente || '—');
     // caixa líquido da unidade: tudo que entrou menos o que voltou ao distratado
-    const liquido = g.total - dv.v;
-    const saldoContrato = disponivel ? 0 : Math.max(0, valorVenda - g.venda);
+    // Saldo de distrato anterior NÃO amortiza o contrato atual e não entra no líquido
+    // da unidade: ele vive na apuração de distratos, onde o que interessa é o lucro.
+    const liquido = (doDono ? doDono.total : g.total) - 0;
+    const saldoContrato = disponivel ? 0 : Math.max(0, valorVenda - vendaDono);
+    // o titular vigente traz consigo o que pagou em qualquer casa
+    const vendaDono  = doDono ? doDono.venda  : g.venda;
+    const inccDono   = doDono ? doDono.incc   : g.incc;
+    const personDono = doDono ? doDono.person : g.person;
     return { casa:c, status:info.status||'—', dataVenda:info.dataVenda||'', valorVenda,
+             migrou: !!(doDono && Math.abs(doDono.venda - g.venda) > 1000),
              cliente: info.cliente || principal, nClientes: clientes.length,
-             venda:g.venda, distratada:g.distratada, incc:g.incc, person:g.person, outros:g.outros,
+             venda:vendaDono, distratada:g.distratada, incc:inccDono, person:personDono, outros:g.outros,
              totalRecebido:g.total, nLanc:g.n,
              devolvido:dv.v, nDevol:dv.n, liquido,
              saldoContrato, disponivel,
-             pct: valorVenda>0 ? g.venda/valorVenda*100 : 0,
+             pct: valorVenda>0 ? vendaDono/valorVenda*100 : 0,
              primeiro:g.primeiro, ultimo:g.ultimo,
              nDist: info.nDist||0, ganhoRev: info.ganhoRev||0, comPerdidas: info.comPerdidas||0 };
   });
@@ -1550,7 +1584,8 @@ function extratoVendasDados(){
     // Cada comprador distratado da casa vira uma OCORRÊNCIA própria. Uma casa com dois
     // distratos aparece com duas linhas, uma sob a outra.
     const ocor = Object.values(distPorPessoa)
-                       .filter(p=>p.casa===l.casa && (p.devolvido>0 || p.marcadoDistrato))
+                       .filter(p=>p.casa===l.casa && (p.devolvido>0 || p.marcadoDistrato)
+                                  && !donosAtuais.has(_audNorm(p.cliente||'').split(/\s+/).slice(0,3).join(' ')))
                        .sort((a,b)=>(a.primeiro||0)-(b.primeiro||0));
     const somaRec = ocor.reduce((s,o)=>s+o.recebido,0);
     const precos = precoContratoPorPessoa();
@@ -1675,12 +1710,12 @@ function renderExtratoVendas(){
       <thead><tr>
         <th style="width:9%">Casa</th><th style="width:22%">Cliente e venda</th>
         <th class="num" style="width:13%">Valor</th><th class="num" style="width:15%">Recebido</th>
-        <th class="num" style="width:13%">De distratados</th><th class="num" style="width:12%">INCC calculado</th>
+        <th class="num" style="width:13%">De distratados<div class="kpi-sub" style="font-weight:400">fora do saldo</div></th><th class="num" style="width:12%">INCC calculado</th>
         <th class="num" style="width:12%">Líquido</th><th class="num" style="width:13%">Saldo</th>
       </tr></thead>
       <tbody>${D.linhas.map(l=>`<tr${l.disponivel?' style="opacity:.62"':''}>
         <td style="font-weight:600">CS ${String(l.casa).padStart(2,'0')}<div class="kpi-sub">${l.status}</div></td>
-        <td><div style="font-size:10.5px">${String(l.cliente||'—').slice(0,24)}</div><div class="kpi-sub">${l.dataVenda||'sem data'}</div></td>
+        <td><div style="font-size:10.5px">${String(l.cliente||'—').slice(0,24)}</div><div class="kpi-sub">${l.dataVenda||'sem data'}${l.migrou?' · <span style="color:#6C8FB5">cliente migrado</span>':''}</div></td>
         <td class="num">${l.valorVenda?fmt(l.valorVenda):'—'}</td>
         <td class="num" style="color:#6D9E7F;cursor:pointer" onclick="evMemoria(${l.casa},'venda')" title="ver a memória de cálculo">${l.venda?fmt(l.venda):'—'}<div class="kpi-sub">${l.disponivel?'':l.pct.toFixed(0)+'% do valor'}${(l.incc||l.person)?' · +'+fmt(l.incc+l.person)+' INCC/pers.':''}</div></td>
         <td class="num" style="color:${l.distratada?'#C4A55C':'var(--text-3)'};cursor:pointer" onclick="evMemoria(${l.casa},'distratada')" title="ver a memória de cálculo">${l.distratada?fmt(l.distratada):'—'}${l.devolvido?'<div class="kpi-sub" style="color:#BF6B60">−'+fmt(l.devolvido)+' devolvido</div>':''}</td>
@@ -2235,7 +2270,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-x · memória de cálculo</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-y · migração de casa</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
