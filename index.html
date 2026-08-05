@@ -2334,7 +2334,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v05.08.26-b · colunas por posição</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v05.08.26-c · rendimentos e não conciliados</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -4009,6 +4009,9 @@ function caixaSerie(desp, rec, aportes, retiradas, rendimentos){
     const s = r.situacao;
     if (!s) return true;
     if (/CONCILIADO/i.test(s)) return true;
+    // Rendimento de aplicação é crédito lançado pelo próprio banco: o sistema o marca
+    // como Quitado e ele nunca chega a ser conciliado. É dinheiro real e sempre conta.
+    if (/RENDIMENTO/i.test(String(r.desc||r.descricao||'')) || /RENDIMENTO/i.test(String(r.cat||r.categoria||''))) return true;
     const v = (r.valor || r.valReceb || 0);
     const sinal = (r.valReceb !== undefined) ? 1 : -1;
     if (/ATRASAD/i.test(s)) { pend.atrN++; pend.atrV += v*sinal; }
@@ -4320,6 +4323,43 @@ function renderCaixa(){
             <td style="text-align:right;font-weight:700;color:#C09257">${fmt(somaReal-somaApur)}</td></tr>`:''}
         </tbody></table></div>
       <div class="kpi-sub" style="margin-bottom:12px">Clique em <strong>informar</strong> na coluna do saldo real para lançar o extrato de cada conta. A divergência mostra quanto falta de lançamento naquela conta.</div>`;
+    })()}
+
+    ${(function(){
+      const ex = window._extrato; if (!ex) return '';
+      const q = r => /QUITADO/i.test(r.situacao||'');
+      const itens = [
+        ...ex.receitas.filter(q).map(r=>({ tipo:'Entrada', data:r.dataComp, valor:r.valReceb||0, quem:r.cliente, desc:r.desc, conta:r.conta })),
+        ...ex.despesas.filter(q).map(r=>({ tipo:'Saída', data:r.data, valor:-(r.valor||0), quem:r.fornecedor, desc:r.descOriginal||r.descricao, conta:r.conta }))
+      ].sort((a,b)=>Math.abs(b.valor)-Math.abs(a.valor));
+      if (!itens.length) return '';
+      const liq = itens.reduce((s,x)=>s+x.valor,0);
+      // pares de mesmo valor e mesma data nos dois sentidos = acerto contábil, não caixa
+      const pares = [];
+      const usados = new Set();
+      itens.forEach((a,i)=>{ if (usados.has(i) || a.valor<=0) return;
+        const j = itens.findIndex((b,k)=>!usados.has(k) && k!==i && b.data===a.data && Math.abs(b.valor + a.valor) < 1);
+        if (j>=0) { usados.add(i); usados.add(j); pares.push([a, itens[j]]); } });
+      return `<div class="section-title" style="margin-top:18px">⚠ Lançamentos baixados e não conciliados${hintIcon('Marcados como quitados no sistema, mas nunca batidos com o extrato bancário. Ficam fora do saldo de caixa até serem conciliados — esta lista existe para o financeiro resolver a pendência.')}</div>
+      <div class="info-box" style="border:1px solid #C4A55C66;background:rgba(196,165,92,.06);margin-bottom:8px"><span style="color:#C4A55C">⚠</span><div>
+        <strong>${itens.length} lançamento(s), efeito líquido ${fmt(liq)}.</strong> Foram baixados no sistema mas não bateram com o extrato do banco, então não entram no saldo de caixa.
+        ${pares.length? '<br><br><strong>'+pares.length+' deles formam pares de mesmo valor e mesma data</strong> — entrada e saída que se anulam, tipicamente distrato cuja comissão foi paga com o próprio dinheiro do distratado. Nesses casos não houve movimento em conta: é acerto contábil, e a conciliação nunca vai ocorrer.' : ''}
+      </div></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th style="width:9%">Tipo</th><th style="width:11%">Data</th><th style="width:24%">Quem</th><th style="width:33%">Descrição</th><th class="num" style="width:14%">Valor</th><th style="width:9%">Par?</th></tr></thead>
+        <tbody>${itens.slice(0,200).map((x,i)=>{
+          const ehPar = pares.some(p=>p[0]===x||p[1]===x);
+          return `<tr>
+          <td style="font-size:10px;color:${x.valor>=0?'#6D9E7F':'#BF6B60'}">${x.tipo}</td>
+          <td style="font-family:'DM Mono',monospace;font-size:10px">${x.data||'—'}</td>
+          <td style="font-size:10px">${String(x.quem||'—').slice(0,26)}</td>
+          <td style="font-size:9.5px;color:var(--muted)">${String(x.desc||'').slice(0,44)}</td>
+          <td class="num" style="color:${x.valor>=0?'#6D9E7F':'#BF6B60'}">${fmt(x.valor)}</td>
+          <td style="font-size:9px;color:${ehPar?'#C4A55C':'var(--text-3)'}">${ehPar?'anula-se':'—'}</td></tr>`;}).join('')}
+          <tr style="border-top:2px solid var(--border);font-weight:700">
+            <td colspan="4">Total — ${itens.length} lançamentos</td>
+            <td class="num">${fmt(liq)}</td><td></td></tr>
+        </tbody></table></div>`;
     })()}
 
     <div class="section-title" style="margin-top:16px">Composição das entradas e das saídas</div>
