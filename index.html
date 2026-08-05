@@ -779,6 +779,7 @@ td.num,th.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-n
 const EMPREENDIMENTOS = {
 
   "liberty": {
+    vendasSheetId: "125UH2CRl-a4f0N6n_Brz_NeFCJHwBhZJyHMPXjySn2E", abaVendasResumo: "LIBERTY_UNIQUE",
     nome: "Liberty Unique", subtitulo: "Painel Gerencial", cor: "#6C8FB5", corSecund: "#6D9E7F",
     sheetId: "1mvNNh2r43GeEmW9h90B_NeyfXWkyoc8k2QHnbVZyUH0",
     abaDespesas: "DESPESAS TOTAIS", abaReceitas: "RECEITAS TOTAIS", abaExtrato: "EXTRATO GERAL", abaVendas: null,
@@ -810,6 +811,7 @@ const EMPREENDIMENTOS = {
     sheetId: "1D660xfizv39rn0pxDJA2Whqeye3bp4hB4vxCAxrXRvw",
     abaDespesas: "DESPESAS TOTAIS", abaReceitas: "RECEITAS TOTAIS", abaExtrato: "EXTRATO GERAL", abaVendas: "VALORES DE VENDA",
     abaGestaoVendas: "GESTAO VENDAS",
+    vendasSheetId: "125UH2CRl-a4f0N6n_Brz_NeFCJHwBhZJyHMPXjySn2E", abaVendasResumo: "JAZZ_EXCLUSIVE",
     nCasas: 66, areaCasa: 144, areaTotal: 8958, mixCasas: '45 casas de 144 m² + 21 casas de 118 m²', pctObraDefault: 82, estruturaPrevisaoFim: '2026-08',
     senha: "jazz2024", bioKey: "jazz_bio", rpId: "liberty-formes.netlify.app",
     socLabel: "🤝 Sociedade",
@@ -831,6 +833,7 @@ const EMPREENDIMENTOS = {
   },
 
   "bossa": {
+    vendasSheetId: "125UH2CRl-a4f0N6n_Brz_NeFCJHwBhZJyHMPXjySn2E", abaVendasResumo: "BOSSA_NOVA",
     nome: "Bossa Nova Residência", subtitulo: "Painel Gerencial", cor: "#8E7FA8", corSecund: "#6C8FB5",
     sheetId: "1B-AG_5lU9JW8TAjybn4OGwK2E3b676xVIE6Yoz9CRjI",
     abaDespesas: "DESPESAS TOTAIS", abaReceitas: "RECEITAS TOTAIS", abaExtrato: "EXTRATO GERAL", abaVendas: null,
@@ -2165,7 +2168,7 @@ async function loadData(force) {
     // de receitas — o extrato tem o dinheiro, mas não tem o contrato.
     // A apuração curada de vendas é autoridade sobre status e preço das unidades —
     // carrega junto com o resto, para as abas de Receitas e Inadimplência já a terem.
-    if (CFG.abaGestaoVendas) { try { await loadGestaoVendas(); } catch(e) { console.warn('GESTAO VENDAS indisponível', e); } }
+    try { await loadGestaoVendas(); } catch(e) { console.warn('apuração de vendas indisponível', e); }
 
     window._extrato = null;
     if (CFG.abaExtrato) {
@@ -2331,7 +2334,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-ag · INCC pelo cliente atual</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v05.08.26-a · vendas das três obras</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -8143,8 +8146,88 @@ async function loadReceitas() {
 }
 
 let _GV = null, _GV_MOTIVO = '';
+// ═══════════════════════════════════════════════════════════════════
+// RESUMO DE VENDAS DA ADMINISTRAÇÃO — planilha única com as três obras
+// Colunas: DATA · UND/UNIDADE · CLIENTE · PREÇO · SINAL · COMISSÃO · BÔNUS ·
+// COMISSÃO PAGA · % · CORRETOR · OBS. Valores em formato americano (R$ 650,000.00).
+// Vira a mesma estrutura que a apuração curada do Jazz produz, para todo o painel
+// (INCC, saldo devedor, estoque, inadimplência) funcionar igual nas três obras.
+// ═══════════════════════════════════════════════════════════════════
+function vendasValorUS(s){
+  const t = String(s||'').replace(/R\$/g,'').replace(/\s/g,'').trim();
+  if (!t) return 0;
+  // 650,000.00 → vírgula é milhar; 650.000,00 → ponto é milhar
+  const usa = /^\d{1,3}(,\d{3})+(\.\d+)?$/.test(t) || (t.includes('.') && !t.includes(','));
+  const n = parseFloat(usa ? t.replace(/,/g,'') : t.replace(/\./g,'').replace(',','.'));
+  return isNaN(n) ? 0 : n;
+}
+async function loadResumoVendas(){
+  if (!CFG.abaVendasResumo || !CFG.vendasSheetId) return null;
+  const rows = parseSheet(await fetchSheet(CFG.abaVendasResumo, CFG.vendasSheetId));
+  if (!rows || rows.length < 2) return null;
+  // localiza o cabeçalho pelas colunas que importam
+  let hdr = -1, M = {};
+  for (let i=0;i<Math.min(5,rows.length);i++){
+    const cs = rows[i].map(c=>_audNorm(String(c||'')));
+    const iCli = cs.findIndex(c=>c==='CLIENTE'); if (iCli<0) continue;
+    hdr = i;
+    M = { data: cs.findIndex(c=>c==='DATA'), und: cs.findIndex(c=>c==='UND'||c==='UNIDADE'),
+          cliente: iCli, preco: cs.findIndex(c=>c==='PRECO'),
+          sinal: cs.findIndex(c=>c==='SINAL'), comissao: cs.findIndex(c=>c.startsWith('COMISSAO PAGA')),
+          corretor: cs.findIndex(c=>c==='CORRETOR'), obs: cs.findIndex(c=>c.startsWith('OBS')) };
+    break;
+  }
+  if (hdr < 0) return null;
+  const porCasa = {};
+  rows.slice(hdr+1).forEach(r=>{
+    const casa = parseInt(String(r[M.und]||'').replace(/\D/g,''),10);
+    const cliente = String(r[M.cliente]||'').trim();
+    if (!casa || !cliente || /SOMAT|MEDIO|TOTAL/i.test(cliente)) return;   // linhas de rodapé
+    const preco = vendasValorUS(r[M.preco]);
+    if (!(preco > 0)) return;
+    const d = normalizeDate(String(r[M.data]||'').trim());
+    const item = { casa, cliente, valor:preco, dataVenda:d,
+                   sinal: M.sinal>=0 ? vendasValorUS(r[M.sinal]) : 0,
+                   comissao: M.comissao>=0 ? vendasValorUS(r[M.comissao]) : 0,
+                   corretor: M.corretor>=0 ? String(r[M.corretor]||'').trim() : '',
+                   obs: M.obs>=0 ? String(r[M.obs]||'').trim() : '' };
+    // várias linhas para a mesma casa = revendas: a MAIS RECENTE é o contrato vigente,
+    // as anteriores viram histórico de distrato daquela unidade
+    const g = (porCasa[casa] = porCasa[casa] || { vigente:null, anteriores:[] });
+    const dt = parseDate(d);
+    if (!g.vigente || (dt && parseDate(g.vigente.dataVenda) && dt > parseDate(g.vigente.dataVenda))) {
+      if (g.vigente) g.anteriores.push(g.vigente);
+      g.vigente = item;
+    } else g.anteriores.push(item);
+  });
+  // monta a lista no formato que o painel já consome
+  const nCasas = CFG.nCasas || 0;
+  const lista = [];
+  for (let c=1; c<=nCasas; c++){
+    const g = porCasa[c];
+    if (!g) { lista.push({ casa:c, cliente:'', status:'Disponível', dataVenda:'', valor:0,
+                           comissao:0, nDist:0, recebDist:0, devolvido:0, comPerdidas:0, ganhoRev:0, obs:'' }); continue; }
+    const v = g.vigente;
+    const ant = g.anteriores;
+    const ganho = ant.length ? (v.valor - ant[ant.length-1].valor) : 0;
+    lista.push({ casa:c, cliente:v.cliente, status:'Em andamento', dataVenda:v.dataVenda,
+                 valor:v.valor, comissao:v.comissao, sinal:v.sinal, corretor:v.corretor,
+                 nDist: ant.length, recebDist:0, devolvido:0,
+                 comPerdidas: ant.reduce((s,a)=>s+(a.comissao||0),0),
+                 ganhoRev: ganho, obs:v.obs, anteriores:ant });
+  }
+  return lista;
+}
+
 async function loadGestaoVendas(force) {
-  if (!CFG.abaGestaoVendas) return null;
+  if (_GV && _GV.length && !force) return _GV;
+  // Sem apuração curada nesta obra, o resumo de vendas da administração assume:
+  // ele tem unidade, cliente, data, preço e comissão das três obras numa planilha só.
+  if (!CFG.abaGestaoVendas) {
+    try { const alt = await loadResumoVendas();
+      if (alt && alt.length) { _GV = alt; window._GV = _GV; return _GV; } } catch(e) { console.warn('resumo de vendas indisponível', e); }
+    return null;
+  }
   if (_GV && _GV.length && !force) return _GV;
   const nomes = [];
   if (CFG.gestaoVendasGid !== undefined) nomes.push({gid: CFG.gestaoVendasGid});
