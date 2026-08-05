@@ -2334,7 +2334,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v05.08.26-a · vendas das três obras</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v05.08.26-b · colunas por posição</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -8166,15 +8166,28 @@ async function loadResumoVendas(){
   const rows = parseSheet(await fetchSheet(CFG.abaVendasResumo, CFG.vendasSheetId));
   if (!rows || rows.length < 2) return null;
   // localiza o cabeçalho pelas colunas que importam
+  // O Google TIPA as colunas de data e número no export e devolve o rótulo VAZIO —
+  // só as de texto sobrevivem. Por isso a detecção por nome achava apenas CLIENTE.
+  // Quando o rótulo falta, caímos para a posição relativa a CLIENTE, que é a mesma
+  // nas três abas: DATA · UNIDADE · CLIENTE · PREÇO · SINAL · COMISSÃO · BÔNUS ·
+  // COMISSÃO PAGA · % · CORRETOR · OBS.
   let hdr = -1, M = {};
   for (let i=0;i<Math.min(5,rows.length);i++){
     const cs = rows[i].map(c=>_audNorm(String(c||'')));
     const iCli = cs.findIndex(c=>c==='CLIENTE'); if (iCli<0) continue;
     hdr = i;
-    M = { data: cs.findIndex(c=>c==='DATA'), und: cs.findIndex(c=>c==='UND'||c==='UNIDADE'),
-          cliente: iCli, preco: cs.findIndex(c=>c==='PRECO'),
-          sinal: cs.findIndex(c=>c==='SINAL'), comissao: cs.findIndex(c=>c.startsWith('COMISSAO PAGA')),
-          corretor: cs.findIndex(c=>c==='CORRETOR'), obs: cs.findIndex(c=>c.startsWith('OBS')) };
+    const acha = (alvo, offset) => {
+      const j = cs.findIndex(c=>alvo(c));
+      return j >= 0 ? j : iCli + offset;
+    };
+    M = { data:     acha(c=>c==='DATA', -2),
+          und:      acha(c=>c==='UND'||c==='UNIDADE', -1),
+          cliente:  iCli,
+          preco:    acha(c=>c==='PRECO', 1),
+          sinal:    acha(c=>c==='SINAL', 2),
+          comissao: acha(c=>c.startsWith('COMISSAO PAGA'), 5),
+          corretor: acha(c=>c==='CORRETOR', 7),
+          obs:      acha(c=>c.startsWith('OBS'), 8) };
     break;
   }
   if (hdr < 0) return null;
@@ -8185,7 +8198,10 @@ async function loadResumoVendas(){
     if (!casa || !cliente || /SOMAT|MEDIO|TOTAL/i.test(cliente)) return;   // linhas de rodapé
     const preco = vendasValorUS(r[M.preco]);
     if (!(preco > 0)) return;
-    const d = normalizeDate(String(r[M.data]||'').trim());
+    let dRaw = String(r[M.data]||'').trim();
+    const mD = dRaw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (mD) dRaw = mD[1].padStart(2,'0')+'/'+mD[2].padStart(2,'0')+'/'+mD[3];
+    const d = normalizeDate(dRaw);
     const item = { casa, cliente, valor:preco, dataVenda:d,
                    sinal: M.sinal>=0 ? vendasValorUS(r[M.sinal]) : 0,
                    comissao: M.comissao>=0 ? vendasValorUS(r[M.comissao]) : 0,
