@@ -1309,16 +1309,22 @@ function saldoDevedorCasas(){
   // A base de parcelas traz a DATA DE COMPETÊNCIA, que repete a data do contrato em
   // todas as parcelas — o fluxo aparecia num mês só e não havia intervalo para
   // corrigir. O EXTRATO GERAL traz a DATA DO MOVIMENTO, quando o dinheiro entrou.
+  // O fluxo é do CLIENTE ATUAL, não da casa. Pegar tudo que entrou na casa fazia a
+  // correção começar no primeiro pagamento de um comprador DISTRATADO anterior — anos
+  // antes do contrato vigente — e inflava o INCC. Seguindo o cliente, o contrato começa
+  // quando ELE comprou, e o dinheiro que ele levou de outra unidade vem junto: o INCC
+  // da casa 10 nasce da compra do Miguel na casa 40, como foi fechado.
   const exSD = window._extrato;
-  const fluxoExtrato = {};
+  const chaveNome = s => _audNorm(s||'').split(/\s+/).slice(0,3).join(' ');
+  const fluxoCliente = {};
   if (exSD) exSD.receitas.forEach(r=>{
     if (!/CONCILIADO/i.test(r.situacao||'') && r.situacao) return;
-    if (r.tipo === 'INCC') return;
-    const cc = extrairCasa(r.desc); if (!cc) return;
+    if (r.tipo === 'INCC') return;                    // correção não amortiza principal
+    const k = chaveNome(r.cliente); if (!k) return;
     const dd = parseDate(r.dataComp); if (!dd) return;
-    (fluxoExtrato[cc] = fluxoExtrato[cc] || []).push({ d: dd, v: r.valReceb||0 });
+    (fluxoCliente[k] = fluxoCliente[k] || []).push({ d: dd, v: r.valReceb||0 });
   });
-  Object.values(fluxoExtrato).forEach(arr=>arr.sort((x,y)=>x.d-y.d));
+  Object.values(fluxoCliente).forEach(arr=>arr.sort((x,y)=>x.d-y.d));
   const linhas = gv.filter(g=>!/DISPON/i.test(g.status||'')).map(g=>{
     const u = porCasa[g.casa];
     const valor = g.valor || 0;
@@ -1326,12 +1332,14 @@ function saldoDevedorCasas(){
     // pagamentos do contrato vigente: só PRINCIPAL (INCC pago é correção, não amortiza o
     // principal contratado — ele quita a própria correção)
     const parc = u ? u.parcelas : [];
-    const temExtrato = !!(fluxoExtrato[g.casa] && fluxoExtrato[g.casa].length);
-    const principais = temExtrato ? fluxoExtrato[g.casa].slice()
+    const kDono = chaveNome(g.cliente || (u && u.cliente));
+    const doCliente = kDono ? fluxoCliente[kDono] : null;
+    const temExtrato = !!(doCliente && doCliente.length);
+    const principais = temExtrato ? doCliente.slice()
       : parc.filter(p=>p.tipo==='Venda' && (p.valReceb||0)>0)
             .map(p=>({ d:parseDate(p.dataComp), v:p.valReceb }))
             .filter(p=>p.d).sort((a,b)=>a.d-b.d);
-    const fonteFluxo = temExtrato ? 'extrato' : 'parcelas';
+    const fonteFluxo = temExtrato ? 'extrato · cliente' : 'parcelas';
     const inccPago = parc.filter(p=>p.tipo==='INCC').reduce((s,p)=>s+(p.valReceb||0),0);
     const pagoPrincipal = principais.reduce((s,p)=>s+p.v,0);
     // simulação mês a mês desde a venda
@@ -2323,7 +2331,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-af · INCC pela data de pagamento</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v04.08.26-ag · INCC pelo cliente atual</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
