@@ -1724,7 +1724,12 @@ function extratoVendasDados(){
   try { const sd = saldoDevedorCasas(); if (sd) sd.linhas.forEach(x=>{
     sdMap[x.casa] = x.corrigidoTotal||0; sdCorte[x.casa] = x.dataCorte||null; }); } catch(e) {}
   linhas.forEach(l=>{ l.inccCalc = sdMap[l.casa] || 0; l.inccAte = sdCorte[l.casa] || null;
-                      l.recebidoComIncc = l.venda + l.incc; });
+                      l.recebidoComIncc = l.venda + l.incc;
+                      // O INCC só é devido NA QUITAÇÃO. Enquanto o contrato corre, a
+                      // correção acumulada é recebível futuro, não divergência de cobrança.
+                      // Considera-se quitada a casa com principal integralmente pago ou
+                      // com repasse identificado.
+                      l.quitada = (l.valorVenda>0 && l.venda >= l.valorVenda*0.98) || !!l.inccAte; });
   const T = f => linhas.reduce((s,l)=>s+(l[f]||0), 0);
   const TD = f => distratos.reduce((s,d)=>s+(d[f]||0), 0);
   return { linhas, distratos, nCasas,
@@ -1803,14 +1808,19 @@ function renderExtratoVendas(){
     </div>
 
     ${(function(){
-      const F = D.linhas.filter(l=>((l.inccCalc||0)-(l.incc||0))>=5000).sort((a,b)=>((b.inccCalc-b.incc)-(a.inccCalc-a.incc)));
-      const M = D.linhas.filter(l=>((l.incc||0)-(l.inccCalc||0))>=5000).sort((a,b)=>((b.incc-b.inccCalc)-(a.incc-a.inccCalc)));
+      const Q = D.linhas.filter(l=>l.quitada);
+      const F = Q.filter(l=>((l.inccCalc||0)-(l.incc||0))>=5000).sort((a,b)=>((b.inccCalc-b.incc)-(a.inccCalc-a.incc)));
+      const M = Q.filter(l=>((l.incc||0)-(l.inccCalc||0))>=5000).sort((a,b)=>((b.incc-b.inccCalc)-(a.incc-a.inccCalc)));
+      const aVencer = D.linhas.filter(l=>!l.quitada).reduce((s,l)=>s+Math.max(0,(l.inccCalc||0)-(l.incc||0)),0);
+      const nVencer = D.linhas.filter(l=>!l.quitada && ((l.inccCalc||0)-(l.incc||0))>500).length;
       if (!F.length && !M.length) return '';
       const vF = F.reduce((s,l)=>s+(l.inccCalc-l.incc),0), vM = M.reduce((s,l)=>s+(l.incc-l.inccCalc),0);
       return `<div class="info-box" style="border:1px solid #C4A55C77;background:rgba(196,165,92,.06);margin-top:14px"><span style="color:#C4A55C;font-size:16px">⚠</span><div>
-        <strong>Divergências de INCC acima de R$ 5.000.</strong>
+        <strong>Divergências de INCC acima de R$ 5.000, apenas em casas quitadas.</strong>
+        <span style="font-size:11px;color:var(--muted)">A correção só é devida na quitação — em contrato que ainda corre, o valor acumulado é recebível futuro, não divergência.</span>
         ${F.length? '<br><span style="color:#BF6B60">Falta cobrar</span> em <strong>'+F.length+' casa(s)</strong>, somando <strong>'+fmt(vF)+'</strong> — maiores: '+F.slice(0,5).map(l=>'CS '+String(l.casa).padStart(2,'0')+' ('+fmt(l.inccCalc-l.incc)+')').join(' · ') : ''}
         ${M.length? '<br><span style="color:#C4A55C">Cobrado a mais</span> em <strong>'+M.length+' casa(s)</strong>, somando <strong>'+fmt(vM)+'</strong> — maiores: '+M.slice(0,5).map(l=>'CS '+String(l.casa).padStart(2,'0')+' ('+fmt(l.incc-l.inccCalc)+')').join(' · ') : ''}
+        ${nVencer? '<br><span style="color:var(--text-3)">A cobrar na quitação</span>: <strong>'+fmt(aVencer)+'</strong> em '+nVencer+' contrato(s) ainda em andamento — não é divergência.' : ''}
         <br><br><span style="font-size:11px;color:var(--muted)">Cobrado a mais pode ser correção de período anterior à data de venda registrada, ou índice diferente do INCC-DI aplicado no contrato. Vale conferir antes de devolver qualquer valor.</span>
       </div></div>`;
     })()}
@@ -1835,6 +1845,7 @@ function renderExtratoVendas(){
           // vira alerta: falta cobrar (vermelho) ou cobrado a mais (âmbar), porque nesse
           // patamar a diferença deixa de ser arredondamento e vira algo a apurar.
           const a = Math.abs(dif);
+          if (!l.quitada) return dif > 500 ? ' · <span style="color:var(--text-3)">a cobrar na quitação</span>' : '';
           if (a < 500) return '';
           const grave = a >= 5000;
           const cor = dif > 0 ? '#BF6B60' : '#C4A55C';
@@ -1850,12 +1861,12 @@ function renderExtratoVendas(){
           <td class="num" style="color:#6D9E7F">${fmt(D.tot.recebidoComIncc)}<div class="kpi-sub">inclui ${fmt(D.tot.incc)} de INCC</div></td>
           <td class="num">${fmt(D.tot.incc)}</td>
           <td class="num" style="color:#C09257">${fmt(D.tot.inccCalc)}<div class="kpi-sub">${(function(){
-            const falta = D.linhas.reduce((s,l)=>s+Math.max(0,(l.inccCalc||0)-(l.incc||0)),0);
-            const mais  = D.linhas.reduce((s,l)=>s+Math.max(0,(l.incc||0)-(l.inccCalc||0)),0);
-            const nF = D.linhas.filter(l=>((l.inccCalc||0)-(l.incc||0))>=5000).length;
-            const nM = D.linhas.filter(l=>((l.incc||0)-(l.inccCalc||0))>=5000).length;
-            return 'falta cobrar '+fmt(falta)+(nF?' ('+nF+' casas)':'')
-                 + (mais>500? ' · cobrado a mais '+fmt(mais)+(nM?' ('+nM+' casas)':'') : '');
+            const Q = D.linhas.filter(l=>l.quitada);
+            const falta = Q.reduce((s,l)=>s+Math.max(0,(l.inccCalc||0)-(l.incc||0)),0);
+            const mais  = Q.reduce((s,l)=>s+Math.max(0,(l.incc||0)-(l.inccCalc||0)),0);
+            const fut   = D.linhas.filter(l=>!l.quitada).reduce((s,l)=>s+Math.max(0,(l.inccCalc||0)-(l.incc||0)),0);
+            return 'quitadas: falta '+fmt(falta)+(mais>500?' · a mais '+fmt(mais):'')
+                 + (fut>500? ' · a vencer '+fmt(fut) : '');
           })()}</div></td>
           <td class="num" style="color:#BF6B60">${fmt(D.tot.saldoContrato)}</td></tr>
       </tbody></table></div>
@@ -2398,7 +2409,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v05.08.26-f · fonte do fluxo em cascata</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v05.08.26-g · INCC devido só na quitação</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
