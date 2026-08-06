@@ -1322,7 +1322,11 @@ function saldoDevedorCasas(){
   const fluxoCliente = {};
   if (exSD) exSD.receitas.forEach(r=>{
     if (!/CONCILIADO/i.test(r.situacao||'') && r.situacao) return;
-    if (r.tipo === 'INCC') return;                    // correção não amortiza principal
+    // Só PRINCIPAL de venda amortiza o contrato. INCC é correção e quita a si mesma;
+    // personalização, reembolso e demais créditos são acessórios e não abatem o preço.
+    // Contá-los fazia o "pago" passar de 100% do valor e o saldo zerar antes da hora,
+    // interrompendo a correção — foi o que zerou o INCC das casas 31, 15, 27, 9 e 2.
+    if (r.tipo !== 'Venda' && r.tipo !== 'VendaDistratada') return;
     const k = chaveNome(r.cliente); if (!k) return;
     const dd = parseDate(r.dataComp); if (!dd) return;
     (fluxoCliente[k] = fluxoCliente[k] || []).push({ d: dd, v: r.valReceb||0 });
@@ -2334,7 +2338,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v05.08.26-c · rendimentos e não conciliados</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v05.08.26-d · só principal amortiza</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
