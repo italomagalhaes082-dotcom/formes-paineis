@@ -1628,10 +1628,23 @@ function extratoVendasDados(){
     g.total += v; g.n++; g.itens.push(r);
   });
   // Titular vigente de cada casa, pela apuração curada — quem é dono hoje não é distratado
+  // Índice de clientes VIGENTES tolerante a grafia. O nome do casal vem separado por
+  // barra, com abreviações e acentuação diferentes entre a planilha de vendas e o
+  // extrato — comparar as três primeiras palavras deixava passar quem já é dono, e a
+  // venda concluída voltava a ser contada como ganho de distrato (caso da Ranniele).
+  const chavesDe = txt => {
+    const partes = String(txt||'').split('/').map(x=>_audNorm(x).trim()).filter(x=>x.length>4);
+    const ks = [];
+    partes.forEach(p=>{ const w = p.split(/\s+/).filter(Boolean);
+      if (w.length>=2) ks.push(w.slice(0,2).join(' '));
+      if (w.length>=3) ks.push(w.slice(0,3).join(' ')); });
+    return ks;
+  };
   const donoDe = {}, donosAtuais = new Set();
   gv.forEach(g=>{ if (/DISPON/i.test(g.status||'')) return;
     const nome = _audNorm(g.cliente||'').split(/\s+/).slice(0,3).join(' ');
-    if (nome) { donoDe[g.casa] = nome; donosAtuais.add(nome); } });
+    if (nome) { donoDe[g.casa] = nome; donosAtuais.add(nome); }
+    chavesDe(g.cliente).forEach(k=>donosAtuais.add(k)); });
 
   // ── linha por casa: as 66 ──
   const nCasas = (gv.length || CFG.nCasas || 0);
@@ -1674,8 +1687,14 @@ function extratoVendasDados(){
     // Cada comprador distratado da casa vira uma OCORRÊNCIA própria. Uma casa com dois
     // distratos aparece com duas linhas, uma sob a outra.
     const ocor = Object.values(distPorPessoa)
-                       .filter(p=>p.casa===l.casa && (p.devolvido>0 || p.marcadoDistrato)
-                                  && !donosAtuais.has(_audNorm(p.cliente||'').split(/\s+/).slice(0,3).join(' ')))
+                       .filter(p=>{
+                         if (p.casa !== l.casa) return false;
+                         // quem é dono vigente de QUALQUER casa nunca é distratado
+                         if (chavesDe(p.cliente).some(k=>donosAtuais.has(k))) return false;
+                         // distrato exige DEVOLUÇÃO EFETIVA ao comprador; sem ela é
+                         // migração de crédito para outra unidade ou empreendimento
+                         return p.devolvido > 0;
+                       })
                        .sort((a,b)=>(a.primeiro||0)-(b.primeiro||0));
     const somaRec = ocor.reduce((s,o)=>s+o.recebido,0);
     const precos = precoContratoPorPessoa();
@@ -1695,6 +1714,11 @@ function extratoVendasDados(){
     // Dois ganhos de naturezas diferentes, mantidos separados:
     //   RESULTADO DO DISTRATO — caixa retido: recebido − devolvido − comissão perdida
     //   GANHO DE REVENDA      — diferença de preço, líquida de custos embutidos
+    // Migração: pagou, não teve devolução e não é dono vigente — o crédito foi para
+    // outra unidade ou outro empreendimento. O ganho da obra é só a comissão retida.
+    const migracoes = Object.values(distPorPessoa).filter(p=>p.casa===l.casa && p.recebido>1000
+      && p.devolvido===0 && !chavesDe(p.cliente).some(k=>donosAtuais.has(k))
+      && !ocor.some(o=>o.cliente===p.cliente));
     const resultadoDistrato = ocor.length ? ocor.reduce((s,o)=>s+o.resultado,0)
                                          : (l.distratada - l.devolvido - l.comPerdidas);
     // Regra do negócio: não houve revenda abaixo do preço da venda anterior. Ganho
@@ -1713,8 +1737,9 @@ function extratoVendasDados(){
       ganhoRevBruto:l.ganhoRev, ganhoSuspeito, custoRev, custoMotivo: cst?cst.motivo:'', ganhoRevLiq,
       total: resultadoDistrato + ganhoRevLiq,
       precoAnterior: precoAnteriorDer, precoAtual: l.valorVenda, ganhoDerivado: ganhoDerivadoCalc,
+      migracoes, migrado: migracoes.reduce((s,p)=>s+p.recebido,0),
       statusAtual:l.status, valorAtual:l.valorVenda };
-  }).sort((a,b)=>b.total-a.total);
+  }).filter(d=>d.ocorrencias.length || d.migracoes.length).sort((a,b)=>b.total-a.total);
 
   // INCC acumulado calculado pela simulação mês a mês do saldo devedor
   let sdMap = {}, sdCorte = {};
@@ -1890,6 +1915,17 @@ function renderExtratoVendas(){
                  : [{ ordem:1, cliente:'—', recebido:d.recebidoDistratado, devolvido:d.devolvido,
                       comPerdidas:d.comPerdidas, resultado:d.resultadoDistrato }];
         const n = oc.length;
+        const linhasMig = (d.migracoes||[]).map(p=>`<tr style="opacity:.75">
+          <td></td><td style="color:#6C8FB5;font-size:10px">migrou</td>
+          <td style="font-size:10px">${String(p.cliente||'—').slice(0,26)}</td>
+          <td class="num" style="color:#6C8FB5">${fmt(p.recebido)}</td>
+          <td class="num" style="color:var(--text-3)">crédito transferido</td>
+          <td class="num" style="color:var(--text-3)">—</td>
+          <td class="num" style="color:var(--text-3);font-size:9.5px">não é distrato</td>
+        </tr>`).join('');
+        if (!oc.length) return `<tr style="border-top:1px solid var(--hairline-strong)">
+          <td rowspan="${(d.migracoes||[]).length+1}" style="font-weight:600;vertical-align:top">CS ${String(d.casa).padStart(2,'0')}</td>
+          <td colspan="6" class="kpi-sub">sem devolução ao comprador — crédito migrado</td></tr>` + linhasMig;
         return oc.map((o,i)=>`<tr${i?'':' style="border-top:1px solid var(--hairline-strong)"'}>
           ${i===0? `<td rowspan="${n}" style="font-weight:600;vertical-align:top">CS ${String(d.casa).padStart(2,'0')}${d.custoMotivo?'<div class="kpi-sub">'+d.custoMotivo+'</div>':''}</td>` : ''}
           <td style="color:var(--muted);font-size:10px">${o.ordem}º</td>
@@ -2409,7 +2445,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v05.08.26-g · INCC devido só na quitação</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v05.08.26-h · distrato exige devolução</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
