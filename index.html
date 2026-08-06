@@ -1332,6 +1332,15 @@ function saldoDevedorCasas(){
     (fluxoCliente[k] = fluxoCliente[k] || []).push({ d: dd, v: r.valReceb||0 });
   });
   Object.values(fluxoCliente).forEach(arr=>arr.sort((x,y)=>x.d-y.d));
+  const fluxoCasa = {};
+  if (exSD) exSD.receitas.forEach(r=>{
+    if (!/CONCILIADO/i.test(r.situacao||'') && r.situacao) return;
+    if (r.tipo !== 'Venda' && r.tipo !== 'VendaDistratada') return;
+    const cc = extrairCasa(r.desc); if (!cc) return;
+    const dd = parseDate(r.dataComp); if (!dd) return;
+    (fluxoCasa[cc] = fluxoCasa[cc] || []).push({ d: dd, v: r.valReceb||0 });
+  });
+  Object.values(fluxoCasa).forEach(arr=>arr.sort((x,y)=>x.d-y.d));
   const linhas = gv.filter(g=>!/DISPON/i.test(g.status||'')).map(g=>{
     const u = porCasa[g.casa];
     const valor = g.valor || 0;
@@ -1339,14 +1348,35 @@ function saldoDevedorCasas(){
     // pagamentos do contrato vigente: só PRINCIPAL (INCC pago é correção, não amortiza o
     // principal contratado — ele quita a própria correção)
     const parc = u ? u.parcelas : [];
+    // ═══ ESCOLHA DA FONTE DO FLUXO ═══
+    // 1º pelo CLIENTE: traz o dinheiro que ele levou de outra unidade e exclui os
+    //    compradores distratados anteriores.
+    // 2º se o nome não casar — grafia diferente, casal com barra, abreviação —, pela
+    //    CASA, mas só a partir da data de venda do contrato vigente, para não herdar
+    //    os pagamentos dos distratados.
+    // A base de parcelas é o último recurso: ela só tem data de COMPETÊNCIA, que repete
+    // a data do contrato em todas as parcelas e faz o saldo zerar no primeiro mês.
     const kDono = chaveNome(g.cliente || (u && u.cliente));
-    const doCliente = kDono ? fluxoCliente[kDono] : null;
-    const temExtrato = !!(doCliente && doCliente.length);
-    const principais = temExtrato ? doCliente.slice()
+    let doCliente = kDono ? fluxoCliente[kDono] : null;
+    // pareamento tolerante: duas primeiras palavras, quando as três não casam
+    if (!doCliente && kDono) {
+      const k2 = kDono.split(' ').slice(0,2).join(' ');
+      const alt = Object.keys(fluxoCliente).find(x=>x.startsWith(k2) || k2.startsWith(x.split(' ').slice(0,2).join(' ')));
+      if (alt) doCliente = fluxoCliente[alt];
+    }
+    let porCasaDesdeVenda = null;
+    if ((!doCliente || !doCliente.length) && fluxoCasa[g.casa] && dv) {
+      porCasaDesdeVenda = fluxoCasa[g.casa].filter(p=>p.d >= dv);
+      if (!porCasaDesdeVenda.length) porCasaDesdeVenda = null;
+    }
+    const temExtrato = !!((doCliente && doCliente.length) || porCasaDesdeVenda);
+    const principais = (doCliente && doCliente.length) ? doCliente.slice()
+      : porCasaDesdeVenda ? porCasaDesdeVenda.slice()
       : parc.filter(p=>p.tipo==='Venda' && (p.valReceb||0)>0)
             .map(p=>({ d:parseDate(p.dataComp), v:p.valReceb }))
             .filter(p=>p.d).sort((a,b)=>a.d-b.d);
-    const fonteFluxo = temExtrato ? 'extrato · cliente' : 'parcelas';
+    const fonteFluxo = (doCliente && doCliente.length) ? 'extrato · cliente'
+                     : porCasaDesdeVenda ? 'extrato · casa' : 'parcelas';
     const inccPago = parc.filter(p=>p.tipo==='INCC').reduce((s,p)=>s+(p.valReceb||0),0);
     const pagoPrincipal = principais.reduce((s,p)=>s+p.v,0);
     // simulação mês a mês desde a venda
@@ -2368,7 +2398,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v05.08.26-e · alerta de divergência de INCC</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v05.08.26-f · fonte do fluxo em cascata</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
