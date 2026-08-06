@@ -1772,6 +1772,18 @@ function renderExtratoVendas(){
       ${k('Caixa líquido das unidades', fmt(D.tot.liquido), 'tudo que entrou menos devoluções de distrato', '#8E7FA8','Soma de venda, distratos anteriores, INCC e personalização, menos o que foi devolvido a comprador distratado. É o dinheiro que a unidade gerou até hoje.')}
     </div>
 
+    ${(function(){
+      const F = D.linhas.filter(l=>((l.inccCalc||0)-(l.incc||0))>=5000).sort((a,b)=>((b.inccCalc-b.incc)-(a.inccCalc-a.incc)));
+      const M = D.linhas.filter(l=>((l.incc||0)-(l.inccCalc||0))>=5000).sort((a,b)=>((b.incc-b.inccCalc)-(a.incc-a.inccCalc)));
+      if (!F.length && !M.length) return '';
+      const vF = F.reduce((s,l)=>s+(l.inccCalc-l.incc),0), vM = M.reduce((s,l)=>s+(l.incc-l.inccCalc),0);
+      return `<div class="info-box" style="border:1px solid #C4A55C77;background:rgba(196,165,92,.06);margin-top:14px"><span style="color:#C4A55C;font-size:16px">⚠</span><div>
+        <strong>Divergências de INCC acima de R$ 5.000.</strong>
+        ${F.length? '<br><span style="color:#BF6B60">Falta cobrar</span> em <strong>'+F.length+' casa(s)</strong>, somando <strong>'+fmt(vF)+'</strong> — maiores: '+F.slice(0,5).map(l=>'CS '+String(l.casa).padStart(2,'0')+' ('+fmt(l.inccCalc-l.incc)+')').join(' · ') : ''}
+        ${M.length? '<br><span style="color:#C4A55C">Cobrado a mais</span> em <strong>'+M.length+' casa(s)</strong>, somando <strong>'+fmt(vM)+'</strong> — maiores: '+M.slice(0,5).map(l=>'CS '+String(l.casa).padStart(2,'0')+' ('+fmt(l.incc-l.inccCalc)+')').join(' · ') : ''}
+        <br><br><span style="font-size:11px;color:var(--muted)">Cobrado a mais pode ser correção de período anterior à data de venda registrada, ou índice diferente do INCC-DI aplicado no contrato. Vale conferir antes de devolver qualquer valor.</span>
+      </div></div>`;
+    })()}
     <div class="section-title" style="margin-top:16px">Vendas por casa — recebimento e INCC${hintIcon('Clique em qualquer valor para ver a memória de cálculo com os lançamentos que o compõem. Venda é o principal do contrato vigente. Distratado é o que entrou de compradores anteriores e ficou. INCC é correção monetária. Personalização é adicional contratado à parte.')}</div>
     <div class="table-wrap" style="max-height:none"><table>
       <thead><tr>
@@ -1788,7 +1800,18 @@ function renderExtratoVendas(){
         <td class="num">${l.valorVenda?fmt(l.valorVenda):'—'}</td>
         <td class="num" style="color:#6D9E7F;cursor:pointer" onclick="evMemoria(${l.casa},'venda')" title="ver a memória de cálculo">${l.recebidoComIncc?fmt(l.recebidoComIncc):'—'}<div class="kpi-sub">${l.incc?'inclui '+fmt(l.incc)+' de INCC':'sem INCC'}${l.disponivel?'':' · '+l.pct.toFixed(0)+'% do valor'}</div></td>
         <td class="num" style="cursor:pointer" onclick="evMemoria(${l.casa},'incc')" title="ver a memória de cálculo">${l.incc?fmt(l.incc):'—'}</td>
-        <td class="num" style="color:#C09257;cursor:pointer" onclick="evMemoria(${l.casa},'incc')" title="ver a memória de cálculo">${l.inccCalc>1?fmt(l.inccCalc):'—'}<div class="kpi-sub">${l.inccAte?'até '+l.inccAte.toLocaleDateString('pt-BR'):(l.disponivel?'':'até hoje')}${Math.abs(dif)>500?' · <span style="color:'+(dif>0?'#BF6B60':'#6D9E7F')+'">'+(dif>0?'falta '+fmt(dif):'pago a mais')+'</span>':''}</div></td>
+        <td class="num" style="color:#C09257;cursor:pointer" onclick="evMemoria(${l.casa},'incc')" title="ver a memória de cálculo">${l.inccCalc>1?fmt(l.inccCalc):'—'}<div class="kpi-sub">${l.inccAte?'até '+l.inccAte.toLocaleDateString('pt-BR'):(l.disponivel?'':'até hoje')}${(function(){
+          // Divergência nos DOIS sentidos, com valor sempre explícito. Acima de R$ 5.000
+          // vira alerta: falta cobrar (vermelho) ou cobrado a mais (âmbar), porque nesse
+          // patamar a diferença deixa de ser arredondamento e vira algo a apurar.
+          const a = Math.abs(dif);
+          if (a < 500) return '';
+          const grave = a >= 5000;
+          const cor = dif > 0 ? '#BF6B60' : '#C4A55C';
+          const rot = dif > 0 ? 'falta cobrar ' : 'cobrado a mais ';
+          return ' · <span style="color:'+cor+(grave?';font-weight:700':'')+'">'
+               + (grave?'⚠ ':'') + rot + fmt(a) + '</span>';
+        })()}</div></td>
         <td class="num" style="font-weight:700;cursor:pointer;color:${l.saldoContrato>1000?'#BF6B60':'var(--text-3)'}" onclick="evMemoria(${l.casa},'saldo')" title="ver a memória de cálculo">${l.saldoContrato>1?fmt(l.saldoContrato):'—'}</td></tr>`;
       }).join('')}
         <tr style="border-top:2px solid var(--border);font-weight:700">
@@ -1796,7 +1819,14 @@ function renderExtratoVendas(){
           <td class="num">${fmt(D.tot.valorVenda)}</td>
           <td class="num" style="color:#6D9E7F">${fmt(D.tot.recebidoComIncc)}<div class="kpi-sub">inclui ${fmt(D.tot.incc)} de INCC</div></td>
           <td class="num">${fmt(D.tot.incc)}</td>
-          <td class="num" style="color:#C09257">${fmt(D.tot.inccCalc)}<div class="kpi-sub">${D.tot.inccCalc>D.tot.incc?'falta '+fmt(D.tot.inccCalc-D.tot.incc):'em dia'}</div></td>
+          <td class="num" style="color:#C09257">${fmt(D.tot.inccCalc)}<div class="kpi-sub">${(function(){
+            const falta = D.linhas.reduce((s,l)=>s+Math.max(0,(l.inccCalc||0)-(l.incc||0)),0);
+            const mais  = D.linhas.reduce((s,l)=>s+Math.max(0,(l.incc||0)-(l.inccCalc||0)),0);
+            const nF = D.linhas.filter(l=>((l.inccCalc||0)-(l.incc||0))>=5000).length;
+            const nM = D.linhas.filter(l=>((l.incc||0)-(l.inccCalc||0))>=5000).length;
+            return 'falta cobrar '+fmt(falta)+(nF?' ('+nF+' casas)':'')
+                 + (mais>500? ' · cobrado a mais '+fmt(mais)+(nM?' ('+nM+' casas)':'') : '');
+          })()}</div></td>
           <td class="num" style="color:#BF6B60">${fmt(D.tot.saldoContrato)}</td></tr>
       </tbody></table></div>
 
@@ -2338,7 +2368,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v05.08.26-d · só principal amortiza</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v05.08.26-e · alerta de divergência de INCC</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
