@@ -2445,7 +2445,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v05.08.26-h · distrato exige devolução</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v05.08.26-i · partes relacionadas por nome inteiro</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -6655,8 +6655,26 @@ async function runAuditoria(progressCb) {
   say("Verificando partes relacionadas...");
   { const kws=[]; (CFG.nomesMap||[]).forEach(m=>{ kws.push(...m.match, m.nome); });
     const kwSet=[...new Set(kws.map(_audNorm))].filter(k=>k.length>=5);
-    const rel=D.filter(r=>{ const f=_audNorm(r.fornecedor)+" "+_audNorm(r.descOriginal);
-      return kwSet.some(k=>f.includes(k)); });
+    // Fornecedores que apenas COINCIDEM com o nome de um sócio e não são parte
+    // relacionada. TALWAN ÍTALO SILVA PUORRO é fornecedor de marmita e cliente do
+    // Jazz — o primeiro nome dele bate com o do sócio e o casamento por trecho de
+    // texto o trazia para cá.
+    const NAO_RELACIONADO = /TALWAN/;
+    // Casamento por SEQUÊNCIA DE PALAVRAS, não por trecho: "ITALO" deixa de casar
+    // dentro de "TALWAN ITALO SILVA". Chave de uma palavra só vale se o nome do
+    // fornecedor tiver no máximo duas palavras — do contrário é homônimo.
+    const casa = (alvo, chave) => {
+      const pa = alvo.split(/\s+/).filter(Boolean), pc = chave.split(/\s+/).filter(Boolean);
+      if (!pc.length) return false;
+      if (pc.length === 1) return pa.length <= 2 && pa.includes(pc[0]);
+      for (let i=0; i<=pa.length-pc.length; i++)
+        if (pc.every((w,j)=>pa[i+j]===w)) return true;
+      return false;
+    };
+    const rel=D.filter(r=>{
+      const forn = _audNorm(r.fornecedor), desc = _audNorm(r.descOriginal);
+      if (NAO_RELACIONADO.test(forn)) return false;
+      return kwSet.some(k=>casa(forn,k) || casa(desc,k)); });
     const totRel=rel.reduce((s,r)=>s+r.valor,0);
     if(rel.length) alerts.push({ sev:"media", icon:"🔁",
       titulo:"Pagamentos envolvendo sócios / partes relacionadas",
