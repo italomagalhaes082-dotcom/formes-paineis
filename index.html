@@ -916,7 +916,11 @@ const GRUPOS_DESPESA = [
     'comissao corretor','marketing e publicidade','premiacao corretores' ] },
   { id:'admin', rot:'Administrativo', cor:'#8E7FA8', cats:[
     'escritorio/administrativo','honorarios advocaticios/consultoria e outros',
-    'salarios','tarifas bancarias','diversos','reembolso','equilibrio de aportes' ] },
+    'salarios','tarifas bancarias','diversos','reembolso' ] },
+  // Movimento de capital entre sócios — não é despesa. Fica fora da pressão de
+  // caixa operacional e do custo por m², como permuta e distrato.
+  { id:'socios', rot:'Movimento entre sócios', cor:'#70767b', cats:[
+    'equilibrio de aportes','retirada socios','devolucao de afac','aporte socios' ] },
   { id:'cartorio', rot:'Cartório, alvarás e licenças', cor:'#C09257', cats:[
     'taxas/licencas/alvara','cartorio - aquisicao terreno','despesas judiciais' ] },
   { id:'impostos', rot:'Impostos e tributos', cor:'#BF6B60', cats:[
@@ -955,7 +959,7 @@ function resumoGrupos(despesas){
   });
   R.naoClassCats = naoClassCats;
   // pressão de caixa operacional: exclui permuta (vinculada à receita) e distrato
-  R.operacional = R.total - R.permuta - R.distrato;
+  R.operacional = R.total - R.permuta - R.distrato - R.socios;
   return R;
 }
 
@@ -2588,7 +2592,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v21.08.26-a · grupos de despesa</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v21.08.26-b · movimento entre sócios</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">

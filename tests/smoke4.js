@@ -417,6 +417,10 @@ async function testEmp(emp, checks){
       {valor:70,categoria:'Categoria Nova'}]);
     ok(RG.obra===1000 && RG.comercial===500,'Grupos: soma por grupo correta');
     ok(RG.impTrimestral===100 && RG.impMensal===50,'Grupos: IRPJ separado dos tributos mensais');
+    ok(w.grupoDespesa('Equilibrio de Aportes')==='socios','Grupos: equilíbrio de aportes é movimento entre sócios');
+    ok(w.grupoDespesa('Retirada Sócios')==='socios','Grupos: retirada de sócios idem');
+    const RG2=w.resumoGrupos([{valor:1000,categoria:'Aquisição de Materiais'},{valor:400,categoria:'Equilibrio de Aportes'}]);
+    ok(RG2.socios===400 && RG2.operacional===1000,'Grupos: movimento entre sócios fora do operacional');
     ok(RG.operacional===RG.total-300-200,'Grupos: operacional exclui permuta e distrato');
     ok(RG.naoclass===70 && RG.naoClassCats['Categoria Nova']===70,'Grupos: não classificado fica visível com a categoria');
     ok(typeof w.parseExtrato==='function','Extrato: parser disponível');
