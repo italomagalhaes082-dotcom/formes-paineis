@@ -2146,6 +2146,86 @@ function fonteBanner(){
     + (r.nAtr ? ' · <span style="color:#BF6B60">' + r.nAtr + ' em atraso: ' + fmt(r.atrasado) + '</span>' : '')
     + '.<br>A base de parcelas segue alimentando VGV, Gestão de Vendas e inadimplência.</div></div>';
 }
+// ═══════════════════════════════════════════════════════════════════
+// DETECTOR DE ALTERAÇÃO RETROATIVA
+// O extrato é REGERADO pelo sistema do zero até a última data conciliada a cada
+// exportação. Se alguém alterar um lançamento de um mês já fechado — data,
+// valor, exclusão —, o número muda em silêncio e nada denuncia. Aqui guardamos a
+// impressão digital de cada mês (total e contagem, de receita e despesa) e
+// comparamos a cada carga. Mês do corrente e o anterior são ignorados: ainda
+// recebem lançamento normalmente.
+// ═══════════════════════════════════════════════════════════════════
+function retroChave(){ return 'retro_' + SHEET_ID; }
+function retroAssinatura(){
+  const ex = window._extrato; if (!ex) return null;
+  const m = {};
+  const add = (k, campo, v) => { (m[k] = m[k] || {rv:0,rn:0,dv:0,dn:0}); m[k][campo] += v; };
+  ex.receitas.forEach(r=>{ const d=parseDate(r.dataComp); if(!d) return;
+    const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    add(k,'rv',r.valReceb||0); add(k,'rn',1); });
+  ex.despesas.forEach(r=>{ const d=parseDate(r.data); if(!d) return;
+    const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    add(k,'dv',r.valor||0); add(k,'dn',1); });
+  Object.keys(m).forEach(k=>{ m[k].rv=Math.round(m[k].rv*100)/100; m[k].dv=Math.round(m[k].dv*100)/100; });
+  return m;
+}
+function retroComparar(){
+  const atual = retroAssinatura(); if (!atual) return null;
+  let base = null; try { base = JSON.parse(localStorage.getItem(retroChave())||'null'); } catch(e){}
+  if (!base) return { primeira:true, atual };
+  const hoje = new Date();
+  const ymAtual = hoje.getFullYear()*100 + (hoje.getMonth()+1);
+  const ymAnterior = hoje.getMonth()===0 ? (hoje.getFullYear()-1)*100+12 : ymAtual-1;
+  const fechado = k => { const [y,mm]=k.split('-').map(Number); const ym=y*100+mm;
+                         return ym !== ymAtual && ym !== ymAnterior; };
+  const mud = [];
+  Object.keys(base).forEach(k=>{
+    if (!fechado(k)) return;
+    const a = atual[k], b = base[k];
+    if (!a) { mud.push({mes:k, tipo:'sumiu', dv:-b.dv, dn:-b.dn, rv:-b.rv, rn:-b.rn}); return; }
+    const dRV=a.rv-b.rv, dRN=a.rn-b.rn, dDV=a.dv-b.dv, dDN=a.dn-b.dn;
+    if (Math.abs(dRV)>1 || dRN!==0 || Math.abs(dDV)>1 || dDN!==0)
+      mud.push({mes:k, tipo:'alterado', rv:dRV, rn:dRN, dv:dDV, dn:dDN});
+  });
+  Object.keys(atual).forEach(k=>{ if (fechado(k) && !base[k])
+    mud.push({mes:k, tipo:'novo', rv:atual[k].rv, rn:atual[k].rn, dv:atual[k].dv, dn:atual[k].dn}); });
+  mud.sort((a,b)=>b.mes.localeCompare(a.mes));
+  return { mudancas:mud, atual, base };
+}
+window.retroGravar = function(){
+  const a = retroAssinatura(); if (!a) return false;
+  try { localStorage.setItem(retroChave(), JSON.stringify(a)); } catch(e){ return false; }
+  const el=document.getElementById('retroAviso'); if(el) el.remove();
+  return true;
+};
+function retroBanner(){
+  const r = retroComparar(); if (!r) return;
+  let el = document.getElementById('retroAviso');
+  if (r.primeira) { retroGravar(); if(el) el.remove(); return; }
+  if (!r.mudancas.length) { if (el) el.remove(); retroGravar(); return; }
+  if (!el) { el = document.createElement('div'); el.id='retroAviso';
+    const dash = document.getElementById('dashboard') || document.body;
+    dash.insertBefore(el, dash.firstChild); }
+  const mesRot = k => { const [y,mm]=k.split('-'); return MESES[+mm-1]+'/'+y.slice(2); };
+  const linha = m => {
+    const p = [];
+    if (Math.abs(m.rv)>1) p.push('receita '+(m.rv>0?'+':'')+fmt(m.rv));
+    if (m.rn) p.push((m.rn>0?'+':'')+m.rn+' lanç. de receita');
+    if (Math.abs(m.dv)>1) p.push('despesa '+(m.dv>0?'+':'')+fmt(m.dv));
+    if (m.dn) p.push((m.dn>0?'+':'')+m.dn+' lanç. de despesa');
+    return '<strong>'+mesRot(m.mes)+'</strong> — '+p.join(' · ');
+  };
+  el.style.cssText = 'background:rgba(196,165,92,.10);border:1px solid #C4A55C88;border-radius:12px;padding:12px 15px;margin:0 0 12px';
+  el.innerHTML = '<div style="display:flex;gap:10px;align-items:flex-start"><span style="color:#C4A55C;font-size:16px">🕐</span><div style="font-size:11.5px;line-height:1.6">'
+    + '<strong>'+r.mudancas.length+' mês(es) já fechado(s) mudaram desde a última conferência.</strong> '
+    + 'O extrato é regerado do zero a cada exportação, então alteração em período antigo entra sem aviso.<br>'
+    + r.mudancas.slice(0,8).map(linha).join('<br>')
+    + (r.mudancas.length>8 ? '<br><span style="color:var(--muted)">… e mais '+(r.mudancas.length-8)+' mês(es)</span>' : '')
+    + '<br><br><span style="font-size:11px;color:var(--muted)">Mudança retroativa costuma ser legítima — parcela reprocessada para a data em que o cliente de fato pagou, por exemplo. Confira e, se estiver certo, marque como conferido para esta virar a nova referência.</span>'
+    + '<br><button onclick="retroGravar()" class="no-print" style="margin-top:8px;background:#6C8FB5;color:#fff;border:0;border-radius:7px;padding:7px 14px;cursor:pointer;font-family:var(--font);font-size:12px;font-weight:600">✓ Conferido — usar como nova referência</button>'
+    + '</div></div>';
+}
+
 function cargaBanner(){
   const avisos = cargaAvaliar();
   let el = document.getElementById('cargaAviso');
@@ -2306,6 +2386,7 @@ async function loadData(force) {
     document.getElementById("dashboard").style.display = "block";
     try { cargaBanner(); } catch(e) { console.warn('sentinela:', e); }
     try { fonteBanner(); } catch(e) {}
+    try { retroBanner(); } catch(e) { console.warn('retro:', e); }
     try { relBotaoFlutuante(); } catch(e) {}
     switchTab(0);
 
@@ -2445,7 +2526,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v05.08.26-i · partes relacionadas por nome inteiro</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v20.08.26-a · alteração retroativa</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">

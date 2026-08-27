@@ -379,6 +379,23 @@ async function testEmp(emp, checks){
     ok(w.vendasValorUS('650.000,00')===650000,'Vendas: formato brasileiro continua valendo');
     ok(w.vendasValorUS('')===0,'Vendas: vazio vira zero');
     ok(typeof w.loadResumoVendas==='function','Vendas: leitor do resumo disponível');
+    // detector de alteração retroativa
+    ok(typeof w.retroAssinatura==='function' && typeof w.retroComparar==='function','Retro: detector disponível');
+    const A1=w.retroAssinatura();
+    if (A1) {
+      w.localStorage.setItem(w.retroChave? w.retroChave() : 'retro_'+w.SHEET_ID, JSON.stringify(A1));
+      const r1=w.retroComparar();
+      ok(r1 && r1.mudancas && r1.mudancas.length===0,'Retro: sem alteração não acusa nada');
+      const A2=JSON.parse(JSON.stringify(A1));
+      const ks=Object.keys(A2).filter(k=>k<'2026-06');
+      if (ks.length) { A2[ks[0]].rv += 54000; A2[ks[0]].rn += 1;
+        w.localStorage.setItem(w.retroChave(), JSON.stringify(A2));
+        const r2=w.retroComparar();
+        ok(r2.mudancas.length>0,'Retro: alteração em mês fechado é detectada');
+        ok(Math.abs(r2.mudancas[0].rv+54000)<1,'Retro: informa o valor e o sinal da diferença');
+      } else ok(true,'Retro: cenário sem mês fechado');
+      w.localStorage.removeItem(w.retroChave());
+    } else ok(true,'Retro: sem extrato neste cenário');
     ok(typeof w.parseExtrato==='function','Extrato: parser disponível');
     const hdrX=['Data movimento','Id','Nome do fornecedor/cliente','Rec','Qtd','Descrição','Ag','Tipo','Origem do lançamento','Conta bancária','Forma','Valor (R$)','Saldo conta (R$)','Situação','Valor original (R$)','Juros (R$)','Multa (R$)','Desconto (R$)','Taxas (R$)','Data de competência','Venc','Prev','Obs','NF','Categoria 1','Val','Centro de Custo 1','ValCC'];
     const lin=(data,quem,desc,tipo,conta,valor,situ,cat)=>{const a=new Array(28).fill('');
