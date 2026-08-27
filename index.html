@@ -897,6 +897,68 @@ const CATS_CUSTO_OBRA = [
   "reembolso",
 ];
 
+// ═══════════════════════════════════════════════════════════════════
+// GRUPOS DE DESPESA — critério aprovado pela direção em 21/08
+// Substitui a cascata "o que sobra vira administrativo", que escondia
+// natureza: dois distratos de R$ 130 mil no Jazz apareceram como explosão
+// administrativa em agosto porque caíram no balde do resto.
+// Cada categoria é DECLARADA em um grupo. O que não estiver mapeado sai
+// como NÃO CLASSIFICADO — visível, nunca diluído em outro grupo.
+// ═══════════════════════════════════════════════════════════════════
+const GRUPOS_DESPESA = [
+  { id:'obra', rot:'Custo de obra', cor:'#6D9E7F', cats:[
+    'aquisicao de materiais','fornecedor - aquisicao de materiais','mao de obra - mestre',
+    'mao de obra - terceiros','alimentacao da obra','aluguel de equipamentos',
+    'manutencao de equipamentos','aquisicao de equipamentos/veiculos','canteiro',
+    'seguranca/vigia/manutencao/manteiro/ serv extras','energia eletrica',
+    'abastecimento de agua (cagece)','limpeza/terraplanagem','projetos de arquitetura' ] },
+  { id:'comercial', rot:'Comercial', cor:'#6C8FB5', cats:[
+    'comissao corretor','marketing e publicidade','premiacao corretores' ] },
+  { id:'admin', rot:'Administrativo', cor:'#8E7FA8', cats:[
+    'escritorio/administrativo','honorarios advocaticios/consultoria e outros',
+    'salarios','tarifas bancarias','diversos','reembolso','equilibrio de aportes' ] },
+  { id:'cartorio', rot:'Cartório, alvarás e licenças', cor:'#C09257', cats:[
+    'taxas/licencas/alvara','cartorio - aquisicao terreno','despesas judiciais' ] },
+  { id:'impostos', rot:'Impostos e tributos', cor:'#BF6B60', cats:[
+    'impostos/tributos' ] },
+  { id:'permuta', rot:'Permuta', cor:'#C4A55C', cats:[ 'permuta' ] },
+  { id:'distrato', rot:'Distrato', cor:'#A8392C', cats:[ 'distrato de venda' ] },
+  { id:'terreno', rot:'Terreno', cor:'#70767b', cats:[ 'terrenos' ] },
+];
+const _grupoIdx = (function(){ const m={};
+  GRUPOS_DESPESA.forEach(g=>g.cats.forEach(c=>m[c]=g.id)); return m; })();
+function grupoDespesa(cat){
+  const c = String(cat||'').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  return _grupoIdx[c] || 'naoclass';
+}
+function grupoRotulo(id){
+  const g = GRUPOS_DESPESA.find(x=>x.id===id);
+  return g ? g.rot : 'Não classificado';
+}
+// IRPJ e CSLL são trimestrais e pagos no mês SEGUINTE à apuração (abril, julho,
+// outubro, janeiro). Separá-los dos mensais é o que torna a projeção confiável.
+function ehImpostoTrimestral(r){
+  return /IRPJ|CSLL/i.test(String(r.descOriginal||r.descricao||''));
+}
+// Resumo por grupo de um conjunto de despesas, com os tributos desmembrados.
+function resumoGrupos(despesas){
+  const R = { total:0 };
+  GRUPOS_DESPESA.forEach(g=>R[g.id]=0);
+  R.naoclass = 0; R.impMensal = 0; R.impTrimestral = 0;
+  const naoClassCats = {};
+  (despesas||[]).forEach(r=>{
+    const v = r.valor||0; const id = grupoDespesa(r.categoria);
+    R[id] += v; R.total += v;
+    if (id === 'impostos') { if (ehImpostoTrimestral(r)) R.impTrimestral += v; else R.impMensal += v; }
+    if (id === 'naoclass') { const c=r.categoria||'(sem categoria)';
+      naoClassCats[c] = (naoClassCats[c]||0) + v; }
+  });
+  R.naoClassCats = naoClassCats;
+  // pressão de caixa operacional: exclui permuta (vinculada à receita) e distrato
+  R.operacional = R.total - R.permuta - R.distrato;
+  return R;
+}
+
 function isCustoObra(cat) {
   if (!cat) return false;
   // Normalize: lowercase + remove accents
@@ -2526,7 +2588,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v20.08.26-a · alteração retroativa</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v21.08.26-a · grupos de despesa</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">

@@ -396,6 +396,29 @@ async function testEmp(emp, checks){
       } else ok(true,'Retro: cenário sem mês fechado');
       w.localStorage.removeItem(w.retroChave());
     } else ok(true,'Retro: sem extrato neste cenário');
+    // grupos de despesa declarados
+    ok(typeof w.grupoDespesa==='function' && typeof w.resumoGrupos==='function','Grupos: funções disponíveis');
+    ok(w.grupoDespesa('Comissão Corretor')==='comercial','Grupos: comissão é comercial');
+    ok(w.grupoDespesa('Marketing e Publicidade')==='comercial','Grupos: marketing é comercial');
+    ok(w.grupoDespesa('Escritório/Administrativo')==='admin','Grupos: escritório é administrativo');
+    ok(w.grupoDespesa('Taxas/Licenças/Alvará')==='cartorio','Grupos: alvará tem grupo próprio');
+    ok(w.grupoDespesa('Cartório - Aquisição Terreno')==='cartorio','Grupos: cartório tem grupo próprio');
+    ok(w.grupoDespesa('Distrato de Venda')==='distrato','Grupos: distrato tem grupo próprio');
+    ok(w.grupoDespesa('Permuta')==='permuta','Grupos: permuta tem grupo próprio');
+    ok(w.grupoDespesa('Aquisição de Materiais')==='obra','Grupos: materiais é custo de obra');
+    ok(w.grupoDespesa('Categoria Inventada XYZ')==='naoclass','Grupos: categoria desconhecida vira não classificado');
+    const RG=w.resumoGrupos([
+      {valor:1000,categoria:'Aquisição de Materiais'},
+      {valor:500,categoria:'Comissão Corretor'},
+      {valor:300,categoria:'Permuta'},
+      {valor:200,categoria:'Distrato de Venda'},
+      {valor:100,categoria:'Impostos/Tributos',descOriginal:'IRPJ 3TRI'},
+      {valor:50,categoria:'Impostos/Tributos',descOriginal:'PIS/COFINS'},
+      {valor:70,categoria:'Categoria Nova'}]);
+    ok(RG.obra===1000 && RG.comercial===500,'Grupos: soma por grupo correta');
+    ok(RG.impTrimestral===100 && RG.impMensal===50,'Grupos: IRPJ separado dos tributos mensais');
+    ok(RG.operacional===RG.total-300-200,'Grupos: operacional exclui permuta e distrato');
+    ok(RG.naoclass===70 && RG.naoClassCats['Categoria Nova']===70,'Grupos: não classificado fica visível com a categoria');
     ok(typeof w.parseExtrato==='function','Extrato: parser disponível');
     const hdrX=['Data movimento','Id','Nome do fornecedor/cliente','Rec','Qtd','Descrição','Ag','Tipo','Origem do lançamento','Conta bancária','Forma','Valor (R$)','Saldo conta (R$)','Situação','Valor original (R$)','Juros (R$)','Multa (R$)','Desconto (R$)','Taxas (R$)','Data de competência','Venc','Prev','Obs','NF','Categoria 1','Val','Centro de Custo 1','ValCC'];
     const lin=(data,quem,desc,tipo,conta,valor,situ,cat)=>{const a=new Array(28).fill('');
