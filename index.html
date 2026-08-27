@@ -911,12 +911,15 @@ const GRUPOS_DESPESA = [
     'mao de obra - terceiros','alimentacao da obra','aluguel de equipamentos',
     'manutencao de equipamentos','aquisicao de equipamentos/veiculos','canteiro',
     'seguranca/vigia/manutencao/manteiro/ serv extras','energia eletrica',
-    'abastecimento de agua (cagece)','limpeza/terraplanagem','projetos de arquitetura' ] },
+    'abastecimento de agua (cagece)','limpeza/terraplanagem',
+    // Decisão da direção em 21/08: salário é custo da obra ainda que indireto, e
+    // projeto é necessário para a obra acontecer — ambos ficam aqui.
+    'projetos de arquitetura','salarios' ] },
   { id:'comercial', rot:'Comercial', cor:'#6C8FB5', cats:[
     'comissao corretor','marketing e publicidade','premiacao corretores' ] },
   { id:'admin', rot:'Administrativo', cor:'#8E7FA8', cats:[
     'escritorio/administrativo','honorarios advocaticios/consultoria e outros',
-    'salarios','tarifas bancarias','diversos','reembolso' ] },
+    'tarifas bancarias','diversos','reembolso' ] },
   // Movimento de capital entre sócios — não é despesa. Fica fora da pressão de
   // caixa operacional e do custo por m², como permuta e distrato.
   { id:'socios', rot:'Movimento entre sócios', cor:'#70767b', cats:[
@@ -2592,7 +2595,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v21.08.26-b · movimento entre sócios</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v21.08.26-c · salários em custo de obra</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">

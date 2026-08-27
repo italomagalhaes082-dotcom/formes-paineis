@@ -406,6 +406,8 @@ async function testEmp(emp, checks){
     ok(w.grupoDespesa('Distrato de Venda')==='distrato','Grupos: distrato tem grupo próprio');
     ok(w.grupoDespesa('Permuta')==='permuta','Grupos: permuta tem grupo próprio');
     ok(w.grupoDespesa('Aquisição de Materiais')==='obra','Grupos: materiais é custo de obra');
+    ok(w.grupoDespesa('Salários')==='obra','Grupos: salários é custo de obra (indireto)');
+    ok(w.grupoDespesa('Projetos de Arquitetura')==='obra','Grupos: projetos é custo de obra');
     ok(w.grupoDespesa('Categoria Inventada XYZ')==='naoclass','Grupos: categoria desconhecida vira não classificado');
     const RG=w.resumoGrupos([
       {valor:1000,categoria:'Aquisição de Materiais'},
