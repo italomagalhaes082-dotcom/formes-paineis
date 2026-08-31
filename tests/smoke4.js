@@ -398,6 +398,15 @@ async function testEmp(emp, checks){
     } else ok(true,'Retro: sem extrato neste cenário');
     // grupos de despesa declarados
     ok(typeof w.grupoDespesa==='function' && typeof w.resumoGrupos==='function','Grupos: funções disponíveis');
+    ok(typeof w.custoObraAjustado==='function' && typeof w.custoM2Projetado==='function','Custo m2: funções disponíveis');
+    const CA=w.custoObraAjustado(w._extrato? w._extrato.despesas : []);
+    ok(CA && CA.liquido===CA.bruto-CA.totalAjustes,'Custo m2: líquido = bruto menos ajustes');
+    ok(CA.totalAjustes>=0,'Custo m2: ajustes nunca negativos');
+    const P=w.custoM2Projetado(w._extrato? w._extrato.despesas : [], 0.9);
+    if (P) { ok(Math.abs(P.custoFinal-P.liquido/0.9)<1,'Custo m2: custo final = líquido dividido pela execução');
+      ok(Math.abs(P.m2-P.custoFinal/P.area)<0.01,'Custo m2: R$/m2 = custo final dividido pela área');
+      ok(P.liquido<=0 || P.falta>0,'Custo m2: falta gastar é positivo quando há custo apurado'); }
+    else ok(true,'Custo m2: sem área configurada neste cenário');
     ok(w.grupoDespesa('Comissão Corretor')==='comercial','Grupos: comissão é comercial');
     ok(w.grupoDespesa('Marketing e Publicidade')==='comercial','Grupos: marketing é comercial');
     ok(w.grupoDespesa('Escritório/Administrativo')==='admin','Grupos: escritório é administrativo');

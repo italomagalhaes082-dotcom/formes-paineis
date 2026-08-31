@@ -948,6 +948,51 @@ function ehImpostoTrimestral(r){
   return /IRPJ|CSLL/i.test(String(r.descOriginal||r.descricao||''));
 }
 // Resumo por grupo de um conjunto de despesas, com os tributos desmembrados.
+// ═══════════════════════════════════════════════════════════════════
+// AJUSTES DO CUSTO DE OBRA PARA CUSTO POR m²
+// Nem tudo que é custo de obra pertence ao custo unitário das unidades.
+// Terraplanagem e arrimo são custo do TERRENO, não da construção — e a casa
+// modelo é investimento comercial, não custo das casas vendidas. Ambos precisam
+// sair para o R$/m² ser comparável entre obras.
+// ═══════════════════════════════════════════════════════════════════
+const AJUSTES_CUSTO_M2 = {
+  bossa:   [{ id:'terra',  rot:'Terraplanagem, máquinas e arrimo',
+              nota:'custo do terreno, não da construção; apurado na aba Terraplanagem — a categoria própria tem só R$ 3.000, o resto está espalhado em materiais e equipamentos' }],
+  jazz:    [{ id:'modelo', valor:500000, rot:'Casa modelo',
+              nota:'investimento comercial: piscina, marcenaria, porcelanato, móveis e gradil. Valor fechado informado pela direção' }],
+  liberty: []
+};
+// Terraplanagem do Bossa é calculada pela própria aba, para acompanhar as regras
+// de escopo que já validamos ali (aterro, piçarra, máquinas, combustível, arrimo).
+function ajusteTerraplanagem(){
+  try { if (typeof tpEstimativa === 'function') { const t = tpEstimativa();
+    if (t && t.total > 0) return t.total; } } catch(e){}
+  return 0;
+}
+function ajustesCustoM2(){
+  const lista = (AJUSTES_CUSTO_M2[_urlEmp] || []).map(a=>{
+    const v = a.valor !== undefined ? a.valor : (a.id === 'terra' ? ajusteTerraplanagem() : 0);
+    return Object.assign({}, a, { valor: v });
+  }).filter(a=>a.valor > 0);
+  return { lista, total: lista.reduce((s,a)=>s+a.valor, 0) };
+}
+// Custo de obra líquido dos ajustes, base do R$/m².
+function custoObraAjustado(despesas){
+  const R = resumoGrupos(despesas);
+  const A = ajustesCustoM2();
+  return { bruto: R.obra, ajustes: A.lista, totalAjustes: A.total,
+           liquido: R.obra - A.total };
+}
+// Custo final por m² a partir do percentual de execução física.
+function custoM2Projetado(despesas, pctExecucao){
+  const C = custoObraAjustado(despesas);
+  const area = CFG.areaTotal || 0;
+  if (!area || !pctExecucao) return null;
+  const final = C.liquido / pctExecucao;
+  return { bruto:C.bruto, ajustes:C.ajustes, totalAjustes:C.totalAjustes, liquido:C.liquido,
+           area, pct:pctExecucao, custoFinal:final, m2:final/area, falta:final - C.liquido };
+}
+
 function resumoGrupos(despesas){
   const R = { total:0 };
   GRUPOS_DESPESA.forEach(g=>R[g.id]=0);
@@ -2595,7 +2640,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v21.08.26-c · salários em custo de obra</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v28.08.26-a · ajustes do custo por m²</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
