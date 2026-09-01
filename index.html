@@ -2640,7 +2640,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v28.08.26-b · permuta sobre VGV apurado</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v28.08.26-c · receita total no resultado</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -8087,6 +8087,36 @@ function vgvApurado(){
     if (/DISPON/i.test(g.status||'')) { vDisp+=v; nD++; } else { vVend+=v; nV++; } });
   return { total:vVend+vDisp, vendidas:nV, disponiveis:nD, vVend, vDisp };
 }
+// RECEITA TOTAL DO EMPREENDIMENTO — base do RESULTADO, não da permuta.
+// A permuta incide só sobre o valor de venda dos contratos (vgvApurado). O
+// resultado da obra, não: ele precisa de TUDO que entra — correção monetária,
+// reembolsos, personalização, retenção de distratos e demais receitas. Sem isso
+// o resultado sai subestimado.
+//
+// INCC entra pelo CALCULADO, não pelo recebido: o que ainda não foi cobrado é
+// recebível do contrato em andamento, e será cobrado na quitação.
+// Retenção de distrato é receita já realizada — o cliente pagou, saiu, e a casa
+// voltou ao estoque para ser revendida (a revenda já está no VGV).
+function receitaTotalEmpreendimento(){
+  const ex = window._extrato;
+  const V = vgvApurado();
+  let incc = 0, inccPago = 0;
+  try { const SD = saldoDevedorCasas();
+    SD.linhas.forEach(l=>{ incc += l.corrigidoTotal||0; inccPago += l.inccPago||0; }); } catch(e){}
+  let distrato = 0;
+  try { const D = extratoVendasDados(); distrato = D.totD.resultadoDistrato||0; } catch(e){}
+  // acessórios recebidos, fora venda/INCC/distrato (que já entram acima)
+  let acess = 0; const detalhe = {};
+  if (ex) ex.receitas.forEach(r=>{
+    const t = r.tipo||''; const v = r.valReceb||0;
+    if (t==='Venda' || t==='VendaDistratada' || t==='INCC') return;
+    acess += v; detalhe[t] = (detalhe[t]||0) + v;
+  });
+  const total = V.total + incc + distrato + acess;
+  return { vgv:V.total, vgvVendidas:V.vVend, vgvEstoque:V.vDisp,
+           incc, inccPago, inccAReceber: incc - inccPago,
+           distrato, acessorios: acess, acessDetalhe: detalhe, total };
+}
 function renderResultadoFinal() {
   const tab6 = document.getElementById('tab6');
   if (!tab6) return;
@@ -8113,7 +8143,7 @@ function renderRFInputs() {
     +rfInput('pctImposto','Impostos e Taxas',pctGet('pctImposto')||'','Ex: 7',true)
     +rfInput('pctPermuta','Permuta (% sobre VGV)',pctGet('pctPermuta')||'','Ex: 16.66',true)
     +rfInput('pctComPermuta','Comissão da permuta',pctGet('pctComPermuta')||'','Ex: 5',true)
-    +rfInput('incc','INCC (Correção Monetária)','','Ex: 2.000.000,00')
+    +rfInput('incc','INCC adicional (manual)','','apurado: '+fmt(receitaTotalEmpreendimento().incc))
     +rfInput('pctObraExec','Obra Executada',pctGet('pctObraExec')||CFG.pctObraDefault||'','Ex: 65',true)
     +'</div>'
     +'<div style="display:flex;gap:8px;margin-top:12px">'
@@ -8154,7 +8184,10 @@ function renderRFCalc() {
 
   if (!window._rfMigrado) { rfMigrarParametros(); window._rfMigrado = true; }
 
+  // BASE DA PERMUTA: só o valor de venda dos contratos, nunca o INCC nem acessórios
   const vgvTotal    = parseFloat(rfGet('vgvTotal',0)) || vgvApurado().total;
+  // BASE DO RESULTADO: tudo que entra no empreendimento
+  const RT          = receitaTotalEmpreendimento();
   const vgvReal     = parseFloat(rfGet('vgvRealizado',0))||0;
   const pctCom      = parseFloat(rfGet('pctComissao',0))||0;
   const pctImp      = parseFloat(rfGet('pctImposto',0))||0;
@@ -8203,7 +8236,12 @@ function renderRFCalc() {
   const recuperacaoCusto = (_RECEITAS||[]).filter(r=>r.grupo==='outras' && r.recupera)
                           .reduce((s,r)=>s+(r.valReceb||0),0);
 
-  const receitaLiq = vgvTotal - comissaoAPagar - impostoAPagar - permutaAPagar + incc + outrasReceitas;
+  // Receita total: VGV dos contratos (ou o valor sobrescrito à mão) mais tudo que
+  // entra além da venda. INCC, distratos e acessórios vêm APURADOS dos dados —
+  // os campos manuais de INCC e outras receitas ficam como acréscimo explícito,
+  // para o que o sistema não captura.
+  const receitaTotalEmp = vgvTotal + RT.incc + RT.distrato + RT.acessorios + incc + outrasReceitas;
+  const receitaLiq = receitaTotalEmp - comissaoAPagar - impostoAPagar - permutaAPagar;
 
   // ── CUSTOS JÁ PAGOS ───────────────────────────────────────────
   // TUDO que saiu do caixa — obra, comissões, impostos, permuta
@@ -8241,7 +8279,16 @@ function renderRFCalc() {
 
     // ── 1. RECEITA ───────────────────────────────────────────
     +rfSec('1. Receita','#6C8FB5')
-    +rfResultRow('VGV Total Bruto', fmt(vgvTotal), '#e6edf3', false, (parseFloat(rfGet('vgvTotal',0))? 'Valor informado manualmente' : 'Apurado dos contratos: '+vgvApurado().vendidas+' vendidas ('+fmt(vgvApurado().vVend)+') + '+vgvApurado().disponiveis+' em estoque ('+fmt(vgvApurado().vDisp)+')'))
+    +rfResultRow('VGV dos contratos', fmt(vgvTotal), '#e6edf3', false, (parseFloat(rfGet('vgvTotal',0))? 'Valor informado manualmente' : 'Apurado dos contratos: '+vgvApurado().vendidas+' vendidas ('+fmt(vgvApurado().vVend)+') + '+vgvApurado().disponiveis+' em estoque ('+fmt(vgvApurado().vDisp)+')'))
+    +rfResultRow('(+) Correção monetária (INCC)', fmt(RT.incc), '#6D9E7F', false,
+      'Calculado sobre os contratos · já recebido '+fmt(RT.inccPago)+' · a cobrar na quitação '+fmt(RT.inccAReceber))
+    +rfResultRow('(+) Retenção de distratos', fmt(RT.distrato), '#6D9E7F', false,
+      'Valor retido dos contratos desfeitos — a revenda das casas já está no VGV acima')
+    +rfResultRow('(+) Reembolsos, personalização e outras', fmt(RT.acessorios), '#6D9E7F', false,
+      Object.entries(RT.acessDetalhe).sort((a,b)=>b[1]-a[1]).map(function(e){return e[0]+' '+fmt(e[1]);}).join(' · '))
+    +rfResultRow('= Receita total do empreendimento', fmt(receitaTotalEmp), '#e6edf3', true,
+      'Base do RESULTADO. A permuta incide só sobre o VGV dos contratos, acima — nunca sobre INCC ou acessórios')
+
 
 
     // Comissões

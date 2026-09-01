@@ -397,6 +397,11 @@ async function testEmp(emp, checks){
       w.localStorage.removeItem(w.retroChave());
     } else ok(true,'Retro: sem extrato neste cenário');
     // grupos de despesa declarados
+    ok(typeof w.receitaTotalEmpreendimento==='function','Resultado: receita total disponivel');
+    const RT=w.receitaTotalEmpreendimento();
+    ok(RT && Math.abs(RT.total-(RT.vgv+RT.incc+RT.distrato+RT.acessorios))<1,'Resultado: total = VGV + INCC + distrato + acessorios');
+    ok(RT.total>=RT.vgv,'Resultado: receita total nunca menor que o VGV');
+    ok(RT.incc>=RT.inccPago,'Resultado: INCC calculado cobre o ja pago');
     ok(typeof w.vgvApurado==='function','Permuta: vgvApurado disponivel');
     const VA=w.vgvApurado();
     ok(VA && Math.abs(VA.total-(VA.vVend+VA.vDisp))<1,'Permuta: VGV apurado = vendidas + estoque');
