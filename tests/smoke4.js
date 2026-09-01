@@ -397,6 +397,11 @@ async function testEmp(emp, checks){
       w.localStorage.removeItem(w.retroChave());
     } else ok(true,'Retro: sem extrato neste cenário');
     // grupos de despesa declarados
+    ok(typeof w.vgvApurado==='function','Permuta: vgvApurado disponivel');
+    const VA=w.vgvApurado();
+    ok(VA && Math.abs(VA.total-(VA.vVend+VA.vDisp))<1,'Permuta: VGV apurado = vendidas + estoque');
+    ok(VA.total>=0,'Permuta: VGV apurado nunca negativo');
+    ok(Math.abs(16.66*(1-0.07-0.05)-14.6608)<0.001,'Permuta: 16,66% menos 7% e 5% da 14,661% liquido');
     ok(typeof w.grupoDespesa==='function' && typeof w.resumoGrupos==='function','Grupos: funções disponíveis');
     ok(typeof w.custoObraAjustado==='function' && typeof w.custoM2Projetado==='function','Custo m2: funções disponíveis');
     const CA=w.custoObraAjustado(w._extrato? w._extrato.despesas : []);

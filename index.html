@@ -2640,7 +2640,7 @@ function renderDashboard() {
   // atualiza data
   const now=new Date();
   document.getElementById("headerMeta").innerHTML=
-    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v28.08.26-a · ajustes do custo por m²</span>`;
+    `Período: ${range}<br>${APORTES.length} aportes · ${RETIRADAS.length} retiradas · Atualizado ${now.toLocaleDateString("pt-BR")}<br><span style="font-size:9px;color:#484f58">painel v28.08.26-b · permuta sobre VGV apurado</span>`;
 
   // helpers
   const kpi=(label,value,sub,color,delta,hint,extra)=>`<div class="kpi" style="border-top:2px solid ${color}">
@@ -8076,6 +8076,17 @@ window.calcResultado = function() {
   renderResultadoFinal();
 };
 
+// VGV apurado dos CONTRATOS: soma o valor de venda de cada unidade vendida e o
+// preço de tabela das que seguem em estoque. É a base correta da permuta, porque
+// exclui INCC, personalização, reembolso e qualquer outro acessório — a permuta
+// incide sobre o valor de venda do contrato, nunca sobre a correção monetária.
+function vgvApurado(){
+  const gv = (typeof _GV !== 'undefined' && _GV) ? _GV : [];
+  let vVend=0, vDisp=0, nV=0, nD=0;
+  gv.forEach(g=>{ const v = g.valor||0; if(!v) return;
+    if (/DISPON/i.test(g.status||'')) { vDisp+=v; nD++; } else { vVend+=v; nV++; } });
+  return { total:vVend+vDisp, vendidas:nV, disponiveis:nD, vVend, vDisp };
+}
 function renderResultadoFinal() {
   const tab6 = document.getElementById('tab6');
   if (!tab6) return;
@@ -8097,10 +8108,11 @@ function renderRFInputs() {
     +'<div style="background:#161b22;border:1px solid #21262d;border-radius:14px;padding:16px;margin-bottom:14px">'
     +'<div style="font-size:11px;font-family:DM Mono,monospace;color:#A1A1A6;letter-spacing:1px;text-transform:uppercase;margin-bottom:14px">Parâmetros do Empreendimento</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
-    +rfInput('vgvTotal','VGV Total Bruto','','Ex: 45.000.000,00')
+    +rfInput('vgvTotal','VGV Total Bruto','','apurado dos contratos: '+fmt(vgvApurado().total))
     +rfInput('pctComissao','Comissões',pctGet('pctComissao')||'','Ex: 6',true)
     +rfInput('pctImposto','Impostos e Taxas',pctGet('pctImposto')||'','Ex: 7',true)
     +rfInput('pctPermuta','Permuta (% sobre VGV)',pctGet('pctPermuta')||'','Ex: 16.66',true)
+    +rfInput('pctComPermuta','Comissão da permuta',pctGet('pctComPermuta')||'','Ex: 5',true)
     +rfInput('incc','INCC (Correção Monetária)','','Ex: 2.000.000,00')
     +rfInput('pctObraExec','Obra Executada',pctGet('pctObraExec')||CFG.pctObraDefault||'','Ex: 65',true)
     +'</div>'
@@ -8142,11 +8154,16 @@ function renderRFCalc() {
 
   if (!window._rfMigrado) { rfMigrarParametros(); window._rfMigrado = true; }
 
-  const vgvTotal    = parseFloat(rfGet('vgvTotal',0))||0;
+  const vgvTotal    = parseFloat(rfGet('vgvTotal',0)) || vgvApurado().total;
   const vgvReal     = parseFloat(rfGet('vgvRealizado',0))||0;
   const pctCom      = parseFloat(rfGet('pctComissao',0))||0;
   const pctImp      = parseFloat(rfGet('pctImposto',0))||0;
   const pctPerm     = parseFloat(rfGet('pctPermuta',0))||0;
+  // Comissão descontada da parte do PERMUTANTE é própria (5%) e diferente da
+  // comissão de corretor do empreendimento (6%). Usar a geral inflava o desconto:
+  // 16,66% × (1 − 7% imposto − 5% comissão) = 14,6608%, exatamente a taxa
+  // apurada no controle de pagamentos ao permutante.
+  const pctComPerm  = parseFloat(rfGet('pctComPermuta',5))||5;
   // Permuta já paga — calculada automaticamente das despesas (categoria Permuta)
   const permPago = _DESPESAS
     .filter(r => (r.categoria||'').toLowerCase().includes('permut'))
@@ -8166,7 +8183,7 @@ function renderRFCalc() {
   // Permuta bruta = VGV × %
   const permutaBruta   = vgvTotal * (pctPerm/100);
   // Permuta líquida = bruta − comissão − imposto sobre a parte do permutante
-  const permutaLiq     = permutaBruta * (1 - pctCom/100 - pctImp/100);
+  const permutaLiq     = permutaBruta * (1 - pctComPerm/100 - pctImp/100);
   // permPago já é líquido (comissão e imposto já descontados)
   // Permuta líquida ainda a pagar = líquida total − já paga (líquida)
   const permutaAPagar  = Math.max(0, permutaLiq - permPago);
@@ -8224,7 +8241,7 @@ function renderRFCalc() {
 
     // ── 1. RECEITA ───────────────────────────────────────────
     +rfSec('1. Receita','#6C8FB5')
-    +rfResultRow('VGV Total Bruto', fmt(vgvTotal), '#e6edf3', false, 'Valor total de todas as unidades do empreendimento')
+    +rfResultRow('VGV Total Bruto', fmt(vgvTotal), '#e6edf3', false, (parseFloat(rfGet('vgvTotal',0))? 'Valor informado manualmente' : 'Apurado dos contratos: '+vgvApurado().vendidas+' vendidas ('+fmt(vgvApurado().vVend)+') + '+vgvApurado().disponiveis+' em estoque ('+fmt(vgvApurado().vDisp)+')'))
 
 
     // Comissões
@@ -8241,7 +8258,7 @@ function renderRFCalc() {
     +'<div style="background:#1e2630;border-radius:8px;padding:12px;margin:10px 0">'
     +'<div style="font-size:10px;color:#A1A1A6;font-family:DM Mono,monospace;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Permuta com o terreno</div>'
     +rfResultRow('Valor bruto da permuta ('+pctPerm+'% do VGV)', fmt(permutaBruta), '#A1A1A6', false, 'Parte bruta que cabe ao permutante')
-    +rfResultRow('(−) Comissão e imposto sobre a permuta', '− '+fmt(permutaBruta*(pctCom/100+pctImp/100)), '#A1A1A6', false, pctCom+'% comissão + '+pctImp+'% imposto sobre a parte do permutante')
+    +rfResultRow('(−) Comissão e imposto sobre a permuta', '− '+fmt(permutaBruta*(pctComPerm/100+pctImp/100)), '#A1A1A6', false, pctComPerm+'% comissão + '+pctImp+'% imposto · equivale a '+(pctPerm*(1-pctComPerm/100-pctImp/100)).toFixed(3)+'% líquido do VGV')
     +rfResultRow('= Permuta líquida total', fmt(permutaLiq), '#A1A1A6', true, 'Valor líquido total devido ao permutante')
     +'<div style="height:1px;background:#1A1A1D;margin:8px 0"></div>'
     +rfResultRow('Permuta já paga (líquida)', fmt(permPago), '#6D9E7F', false, 'Já transferido ao permutante — valor líquido')
